@@ -18,6 +18,15 @@ import { TriggerNode } from "./nodes/TriggerNode";
 import { ActionNode } from "./nodes/ActionNode";
 import { LeftSidebar } from "./LeftSidebar";
 
+interface ScriptFile {
+  id: string;
+  name: string;
+  content: string;
+  language: "python" | "powershell" | "shell" | "javascript";
+  lastModified: Date;
+  source: "upload" | "editor";
+}
+
 interface NodeData {
   label: string;
   type: string;
@@ -133,13 +142,60 @@ const WorkflowBuilderContent = () => {
   );
 
   const saveWorkflow = () => {
+    // Enhanced workflow logging with detailed node information
     const workflow = {
-      nodes: nodes.map((node) => ({
-        id: node.id,
-        type: node.type,
-        position: node.position,
-        data: node.data,
-      })),
+      nodes: nodes.map((node) => {
+        const nodeDetails = {
+          id: node.id,
+          type: node.type,
+          position: node.position,
+          data: node.data,
+        };
+
+        // Add script file information for action nodes
+        if (node.type === "action" && node.data?.selectedScript) {
+          try {
+            const savedFiles = localStorage.getItem("scriptFiles");
+            if (savedFiles) {
+              const files = JSON.parse(savedFiles);
+              const selectedScript = files.find(
+                (file: ScriptFile) => file.id === node.data.selectedScript
+              );
+              if (selectedScript) {
+                // Generate blob URL for the script content
+                const blob = new Blob([selectedScript.content], {
+                  type: "text/plain",
+                });
+                const codeLink = URL.createObjectURL(blob);
+
+                nodeDetails.data = {
+                  ...nodeDetails.data,
+                  scriptFile: {
+                    id: selectedScript.id,
+                    name: selectedScript.name,
+                    language: selectedScript.language,
+                    source:
+                      selectedScript.source === "upload"
+                        ? "Uploaded File"
+                        : "Written in Editor",
+                    lastModified: selectedScript.lastModified,
+                    codeLink: codeLink,
+                  },
+                };
+
+                // Clean up blob URL after delay
+                setTimeout(() => {
+                  URL.revokeObjectURL(codeLink);
+                }, 300000);
+              }
+            }
+          } catch (error) {
+            console.error("Error loading script file details:", error);
+          }
+        }
+
+        return nodeDetails;
+      }),
       edges: edges.map((edge) => ({
         id: edge.id,
         source: edge.source,
@@ -147,8 +203,15 @@ const WorkflowBuilderContent = () => {
         sourceHandle: edge.sourceHandle,
         targetHandle: edge.targetHandle,
       })),
+      timestamp: new Date().toISOString(),
+      totalNodes: nodes.length,
+      totalEdges: edges.length,
     };
-    console.log("Workflow saved:", JSON.stringify(workflow, null, 2));
+
+    console.log(
+      "🌊 Complete Workflow Details Saved:",
+      JSON.stringify(workflow, null, 2)
+    );
   };
 
   return (
@@ -259,6 +322,7 @@ const WorkflowBuilderContent = () => {
             onUpdateNode={updateNodeData}
             onDeleteNode={deleteNode}
             onClose={() => setSelectedNode(null)}
+            onSaveWorkflow={saveWorkflow}
           />
         </div>
       </div>
