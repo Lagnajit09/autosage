@@ -163,10 +163,8 @@ const WorkflowBuilderContent = () => {
               );
               if (selectedScript) {
                 // Generate blob URL for the script content
-                const blob = new Blob([selectedScript.content], {
-                  type: "text/plain",
-                });
-                const codeLink = URL.createObjectURL(blob);
+
+                const codeLink = `${window.location.origin}/raw/${selectedScript.id}`;
 
                 nodeDetails.data = {
                   ...nodeDetails.data,
