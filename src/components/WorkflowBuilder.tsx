@@ -17,6 +17,7 @@ import { RightSidebar } from "./RightSidebar";
 import { TriggerNode } from "./nodes/TriggerNode";
 import { ActionNode } from "./nodes/ActionNode";
 import { LeftSidebar } from "./LeftSidebar";
+import { NavigationMenu } from "./NavigationMenu";
 
 interface ScriptFile {
   id: string;
@@ -27,14 +28,21 @@ interface ScriptFile {
   source: "upload" | "editor";
 }
 
+// Define a Credential interface
+interface Credential {
+  id: string;
+  name: string;
+  username: string;
+  password: string;
+}
+
 interface NodeData {
   label: string;
   type: string;
   description?: string;
   executionMode?: "local" | "remote";
   serverAddress?: string;
-  userID?: string;
-  password?: string;
+  selectedCredential?: Credential;
 }
 
 const nodeTypes = {
@@ -89,8 +97,7 @@ const WorkflowBuilderContent = () => {
           description: "",
           executionMode: type === "action" ? "local" : undefined,
           serverAddress: "",
-          userID: "",
-          password: "",
+          selectedCredential: "",
         },
       };
 
@@ -243,12 +250,15 @@ const WorkflowBuilderContent = () => {
             </div>
           </div>
 
-          <div className="flex items-center space-x-3">
-            <div className="text-xs text-slate-400">
-              {nodes.length} nodes • {edges.length} connections
+          <div className="flex items-center space-x-4">
+            <div className="flex items-center space-x-2">
+              <div className="text-xs text-slate-400">
+                {nodes.length} nodes • {edges.length} connections
+              </div>
+              <div className="w-1 h-1 bg-green-500 rounded-full animate-pulse"></div>
+              <span className="text-xs text-green-400">Live</span>
             </div>
-            <div className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse"></div>
-            <span className="text-xs text-green-400">Live</span>
+            <NavigationMenu />
           </div>
         </div>
 

@@ -17,8 +17,12 @@ interface NodeData {
   executionMode?: "local" | "remote";
   scriptType?: "Python Script" | "Powershell Script" | "Shell Script";
   serverAddress?: string;
-  userID?: string;
-  password?: string;
+  selectedCredential?: {
+    id: string;
+    name: string;
+    username: string;
+    password: string;
+  };
   selectedScript?: string; // ID of selected script
 }
 
@@ -37,6 +41,14 @@ interface Node {
   id: string;
   type?: string;
   data?: NodeData;
+}
+
+// Define a Credential interface
+interface Credential {
+  id: string;
+  name: string;
+  username: string;
+  password: string;
 }
 
 interface RightSidebarProps {
@@ -65,20 +77,6 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({
   const handleDelete = () => {
     onDeleteNode(selectedNode.id);
   };
-
-  // Generate blob URL for code content
-  // const generateCodeLink = (content: string, filename: string) => {
-  //   const blob = new Blob([content], { type: "text/plain" });
-  //   const url = URL.createObjectURL(blob);
-  //   return url;
-  // };
-
-  // Navigate to code editor
-  // const handleWriteScript = () => {
-  //   const scriptType = selectedNode.data?.scriptType || "Python Script";
-  //   const type = scriptType.replace(" Script", "").toLowerCase();
-  //   navigate(`/code-editor?type=${type}&nodeId=${selectedNode.id}`);
-  // };
 
   // Handle script upload
   const handleUploadScript = () => {
@@ -138,6 +136,19 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({
     return [];
   };
 
+  // Get saved credentials from sessionStorage
+  const getSavedCredentials = () => {
+    try {
+      const savedCredentials = sessionStorage.getItem("workflowCredentials");
+      if (savedCredentials) {
+        return JSON.parse(savedCredentials);
+      }
+    } catch (error) {
+      console.error("Error loading credentials:", error);
+    }
+    return [];
+  };
+
   // Navigate to code editor
   const getEditorUrl = () => {
     const scriptType = selectedNode.data?.scriptType || "Python Script";
@@ -150,57 +161,71 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({
     onUpdateNode(selectedNode.id, { selectedScript: scriptId });
   };
 
+  // Handle credential selection
+  const handleCredentialSelect = (credentialId: string) => {
+    const selectedCred = getSavedCredentials().find(
+      (cred) => cred.id === credentialId
+    );
+    if (selectedCred) {
+      onUpdateNode(selectedNode.id, {
+        selectedCredential: {
+          id: selectedCred.id,
+          name: selectedCred.name,
+          username: selectedCred.username,
+          password: selectedCred.password,
+        },
+      });
+    }
+  };
+
   return (
-    <div className="w-52 bg-slate-800/60 backdrop-blur-xl border-l border-slate-700/50 p-3 overflow-y-auto">
-      <div className="flex items-center justify-between mb-4">
-        <h3 className="text-xs font-semibold text-white flex items-center">
-          <div className="w-1 h-1 bg-blue-500 rounded-full mr-1.5"></div>
+    <div className="w-72 bg-slate-800/60 backdrop-blur-xl border-l border-slate-700/50 p-4 overflow-y-auto">
+      <div className="flex items-center justify-between mb-6">
+        <h3 className="text-sm font-semibold text-white flex items-center">
+          <div className="w-1 h-1 bg-blue-500 rounded-full mr-2"></div>
           Node Configuration
         </h3>
         <button
           onClick={onClose}
-          className="p-1 hover:bg-slate-700/50 rounded-md transition-colors duration-200 text-slate-400 hover:text-white"
+          className="p-1.5 hover:bg-slate-700/50 rounded-md transition-colors duration-200 text-slate-400 hover:text-white"
         >
-          <X size={12} />
+          <X size={14} />
         </button>
       </div>
-
-      <div className="space-y-4">
+      <div className="space-y-6">
         {/* Node Info */}
-        <div className="bg-slate-700/30 backdrop-blur-sm rounded-lg p-2.5 border border-slate-600/30">
-          <div className="text-xs text-slate-400 mb-0.5">Node Type</div>
-          <div className="text-xs text-white font-medium capitalize">
+        <div className="bg-slate-700/30 backdrop-blur-sm rounded-lg p-4 border border-slate-600/30">
+          <div className="text-xs text-slate-400 mb-1">Node Type</div>
+          <div className="text-sm text-white font-medium capitalize mb-2">
             {selectedNode.type}
           </div>
-          <div className="text-xs text-slate-500 mt-0.5">
-            ID: {selectedNode.id}
-          </div>
+          <div className="text-xs text-slate-500">ID: {selectedNode.id}</div>
         </div>
 
         {/* Basic Settings */}
-        <div className="space-y-2.5">
+        <div className="space-y-4">
           <div>
-            <label className="block text-xs font-medium text-slate-300 mb-1">
+            <label className="block text-sm font-medium text-slate-300 mb-2">
               Label
             </label>
             <input
               type="text"
               value={String(selectedNode.data?.label || "")}
               onChange={(e) => handleInputChange("label", e.target.value)}
-              className="w-full px-2 py-1 text-xs bg-slate-700/50 border border-slate-600/50 rounded-md text-white placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-blue-500/50 focus:border-transparent transition-all duration-200"
+              className="w-full px-3 py-2 text-sm bg-slate-700/50 border border-slate-600/50 rounded-md text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-transparent transition-all duration-200"
               placeholder="Enter node label"
             />
           </div>
 
           <div>
-            <label className="block text-xs font-medium text-slate-300 mb-1">
+            <label className="block text-sm font-medium text-slate-300 mb-2">
               Description
             </label>
             <textarea
               value={String(selectedNode.data?.description || "")}
               onChange={(e) => handleInputChange("description", e.target.value)}
-              className="w-full px-2 py-1 text-xs bg-slate-700/50 border border-slate-600/50 rounded-md text-white placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-blue-500/50 focus:border-transparent transition-all duration-200 resize-none"
-              rows={2}
+              className="w-full px-3 py-2 text-sm bg-slate-700/50 border border-slate-600/50 rounded-md text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-transparent transition-all duration-200 resize-none"
+              rows={3}
               placeholder="Enter description"
             />
           </div>
@@ -208,9 +233,9 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({
 
         {/* Action Node Specific Settings */}
         {selectedNode.type === "action" && (
-          <div className="space-y-2.5">
+          <div className="space-y-4">
             <div>
-              <label className="block text-xs font-medium text-slate-300 mb-1">
+              <label className="block text-sm font-medium text-slate-300 mb-2">
                 Script Type
               </label>
               <select
@@ -218,7 +243,7 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({
                 onChange={(e) =>
                   handleInputChange("scriptType", e.target.value)
                 }
-                className="w-full px-2 py-1 text-xs bg-slate-700 border border-slate-600/50 rounded-md text-white focus:outline-none focus:ring-1 focus:ring-blue-500/50 focus:border-transparent transition-all duration-200"
+                className="w-full px-3 py-2 text-sm bg-slate-700 border border-slate-600/50 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-transparent transition-all duration-200"
               >
                 <option value="Python Script">Python Script</option>
                 <option value="Powershell Script">Powershell Script</option>
@@ -228,11 +253,11 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({
 
             {/* Script Management Section */}
             <div className="space-y-2">
-              <label className="block text-xs font-medium text-slate-300">
+              <label className="block text-sm font-medium text-slate-300">
                 Script Management
               </label>
 
-              <div className="grid grid-cols-1 gap-1.5">
+              <div className="grid grid-cols-1 gap-2">
                 <Link
                   to={getEditorUrl()}
                   target="_blank"
@@ -241,9 +266,9 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({
                 >
                   <Button
                     size="sm"
-                    className="w-full text-xs py-1.5 bg-blue-600/20 hover:bg-blue-600/30 border border-blue-500/30 text-blue-400 hover:text-blue-300 transition-all duration-200"
+                    className="w-full text-sm py-2 bg-blue-600/20 hover:bg-blue-600/30 border border-blue-500/30 text-blue-400 hover:text-blue-300 transition-all duration-200"
                   >
-                    <Code size={10} className="mr-1" />
+                    <Code size={14} className="mr-2" />
                     Write Script
                   </Button>
                 </Link>
@@ -252,23 +277,23 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({
                   onClick={handleUploadScript}
                   size="sm"
                   variant="outline"
-                  className="w-full text-xs py-1.5 bg-slate-700/30 hover:bg-slate-600/30 border border-slate-600/50 text-slate-300 hover:text-white transition-all duration-200"
+                  className="w-full text-sm py-2 bg-slate-700/30 hover:bg-slate-600/30 border border-slate-600/50 text-slate-300 hover:text-white transition-all duration-200"
                 >
-                  <Upload size={10} className="mr-1" />
+                  <Upload size={14} className="mr-2" />
                   Upload Script
                 </Button>
               </div>
 
               {/* Script Selection */}
               <div>
-                <label className="block text-xs font-medium text-slate-300 mb-1">
+                <label className="block text-sm font-medium text-slate-300 mb-2">
                   Select Script
                 </label>
                 <Select
                   onValueChange={handleScriptSelect}
                   value={selectedNode.data?.selectedScript || ""}
                 >
-                  <SelectTrigger className="w-full h-7 text-xs bg-slate-700/50 border border-slate-600/50 text-white">
+                  <SelectTrigger className="w-full h-10 text-sm bg-slate-700/50 border border-slate-600/50 text-white">
                     <SelectValue placeholder="Choose a script..." />
                   </SelectTrigger>
                   <SelectContent className="bg-slate-700 border border-slate-600 text-white">
@@ -276,10 +301,10 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({
                       <SelectItem
                         key={script.id}
                         value={script.id}
-                        className="text-xs hover:bg-slate-600 focus:bg-slate-600"
+                        className="text-sm hover:bg-slate-600 focus:bg-slate-600"
                       >
-                        <div className="flex items-center space-x-1.5">
-                          <FileText size={10} />
+                        <div className="flex items-center space-x-2">
+                          <FileText size={14} />
                           <span>{script.name}</span>
                           <span className="text-xs text-slate-400">
                             {script.source === "upload" ? "↑" : "✏️"}
@@ -302,7 +327,7 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({
             </div>
 
             <div>
-              <label className="block text-xs font-medium text-slate-300 mb-1">
+              <label className="block text-sm font-medium text-slate-300 mb-2">
                 Execution Mode
               </label>
               <select
@@ -310,7 +335,7 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({
                 onChange={(e) =>
                   handleInputChange("executionMode", e.target.value)
                 }
-                className="w-full px-2 py-1 text-xs bg-slate-700 border border-slate-600/50 rounded-md text-white focus:outline-none focus:ring-1 focus:ring-blue-500/50 focus:border-transparent transition-all duration-200"
+                className="w-full px-3 py-2 text-sm bg-slate-700 border border-slate-600/50 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-transparent transition-all duration-200"
               >
                 <option value="local">Local</option>
                 <option value="remote">Remote</option>
@@ -320,7 +345,7 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({
             {selectedNode.data?.executionMode === "remote" && (
               <>
                 <div>
-                  <label className="block text-xs font-medium text-slate-300 mb-1">
+                  <label className="block text-sm font-medium text-slate-300 mb-2">
                     Server Address
                   </label>
                   <input
@@ -329,39 +354,61 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({
                     onChange={(e) =>
                       handleInputChange("serverAddress", e.target.value)
                     }
-                    className="w-full px-2 py-1 text-xs bg-slate-700/50 border border-slate-600/50 rounded-md text-white placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-blue-500/50 focus:border-transparent transition-all duration-200"
+                    className="w-full px-3 py-2 text-sm bg-slate-700/50 border border-slate-600/50 rounded-md text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-transparent transition-all duration-200"
                     placeholder="Enter server address"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-medium text-slate-300 mb-1">
-                    User ID
+                  <label className="block text-sm font-medium text-slate-300 mb-2">
+                    Credentials
                   </label>
-                  <input
-                    type="text"
-                    value={String(selectedNode.data?.userID || "")}
-                    onChange={(e) =>
-                      handleInputChange("userID", e.target.value)
-                    }
-                    className="w-full px-2 py-1 text-xs bg-slate-700/50 border border-slate-600/50 rounded-md text-white placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-blue-500/50 focus:border-transparent transition-all duration-200"
-                    placeholder="Enter user ID"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-medium text-slate-300 mb-1">
-                    Password
-                  </label>
-                  <input
-                    type="password"
-                    value={String(selectedNode.data?.password || "")}
-                    onChange={(e) =>
-                      handleInputChange("password", e.target.value)
-                    }
-                    className="w-full px-2 py-1 text-xs bg-slate-700/50 border border-slate-600/50 rounded-md text-white placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-blue-500/50 focus:border-transparent transition-all duration-200"
-                    placeholder="Enter password"
-                  />
+                  <Select
+                    onValueChange={handleCredentialSelect}
+                    value={selectedNode.data?.selectedCredential?.id || ""}
+                  >
+                    <SelectTrigger className="w-full h-10 text-sm bg-slate-700/50 border border-slate-600/50 text-white">
+                      <SelectValue placeholder="Select credentials..." />
+                    </SelectTrigger>
+                    <SelectContent className="bg-slate-700 border border-slate-600 text-white">
+                      {getSavedCredentials().map((credential: Credential) => (
+                        <SelectItem
+                          key={credential.id}
+                          value={credential.id}
+                          className="text-sm hover:bg-slate-600 focus:bg-slate-600"
+                        >
+                          <div className="flex items-center space-x-2">
+                            <svg
+                              className="w-3 h-3"
+                              fill="none"
+                              stroke="currentColor"
+                              viewBox="0 0 24 24"
+                            >
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth={2}
+                                d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"
+                              />
+                            </svg>
+                            <span>{credential.name}</span>
+                          </div>
+                        </SelectItem>
+                      ))}
+                      {getSavedCredentials().length === 0 && (
+                        <SelectItem
+                          value="none"
+                          disabled
+                          className="text-sm text-slate-500"
+                        >
+                          No credentials available
+                        </SelectItem>
+                      )}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-slate-500 mt-1">
+                    Add credentials via the hamburger menu
+                  </p>
                 </div>
               </>
             )}
@@ -369,13 +416,13 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({
         )}
 
         {/* Delete Node Button */}
-        <div className="pt-2.5 border-t border-slate-600/30">
+        <div className="pt-4 border-t border-slate-600/30">
           <Button
             onClick={handleDelete}
             variant="destructive"
-            className="w-full text-xs py-1.5 bg-red-600/20 hover:bg-red-600/30 border border-red-500/30 text-red-400 hover:text-red-300 transition-all duration-200"
+            className="w-full text-sm py-2 bg-red-600/20 hover:bg-red-600/30 border border-red-500/30 text-red-400 hover:text-red-300 transition-all duration-200"
           >
-            <Trash2 size={10} className="mr-1" />
+            <Trash2 size={14} className="mr-2" />
             Delete Node
           </Button>
         </div>
