@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useRef } from "react";
+import React, { useState, useCallback, useRef, useEffect } from "react";
 import {
   ReactFlow,
   addEdge,
@@ -18,7 +18,8 @@ import { TriggerNode } from "./nodes/TriggerNode";
 import { ActionNode } from "./nodes/ActionNode";
 import { LeftSidebar } from "./LeftSidebar";
 import { NavigationMenu } from "./NavigationMenu";
-import { NodeData, ScriptFile } from "@/utils/types";
+import { NodeData, ScriptFile, WorkflowData } from "@/utils/types";
+import { ImportWorkflowDialog } from "./ImportWorkflowDialog";
 
 const nodeTypes = {
   trigger: TriggerNode,
@@ -29,9 +30,56 @@ const WorkflowBuilderContent = () => {
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
   const [selectedNode, setSelectedNode] = useState<Node | null>(null);
+  const [showImportDialog, setShowImportDialog] = useState(false);
   const [reactFlowInstance, setReactFlowInstance] =
     useState<ReactFlowInstance | null>(null);
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
+
+  // Load workflow from localStorage on component mount
+  useEffect(() => {
+    const savedWorkflow = localStorage.getItem("currentWorkflow");
+    if (savedWorkflow) {
+      try {
+        const { nodes: savedNodes, edges: savedEdges } =
+          JSON.parse(savedWorkflow);
+        setNodes(savedNodes || []);
+        setEdges(savedEdges || []);
+      } catch (error) {
+        console.error("Error loading saved workflow:", error);
+      }
+    }
+  }, [setNodes, setEdges]);
+
+  // Auto-save to localStorage whenever nodes or edges change
+  useEffect(() => {
+    const workflowData = { nodes, edges, timestamp: new Date().toISOString() };
+    localStorage.setItem("currentWorkflow", JSON.stringify(workflowData));
+  }, [nodes, edges]);
+
+  const importWorkflow = (workflowData: WorkflowData) => {
+    try {
+      const { nodes: importedNodes, edges: importedEdges } = workflowData;
+
+      if (importedNodes && Array.isArray(importedNodes)) {
+        setNodes(importedNodes);
+      }
+
+      if (importedEdges && Array.isArray(importedEdges)) {
+        setEdges(importedEdges);
+      }
+
+      setShowImportDialog(false);
+
+      // Fit view to imported workflow
+      if (reactFlowInstance) {
+        setTimeout(() => {
+          reactFlowInstance.fitView();
+        }, 100);
+      }
+    } catch (error) {
+      console.error("Error importing workflow:", error);
+    }
+  };
 
   const onConnect = useCallback(
     (params: Connection) => setEdges((eds) => addEdge(params, eds)),
@@ -233,6 +281,12 @@ const WorkflowBuilderContent = () => {
               <div className="w-1 h-1 bg-green-500 rounded-full animate-pulse"></div>
               <span className="text-xs text-green-400">Live</span>
             </div>
+            <button
+              onClick={() => setShowImportDialog(true)}
+              className="px-3 py-1.5 text-xs bg-blue-600/20 hover:bg-blue-600/30 border border-blue-500/30 text-blue-400 hover:text-blue-300 rounded-md transition-all duration-200"
+            >
+              Import JSON
+            </button>
             <NavigationMenu />
           </div>
         </div>
@@ -309,6 +363,12 @@ const WorkflowBuilderContent = () => {
           />
         </div>
       </div>
+      {/* Import Workflow Dialog */}
+      <ImportWorkflowDialog
+        isOpen={showImportDialog}
+        onClose={() => setShowImportDialog(false)}
+        onImport={importWorkflow}
+      />
     </div>
   );
 };

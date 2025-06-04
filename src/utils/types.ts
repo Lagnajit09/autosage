@@ -28,8 +28,25 @@ export interface NodeData {
   selectedScript?: string;
 }
 
+interface Position {
+  x: number;
+  y: number;
+}
+
 export interface Node {
   id: string;
   type?: string;
+  position?: Position;
   data?: NodeData;
+}
+
+export interface Edge {
+  id: string;
+  source: string;
+  target: string;
+}
+
+export interface WorkflowData {
+  nodes: Node[];
+  edges: Edge[];
 }
