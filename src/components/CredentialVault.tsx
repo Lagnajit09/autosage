@@ -3,14 +3,7 @@ import { X, Plus, Eye, EyeOff, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
-
-interface Credential {
-  id: string;
-  name: string;
-  username: string;
-  password: string;
-  createdAt: string;
-}
+import { Credential } from "@/utils/types";
 
 interface CredentialVaultProps {
   onClose: () => void;

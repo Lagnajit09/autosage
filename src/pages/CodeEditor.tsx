@@ -19,15 +19,7 @@ import {
   ContextMenuSeparator,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
-
-interface ScriptFile {
-  id: string;
-  name: string;
-  content: string;
-  language: string;
-  lastModified: Date;
-  source: "upload" | "editor";
-}
+import { ScriptFile, ScriptLanguage } from "@/utils/types";
 
 const CodeEditor = () => {
   const navigate = useNavigate();
@@ -41,7 +33,9 @@ const CodeEditor = () => {
   const [renamingFileId, setRenamingFileId] = useState<string | null>(null);
   const [newFileName, setNewFileName] = useState("");
 
-  const getLanguageInfo = (type: string) => {
+  const getLanguageInfo = (
+    type: string
+  ): { language: ScriptLanguage; extension: string; template: string } => {
     switch (type.toLowerCase()) {
       case "python":
         return {

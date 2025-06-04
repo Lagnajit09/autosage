@@ -9,47 +9,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Link } from "react-router-dom";
-
-// Define the shape of node data
-interface NodeData {
-  label?: string;
-  description?: string;
-  executionMode?: "local" | "remote";
-  scriptType?: "Python Script" | "Powershell Script" | "Shell Script";
-  serverAddress?: string;
-  selectedCredential?: {
-    id: string;
-    name: string;
-    username: string;
-    password: string;
-  };
-  selectedScript?: string; // ID of selected script
-}
-
-// Define a ScriptFile interface
-interface ScriptFile {
-  id: string;
-  name: string;
-  content: string;
-  language: "python" | "powershell" | "shell" | "javascript";
-  lastModified: Date;
-  source: "upload" | "editor";
-}
-
-// Define a simplified Node interface (we're only using the properties we need)
-interface Node {
-  id: string;
-  type?: string;
-  data?: NodeData;
-}
-
-// Define a Credential interface
-interface Credential {
-  id: string;
-  name: string;
-  username: string;
-  password: string;
-}
+import { Credential, NodeData, ScriptFile, Node } from "@/utils/types";
 
 interface RightSidebarProps {
   selectedNode: Node | null;
@@ -173,6 +133,7 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({
           name: selectedCred.name,
           username: selectedCred.username,
           password: selectedCred.password,
+          createdAt: selectedCred.createdAt,
         },
       });
     }

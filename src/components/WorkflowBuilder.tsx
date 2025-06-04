@@ -18,32 +18,7 @@ import { TriggerNode } from "./nodes/TriggerNode";
 import { ActionNode } from "./nodes/ActionNode";
 import { LeftSidebar } from "./LeftSidebar";
 import { NavigationMenu } from "./NavigationMenu";
-
-interface ScriptFile {
-  id: string;
-  name: string;
-  content: string;
-  language: "python" | "powershell" | "shell" | "javascript";
-  lastModified: Date;
-  source: "upload" | "editor";
-}
-
-// Define a Credential interface
-interface Credential {
-  id: string;
-  name: string;
-  username: string;
-  password: string;
-}
-
-interface NodeData {
-  label: string;
-  type: string;
-  description?: string;
-  executionMode?: "local" | "remote";
-  serverAddress?: string;
-  selectedCredential?: Credential;
-}
+import { NodeData, ScriptFile } from "@/utils/types";
 
 const nodeTypes = {
   trigger: TriggerNode,

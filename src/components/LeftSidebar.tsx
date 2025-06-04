@@ -1,10 +1,6 @@
 import React from "react";
 import { Play, Zap, Terminal, Globe, Mail } from "lucide-react";
-
-interface NodeData {
-  label: string;
-  type: string;
-}
+import { NodeData } from "@/utils/types";
 
 interface LeftSidebarProps {
   onSaveWorkflow: () => void;
