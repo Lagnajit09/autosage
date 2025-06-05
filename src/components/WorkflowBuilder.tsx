@@ -18,7 +18,7 @@ import { TriggerNode } from "./nodes/TriggerNode";
 import { ActionNode } from "./nodes/ActionNode";
 import { LeftSidebar } from "./LeftSidebar";
 import { NavigationMenu } from "./NavigationMenu";
-import { NodeData, ScriptFile, WorkflowData } from "@/utils/types";
+import { Edge, NodeData, ScriptFile, WorkflowData } from "@/utils/types";
 import { ImportWorkflowDialog } from "./ImportWorkflowDialog";
 
 const nodeTypes = {
@@ -30,6 +30,7 @@ const WorkflowBuilderContent = () => {
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
   const [selectedNode, setSelectedNode] = useState<Node | null>(null);
+  const [selectedEdge, setSelectedEdge] = useState<Edge | null>(null);
   const [showImportDialog, setShowImportDialog] = useState(false);
   const [reactFlowInstance, setReactFlowInstance] =
     useState<ReactFlowInstance | null>(null);
@@ -131,10 +132,17 @@ const WorkflowBuilderContent = () => {
 
   const onNodeClick = useCallback((_: React.MouseEvent, node: Node) => {
     setSelectedNode(node);
+    setSelectedEdge(null);
+  }, []);
+
+  const onEdgeClick = useCallback((_: React.MouseEvent, edge: Edge) => {
+    setSelectedEdge(edge);
+    setSelectedNode(null);
   }, []);
 
   const onPaneClick = useCallback(() => {
     setSelectedNode(null);
+    setSelectedEdge(null);
   }, []);
 
   const updateNodeData = useCallback(
@@ -153,6 +161,22 @@ const WorkflowBuilderContent = () => {
     [setNodes]
   );
 
+  const updateEdgeData = useCallback(
+    (edgeId: string, updates: Partial<Edge>) => {
+      setEdges((eds) =>
+        eds.map((edge) => {
+          if (edge.id === edgeId) {
+            const updatedEdge = { ...edge, ...updates };
+            setSelectedEdge(updatedEdge);
+            return updatedEdge;
+          }
+          return edge;
+        })
+      );
+    },
+    [setEdges]
+  );
+
   const deleteNode = useCallback(
     (nodeId: string) => {
       setNodes((nds) => nds.filter((node) => node.id !== nodeId));
@@ -162,6 +186,14 @@ const WorkflowBuilderContent = () => {
       setSelectedNode(null);
     },
     [setNodes, setEdges]
+  );
+
+  const deleteEdge = useCallback(
+    (edgeId: string) => {
+      setEdges((eds) => eds.filter((edge) => edge.id !== edgeId));
+      setSelectedEdge(null);
+    },
+    [setEdges]
   );
 
   const handleReactFlowInit = useCallback(
@@ -230,6 +262,9 @@ const WorkflowBuilderContent = () => {
         target: edge.target,
         sourceHandle: edge.sourceHandle,
         targetHandle: edge.targetHandle,
+        type: edge.type,
+        label: edge.label,
+        style: edge.style,
       })),
       timestamp: new Date().toISOString(),
       totalNodes: nodes.length,
@@ -240,6 +275,11 @@ const WorkflowBuilderContent = () => {
       "🌊 Complete Workflow Details Saved:",
       JSON.stringify(workflow, null, 2)
     );
+  };
+
+  const handleCloseRightSidebar = () => {
+    setSelectedNode(null);
+    setSelectedEdge(null);
   };
 
   return (
@@ -306,6 +346,7 @@ const WorkflowBuilderContent = () => {
               onDrop={onDrop}
               onDragOver={onDragOver}
               onNodeClick={onNodeClick}
+              onEdgeClick={onEdgeClick}
               onPaneClick={onPaneClick}
               nodeTypes={nodeTypes}
               fitView
@@ -356,9 +397,12 @@ const WorkflowBuilderContent = () => {
 
           <RightSidebar
             selectedNode={selectedNode}
+            selectedEdge={selectedEdge}
             onUpdateNode={updateNodeData}
+            onUpdateEdge={updateEdgeData}
             onDeleteNode={deleteNode}
-            onClose={() => setSelectedNode(null)}
+            onDeleteEdge={deleteEdge}
+            onClose={handleCloseRightSidebar}
             onSaveWorkflow={saveWorkflow}
           />
         </div>

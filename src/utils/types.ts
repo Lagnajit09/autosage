@@ -17,6 +17,13 @@ export interface Credential {
   createdAt: string;
 }
 
+export interface Parameter {
+  id: string;
+  name: string;
+  type: "string" | "number" | "boolean" | "file";
+  description?: string;
+}
+
 export interface NodeData {
   label?: string;
   type?: string;
@@ -26,6 +33,8 @@ export interface NodeData {
   serverAddress?: string;
   selectedCredential?: Credential;
   selectedScript?: string;
+  parameters?: Parameter[];
+  conditionType?: "output-eval" | "condition" | "custom";
 }
 
 interface Position {
@@ -44,6 +53,14 @@ export interface Edge {
   id: string;
   source: string;
   target: string;
+  sourceHandle?: string;
+  targetHandle?: string;
+  type?: string;
+  label?: string;
+  style?: {
+    stroke?: string;
+    strokeWidth?: number;
+  };
 }
 
 export interface WorkflowData {
