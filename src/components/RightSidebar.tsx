@@ -20,6 +20,7 @@ import {
 import { ParametersModal } from "./ParametersModal";
 
 interface RightSidebarProps {
+  nodes: Node[];
   selectedNode: Node | null;
   selectedEdge: Edge | null;
   onUpdateNode: (nodeId: string, data: Partial<NodeData>) => void;
@@ -28,9 +29,15 @@ interface RightSidebarProps {
   onDeleteEdge: (edgeId: string) => void;
   onClose: () => void;
   onSaveWorkflow?: () => void;
+  onCreateEdge: (
+    sourceId: string,
+    targetId: string,
+    sourceHandle?: string
+  ) => void;
 }
 
 export const RightSidebar: React.FC<RightSidebarProps> = ({
+  nodes = [],
   selectedNode,
   selectedEdge,
   onUpdateNode,
@@ -38,6 +45,7 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({
   onDeleteEdge,
   onDeleteNode,
   onClose,
+  onCreateEdge,
 }) => {
   const [showParametersModal, setShowParametersModal] = useState(false);
 
@@ -46,6 +54,13 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({
 
   // Handle input changes and update the node
   const handleInputChange = (field: string, value: string) => {
+    if (selectedNode) {
+      onUpdateNode(selectedNode.id, { [field]: value });
+    }
+  };
+
+  // Handle array input changes for decision nodes
+  const handleArrayInputChange = (field: string, value: string[]) => {
     if (selectedNode) {
       onUpdateNode(selectedNode.id, { [field]: value });
     }
@@ -200,6 +215,38 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({
     }
   };
 
+  // Handle decision node label changes
+  const handleTrueLabelChange = (nodeIds: string[]) => {
+    if (selectedNode && onCreateEdge) {
+      // Update the node data
+      handleArrayInputChange("trueLabel", nodeIds);
+
+      // Create edges for each selected node
+      nodeIds.forEach((targetId) => {
+        onCreateEdge(selectedNode.id, targetId, "true");
+      });
+    }
+  };
+
+  const handleFalseLabelChange = (nodeIds: string[]) => {
+    if (selectedNode && onCreateEdge) {
+      // Update the node data
+      handleArrayInputChange("falseLabel", nodeIds);
+
+      // Create edges for each selected node
+      nodeIds.forEach((targetId) => {
+        onCreateEdge(selectedNode.id, targetId, "false");
+      });
+    }
+  };
+
+  // Get available nodes for decision connections (exclude current node)
+  const getAvailableNodes = () => {
+    return nodes.filter(
+      (node) => node.id !== selectedNode?.id && node.type !== "trigger"
+    );
+  };
+
   return (
     <div className="w-80 bg-slate-800/60 backdrop-blur-xl border-l border-slate-700/50 p-6 overflow-y-auto">
       <div className="flex items-center justify-between mb-6">
@@ -327,7 +374,6 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({
                 ID: {selectedNode.id}
               </div>
             </div>
-
             {/* Basic Settings */}
             <div className="space-y-4">
               <div>
@@ -358,28 +404,127 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({
                 />
               </div>
             </div>
-
-            {/* Parameters Section - Available for all node types */}
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <label className="block text-sm font-medium text-slate-300">
-                  Parameters
-                </label>
-                <Button
-                  onClick={() => setShowParametersModal(true)}
-                  size="sm"
-                  className="text-xs py-1.5 px-3 bg-purple-600/20 hover:bg-purple-600/30 border border-purple-500/30 text-purple-400 hover:text-purple-300 transition-all duration-200"
-                >
-                  <Settings size={12} className="mr-1" />
-                  Configure
-                </Button>
+            {/* Parameters Section - Available for action node types */}
+            {selectedNode.type === "action" && (
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <label className="block text-sm font-medium text-slate-300">
+                    Parameters
+                  </label>
+                  <Button
+                    onClick={() => setShowParametersModal(true)}
+                    size="sm"
+                    className="text-xs py-1.5 px-3 bg-purple-600/20 hover:bg-purple-600/30 border border-purple-500/30 text-purple-400 hover:text-purple-300 transition-all duration-200"
+                  >
+                    <Settings size={12} className="mr-1" />
+                    Configure
+                  </Button>
+                </div>
+                <div className="text-xs text-slate-500">
+                  {selectedNode.data?.parameters?.length || 0} parameter(s)
+                  configured
+                </div>
               </div>
-              <div className="text-xs text-slate-500">
-                {selectedNode.data?.parameters?.length || 0} parameter(s)
-                configured
-              </div>
-            </div>
+            )}
+            {/* Decision Node Specific Settings */}
+            {selectedNode.type === "decision" && (
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-300 mb-2">
+                    Condition
+                  </label>
+                  <input
+                    type="text"
+                    value={String(selectedNode.data?.condition || "")}
+                    onChange={(e) =>
+                      handleInputChange("condition", e.target.value)
+                    }
+                    className="w-full px-3 py-2.5 text-sm bg-slate-700/50 border border-slate-600/50 rounded-md text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-transparent transition-all duration-200"
+                    placeholder="e.g., x > 0"
+                  />
+                </div>
 
+                <div>
+                  <label className="block text-sm font-medium text-slate-300 mb-2">
+                    True Label (Node IDs)
+                  </label>
+                  <Select
+                    onValueChange={(value) => handleTrueLabelChange([value])}
+                    value=""
+                  >
+                    <SelectTrigger className="w-full h-11 text-sm bg-slate-700/50 border border-slate-600/50 text-white">
+                      <SelectValue placeholder="Select node for true condition..." />
+                    </SelectTrigger>
+                    <SelectContent className="bg-slate-700 border border-slate-600 text-white">
+                      {getAvailableNodes().map((node) => (
+                        <SelectItem
+                          key={node.id}
+                          value={node.id}
+                          className="text-sm hover:bg-slate-600 focus:bg-slate-600"
+                        >
+                          {node.data?.label || node.id} ({node.type})
+                        </SelectItem>
+                      ))}
+                      {getAvailableNodes().length === 0 && (
+                        <SelectItem
+                          value="none"
+                          disabled
+                          className="text-sm text-slate-500"
+                        >
+                          No nodes available
+                        </SelectItem>
+                      )}
+                    </SelectContent>
+                  </Select>
+                  {selectedNode.data?.trueLabel &&
+                    selectedNode.data.trueLabel.length > 0 && (
+                      <div className="mt-2 text-xs text-green-400">
+                        Connected to: {selectedNode.data.trueLabel.join(", ")}
+                      </div>
+                    )}
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-slate-300 mb-2">
+                    False Label (Node IDs)
+                  </label>
+                  <Select
+                    onValueChange={(value) => handleFalseLabelChange([value])}
+                    value=""
+                  >
+                    <SelectTrigger className="w-full h-11 text-sm bg-slate-700/50 border border-slate-600/50 text-white">
+                      <SelectValue placeholder="Select node for false condition..." />
+                    </SelectTrigger>
+                    <SelectContent className="bg-slate-700 border border-slate-600 text-white">
+                      {getAvailableNodes().map((node) => (
+                        <SelectItem
+                          key={node.id}
+                          value={node.id}
+                          className="text-sm hover:bg-slate-600 focus:bg-slate-600"
+                        >
+                          {node.data?.label || node.id} ({node.type})
+                        </SelectItem>
+                      ))}
+                      {getAvailableNodes().length === 0 && (
+                        <SelectItem
+                          value="none"
+                          disabled
+                          className="text-sm text-slate-500"
+                        >
+                          No nodes available
+                        </SelectItem>
+                      )}
+                    </SelectContent>
+                  </Select>
+                  {selectedNode.data?.falseLabel &&
+                    selectedNode.data.falseLabel.length > 0 && (
+                      <div className="mt-2 text-xs text-red-400">
+                        Connected to: {selectedNode.data.falseLabel.join(", ")}
+                      </div>
+                    )}
+                </div>
+              </div>
+            )}
             {/* Action Node Specific Settings */}
             {selectedNode.type === "action" && (
               <div className="space-y-5">
@@ -567,31 +712,6 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({
                 )}
               </div>
             )}
-
-            {/* Decision Node Specific Settings */}
-            {selectedNode.type === "decision" && (
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-2">
-                    Condition Type
-                  </label>
-                  <select
-                    value={String(
-                      selectedNode.data?.conditionType || "output-eval"
-                    )}
-                    onChange={(e) =>
-                      handleInputChange("conditionType", e.target.value)
-                    }
-                    className="w-full px-3 py-2.5 text-sm bg-slate-700 border border-slate-600/50 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-transparent transition-all duration-200"
-                  >
-                    <option value="output-eval">Output Evaluation</option>
-                    <option value="condition">Condition Check</option>
-                    <option value="custom">Custom Logic</option>
-                  </select>
-                </div>
-              </div>
-            )}
-
             {/* Delete Node Button */}
             <div className="pt-6 border-t border-slate-600/30">
               <Button

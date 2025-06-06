@@ -20,10 +20,12 @@ import { LeftSidebar } from "./LeftSidebar";
 import { NavigationMenu } from "./NavigationMenu";
 import { Edge, NodeData, ScriptFile, WorkflowData } from "@/utils/types";
 import { ImportWorkflowDialog } from "./ImportWorkflowDialog";
+import { DecisionNode } from "./nodes/DecisionNode";
 
 const nodeTypes = {
   trigger: TriggerNode,
   action: ActionNode,
+  decision: DecisionNode,
 };
 
 const WorkflowBuilderContent = () => {
@@ -122,6 +124,9 @@ const WorkflowBuilderContent = () => {
           executionMode: type === "action" ? "local" : undefined,
           serverAddress: "",
           selectedCredential: "",
+          condition: type === "decision" ? "" : undefined,
+          trueLabel: type === "decision" ? [] : undefined,
+          falseLabel: type === "decision" ? [] : undefined,
         },
       };
 
@@ -201,6 +206,44 @@ const WorkflowBuilderContent = () => {
       setReactFlowInstance(reactFlowInstance);
     },
     []
+  );
+
+  // edge creation handler for decision nodes
+  const handleCreateEdge = useCallback(
+    (sourceId: string, targetId: string, sourceHandle?: string) => {
+      const newEdge = {
+        id: `${sourceId}-${targetId}-${sourceHandle || "default"}`,
+        source: sourceId,
+        target: targetId,
+        sourceHandle,
+        type: "smoothstep",
+        style: {
+          stroke:
+            sourceHandle === "true"
+              ? "#10b981"
+              : sourceHandle === "false"
+              ? "#ef4444"
+              : "#64748b",
+          strokeWidth: 2,
+        },
+        label:
+          sourceHandle === "true"
+            ? "True"
+            : sourceHandle === "false"
+            ? "False"
+            : undefined,
+      };
+
+      setEdges((eds) => {
+        // Remove existing edge with same source and sourceHandle to avoid duplicates
+        const filteredEdges = eds.filter(
+          (edge) =>
+            !(edge.source === sourceId && edge.sourceHandle === sourceHandle)
+        );
+        return [...filteredEdges, newEdge];
+      });
+    },
+    [setEdges]
   );
 
   const saveWorkflow = () => {
@@ -404,6 +447,8 @@ const WorkflowBuilderContent = () => {
             onDeleteEdge={deleteEdge}
             onClose={handleCloseRightSidebar}
             onSaveWorkflow={saveWorkflow}
+            onCreateEdge={handleCreateEdge}
+            nodes={nodes}
           />
         </div>
       </div>

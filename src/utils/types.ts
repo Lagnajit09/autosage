@@ -34,7 +34,9 @@ export interface NodeData {
   selectedCredential?: Credential;
   selectedScript?: string;
   parameters?: Parameter[];
-  conditionType?: "output-eval" | "condition" | "custom";
+  condition?: string;
+  trueLabel?: string[];
+  falseLabel?: string[];
 }
 
 interface Position {
