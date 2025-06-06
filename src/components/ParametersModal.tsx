@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -26,6 +26,7 @@ interface Parameter {
 }
 
 interface ParametersModalProps {
+  nodeId?: string;
   isOpen: boolean;
   onClose: () => void;
   parameters: Parameter[];
@@ -33,17 +34,24 @@ interface ParametersModalProps {
 }
 
 export const ParametersModal: React.FC<ParametersModalProps> = ({
+  nodeId,
   isOpen,
   onClose,
   parameters,
   onUpdateParameters,
 }) => {
-  const [localParameters, setLocalParameters] =
-    useState<Parameter[]>(parameters);
+  const [localParameters, setLocalParameters] = useState<Parameter[]>([]);
+
+  // Reset local parameters whenever the modal opens with new parameters
+  useEffect(() => {
+    if (isOpen) {
+      setLocalParameters([...parameters]);
+    }
+  }, [isOpen, parameters, nodeId]);
 
   const addParameter = () => {
     const newParameter: Parameter = {
-      id: `param-${Date.now()}`,
+      id: `param-${Date.now()}-${Math.random()}`,
       name: "",
       type: "string",
       description: "",
@@ -68,12 +76,12 @@ export const ParametersModal: React.FC<ParametersModalProps> = ({
   };
 
   const handleSave = () => {
-    onUpdateParameters(localParameters);
+    onUpdateParameters([...localParameters]);
     onClose();
   };
 
   const handleCancel = () => {
-    setLocalParameters(parameters);
+    setLocalParameters([...parameters]);
     onClose();
   };
 
@@ -83,7 +91,10 @@ export const ParametersModal: React.FC<ParametersModalProps> = ({
         <DialogHeader>
           <DialogTitle className="text-white flex items-center">
             <div className="w-1 h-1 bg-blue-500 rounded-full mr-2"></div>
-            Configure Parameters
+            Configure Parameters{" "}
+            {nodeId && (
+              <span className="text-slate-400 text-sm ml-2">({nodeId})</span>
+            )}
           </DialogTitle>
         </DialogHeader>
 
@@ -101,7 +112,7 @@ export const ParametersModal: React.FC<ParametersModalProps> = ({
                 localParameters.map((param) => (
                   <div
                     key={param.id}
-                    className="bg-slate-700/30 rounded-lg p-2 border border-slate-600/30"
+                    className="bg-slate-700/30 rounded-lg p-3 border border-slate-600/30"
                   >
                     <div className="flex items-center gap-3 mb-3">
                       <div className="flex-1">
@@ -170,33 +181,11 @@ export const ParametersModal: React.FC<ParametersModalProps> = ({
                         onClick={() => removeParameter(param.id)}
                         size="sm"
                         variant="ghost"
-                        className="h-6 w-6 p-0 text-red-400 hover:text-red-300 hover:bg-red-500/20"
+                        className="h-6 w-6 p-0 text-red-400 hover:text-red-300 hover:bg-red-500/20 self-end"
                       >
                         <Trash2 size={12} />
                       </Button>
                     </div>
-
-                    {/* <div>
-                      <Label
-                        htmlFor={`desc-${param.id}`}
-                        className="text-xs text-slate-300 mb-1 block"
-                      >
-                        Description (Optional)
-                      </Label>
-                      <Input
-                        id={`desc-${param.id}`}
-                        value={param.description || ""}
-                        onChange={(e) =>
-                          updateParameter(
-                            param.id,
-                            "description",
-                            e.target.value
-                          )
-                        }
-                        placeholder="Brief description of this parameter"
-                        className="h-8 text-xs bg-slate-700/50 border-slate-600/50 text-white"
-                      />
-                    </div> */}
                   </div>
                 ))
               )}

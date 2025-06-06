@@ -122,8 +122,8 @@ const WorkflowBuilderContent = () => {
           label: nodeData.label,
           description: "",
           executionMode: type === "action" ? "local" : undefined,
-          serverAddress: "",
-          selectedCredential: "",
+          serverAddress: type === "action" ? "" : undefined,
+          selectedCredential: type === "action" ? "" : undefined,
           condition: type === "decision" ? "" : undefined,
           trueLabel: type === "decision" ? [] : undefined,
           falseLabel: type === "decision" ? [] : undefined,
@@ -211,7 +211,7 @@ const WorkflowBuilderContent = () => {
   // edge creation handler for decision nodes
   const handleCreateEdge = useCallback(
     (sourceId: string, targetId: string, sourceHandle?: string) => {
-      const newEdge = {
+      const newEdge: Edge = {
         id: `${sourceId}-${targetId}-${sourceHandle || "default"}`,
         source: sourceId,
         target: targetId,

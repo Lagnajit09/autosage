@@ -734,6 +734,7 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({
           onClose={() => setShowParametersModal(false)}
           parameters={selectedNode.data?.parameters || []}
           onUpdateParameters={handleUpdateParameters}
+          nodeId={selectedNode.id}
         />
       )}
     </div>
