@@ -8,6 +8,7 @@ import {
   Folder,
   Trash2,
   Pencil,
+  FilePlus,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -20,6 +21,11 @@ import {
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
 import { ScriptFile, ScriptLanguage } from "@/utils/types";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 const CodeEditor = () => {
   const navigate = useNavigate();
@@ -220,32 +226,15 @@ const CodeEditor = () => {
           <Button
             variant="ghost"
             size="sm"
-            onClick={createNewFile}
-            className="text-slate-400 hover:text-gray-800"
-          >
-            <File size={14} className="mr-1" />
-            New
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
             onClick={saveFile}
-            className={`${
+            className={`flex items-center ${
               hasUnsavedChanges
                 ? "text-blue-400 hover:text-blue-800"
                 : "text-slate-400 hover:text-gray-800"
             }`}
           >
-            <Save size={14} className="mr-1" />
-            Save
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="text-green-400 hover:text-green-800"
-          >
-            <Play size={14} className="mr-1" />
-            Run
+            <Save size={14} />
+            <span className="text-sm font-medium">Save</span>
           </Button>
         </div>
       </div>
@@ -258,6 +247,22 @@ const CodeEditor = () => {
               <Folder size={12} className="mr-1" />
               Scripts
             </h3>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={createNewFile}
+                  className="text-slate-400 hover:text-gray-800"
+                >
+                  <FilePlus
+                    size={14}
+                    className="text-blue-400 hover:text-blue-800"
+                  />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Create a new script</TooltipContent>
+            </Tooltip>
           </div>
 
           <div className="space-y-1">
