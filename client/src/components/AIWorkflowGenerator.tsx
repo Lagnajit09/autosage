@@ -30,60 +30,41 @@ export const AIWorkflowGenerator: React.FC<AIWorkflowGeneratorProps> = ({
     setIsGenerating(true);
 
     try {
-      // Mock AI generation - replace with actual AI API call
-      await new Promise((resolve) => setTimeout(resolve, 2000));
+      const response = await fetch(
+        "http://localhost:3001/api/generate-workflow",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            prompt: prompt.trim(),
+          }),
+        }
+      );
 
-      // Mock generated workflow based on prompt
-      const mockWorkflow: WorkflowData = {
-        nodes: [
-          {
-            id: `trigger-${Date.now()}`,
-            type: "trigger",
-            position: { x: 100, y: 100 },
-            data: {
-              label: "Start",
-              description: "Generated workflow trigger",
-              type: "manual",
-              parameters: [],
-            },
-          },
-          {
-            id: `action-${Date.now() + 1}`,
-            type: "action",
-            position: { x: 300, y: 100 },
-            data: {
-              label: "Process Data",
-              description: `Action based on: ${prompt}`,
-              type: "script",
-              scriptType: "Python Script",
-              executionMode: "local",
-              parameters: [
-                {
-                  id: `param-${Date.now()}`,
-                  name: "input_data",
-                  type: "string",
-                  description: "Input data for processing",
-                },
-              ],
-            },
-          },
-        ],
-        edges: [
-          {
-            id: `edge-${Date.now()}`,
-            source: `trigger-${Date.now()}`,
-            target: `action-${Date.now() + 1}`,
-            type: "smoothstep",
-            style: { stroke: "#64748b", strokeWidth: 2 },
-          },
-        ],
-      };
+      const data = await response.json();
 
-      onGenerate(mockWorkflow);
-      setPrompt("");
-      onClose();
+      if (!response.ok) {
+        throw new Error(data.message || "Failed to generate workflow");
+      }
+
+      if (data.success && data.workflow) {
+        onGenerate(data.workflow);
+        setPrompt("");
+        onClose();
+
+        if (data.fallback) {
+          console.warn("Generated fallback workflow:", data.message);
+        }
+      } else {
+        throw new Error("Invalid response from server");
+      }
     } catch (error) {
       console.error("Error generating workflow:", error);
+      // setError(
+      //   error instanceof Error ? error.message : "An unexpected error occurred"
+      // );
     } finally {
       setIsGenerating(false);
     }
