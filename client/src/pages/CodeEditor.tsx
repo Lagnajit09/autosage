@@ -10,9 +10,7 @@ import {
   Pencil,
   FilePlus,
 } from "lucide-react";
-
 import { Button } from "@/components/ui/button";
-import Editor from "@monaco-editor/react";
 import {
   ContextMenu,
   ContextMenuContent,
@@ -26,6 +24,10 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
+import Editor, { OnMount } from "@monaco-editor/react";
+import AIScriptGenerator from "@/components/AIScriptGenerator";
+import GenieButton from "@/components/GenieButton";
 
 const CodeEditor = () => {
   const navigate = useNavigate();
@@ -38,6 +40,7 @@ const CodeEditor = () => {
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [renamingFileId, setRenamingFileId] = useState<string | null>(null);
   const [newFileName, setNewFileName] = useState("");
+  const [isAISidebarOpen, setIsAISidebarOpen] = useState(false);
 
   const getLanguageInfo = (
     type: string
@@ -105,6 +108,137 @@ const CodeEditor = () => {
       setCurrentFile(newFile);
     }
   }, [scriptType]);
+
+  const handleGeneratedScript = (script: string, filename: string) => {
+    const langInfo = getLanguageInfo(scriptType);
+    const newFile: ScriptFile = {
+      id: `${Date.now()}-${Math.random()}`,
+      name: filename,
+      content: script,
+      language: langInfo.language,
+      lastModified: new Date(),
+      source: "editor",
+    };
+
+    const updatedFiles = [...files, newFile];
+    setFiles(updatedFiles);
+    setCurrentFile(newFile);
+    localStorage.setItem("scriptFiles", JSON.stringify(updatedFiles));
+    setHasUnsavedChanges(false);
+    setIsAISidebarOpen(false);
+  };
+
+  const configureMonacoEditor: OnMount = (editor, monaco) => {
+    // Enable IntelliSense and autocomplete
+    monaco.languages.registerCompletionItemProvider(
+      currentFile?.language || "javascript",
+      {
+        provideCompletionItems: () => {
+          const suggestions = [];
+
+          // Common suggestions based on language
+          if (currentFile?.language === "python") {
+            suggestions.push(
+              {
+                label: "print",
+                kind: monaco.languages.CompletionItemKind.Function,
+                insertText: "print(${1})",
+                insertTextRules:
+                  monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+                documentation: "Print function",
+              },
+              {
+                label: "def",
+                kind: monaco.languages.CompletionItemKind.Keyword,
+                insertText: "def ${1:function_name}(${2}):\n    ${3:pass}",
+                insertTextRules:
+                  monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+                documentation: "Define a function",
+              },
+              {
+                label: "if",
+                kind: monaco.languages.CompletionItemKind.Keyword,
+                insertText: "if ${1:condition}:\n    ${2:pass}",
+                insertTextRules:
+                  monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+                documentation: "If statement",
+              },
+              {
+                label: "for",
+                kind: monaco.languages.CompletionItemKind.Keyword,
+                insertText: "for ${1:item} in ${2:iterable}:\n    ${3:pass}",
+                insertTextRules:
+                  monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+                documentation: "For loop",
+              }
+            );
+          } else if (currentFile?.language === "javascript") {
+            suggestions.push(
+              {
+                label: "console.log",
+                kind: monaco.languages.CompletionItemKind.Function,
+                insertText: "console.log(${1});",
+                insertTextRules:
+                  monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+                documentation: "Console log function",
+              },
+              {
+                label: "function",
+                kind: monaco.languages.CompletionItemKind.Keyword,
+                insertText: "function ${1:functionName}(${2}) {\n    ${3}\n}",
+                insertTextRules:
+                  monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+                documentation: "Function declaration",
+              },
+              {
+                label: "const",
+                kind: monaco.languages.CompletionItemKind.Keyword,
+                insertText: "const ${1:variable} = ${2};",
+                insertTextRules:
+                  monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+                documentation: "Const declaration",
+              }
+            );
+          } else if (currentFile?.language === "powershell") {
+            suggestions.push(
+              {
+                label: "Write-Host",
+                kind: monaco.languages.CompletionItemKind.Function,
+                insertText: 'Write-Host "${1}"',
+                insertTextRules:
+                  monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+                documentation: "Write output to console",
+              },
+              {
+                label: "function",
+                kind: monaco.languages.CompletionItemKind.Keyword,
+                insertText: "function ${1:FunctionName} {\n    ${2}\n}",
+                insertTextRules:
+                  monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+                documentation: "Function declaration",
+              }
+            );
+          }
+
+          return { suggestions };
+        },
+      }
+    );
+
+    // Configure editor settings for better code completion
+    editor.updateOptions({
+      suggestOnTriggerCharacters: true,
+      acceptSuggestionOnEnter: "on",
+      tabCompletion: "on",
+      wordBasedSuggestions: "matchingDocuments",
+      parameterHints: { enabled: true },
+      autoClosingBrackets: "always",
+      autoClosingQuotes: "always",
+      autoIndent: "advanced",
+      formatOnPaste: true,
+      formatOnType: true,
+    });
+  };
 
   const saveFile = () => {
     if (!currentFile) return;
@@ -261,7 +395,7 @@ const CodeEditor = () => {
                   />
                 </Button>
               </TooltipTrigger>
-              <TooltipContent>Create a new script</TooltipContent>
+              <TooltipContent>Create new script</TooltipContent>
             </Tooltip>
           </div>
 
@@ -337,6 +471,22 @@ const CodeEditor = () => {
           </div>
         </div>
 
+        {/* AI Script Generator */}
+        <Sheet open={isAISidebarOpen} onOpenChange={setIsAISidebarOpen}>
+          <SheetTrigger asChild>
+            <GenieButton onClick={() => setIsAISidebarOpen(true)} />
+          </SheetTrigger>
+          <SheetContent
+            side="right"
+            className="w-96 bg-slate-900/95 border-slate-700/50 p-0"
+          >
+            <AIScriptGenerator
+              scriptType={scriptType}
+              onGeneratedScript={handleGeneratedScript}
+            />
+          </SheetContent>
+        </Sheet>
+
         {/* Editor */}
         <div className="flex-1 relative">
           {currentFile ? (
@@ -346,6 +496,7 @@ const CodeEditor = () => {
               value={currentFile.content}
               onChange={handleEditorChange}
               theme="vs-dark"
+              onMount={configureMonacoEditor}
               options={{
                 minimap: { enabled: true },
                 fontSize: 13,
@@ -358,6 +509,14 @@ const CodeEditor = () => {
                 wordWrap: "on",
                 formatOnPaste: true,
                 formatOnType: true,
+                suggestOnTriggerCharacters: true,
+                acceptSuggestionOnEnter: "on",
+                tabCompletion: "on",
+                wordBasedSuggestions: "matchingDocuments",
+                parameterHints: { enabled: true },
+                autoClosingBrackets: "always",
+                autoClosingQuotes: "always",
+                autoIndent: "advanced",
               }}
             />
           ) : (
@@ -365,7 +524,12 @@ const CodeEditor = () => {
               <div className="text-center">
                 <File size={48} className="text-slate-600 mx-auto mb-3" />
                 <p className="text-slate-400 text-sm mb-2">No file selected</p>
-                <Button onClick={createNewFile} variant="outline" size="sm">
+                <Button
+                  onClick={createNewFile}
+                  variant="outline"
+                  size="sm"
+                  className="text-slate-700 hover:text-slate-900"
+                >
                   Create New Script
                 </Button>
               </div>

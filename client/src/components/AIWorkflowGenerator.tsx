@@ -76,7 +76,7 @@ export const AIWorkflowGenerator: React.FC<AIWorkflowGeneratorProps> = ({
         <DialogHeader>
           <DialogTitle className="text-white flex items-center">
             <Wand2 size={18} className="mr-2 text-purple-400" />
-            AI Workflow Generator
+            Genie Workflow
           </DialogTitle>
         </DialogHeader>
 
