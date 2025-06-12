@@ -5,6 +5,7 @@ require("dotenv").config();
 // Import route modules
 const healthRoutes = require("./routes/health");
 const workflowRoutes = require("./routes/workflow");
+const scriptRoutes = require("./routes/script");
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -17,6 +18,7 @@ app.use(express.urlencoded({ extended: true }));
 // Routes
 app.use("/health", healthRoutes);
 app.use("/api", workflowRoutes);
+app.use("/api", scriptRoutes);
 
 // Error handling middleware
 app.use((error, req, res, next) => {

@@ -3,11 +3,29 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
-import { Wand2, Loader2, Copy, Plus } from "lucide-react";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Wand2, Loader2, Copy, Plus, AlertCircle } from "lucide-react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { ScrollArea } from "./ui/scroll-area";
 
 interface AIScriptGeneratorProps {
   scriptType: string;
   onGeneratedScript?: (script: string, filename: string) => void;
+}
+
+interface GenerateScriptResponse {
+  success: boolean;
+  script: string;
+  filename: string;
+  language: string;
+  message: string;
+  fallback?: boolean;
 }
 
 const AIScriptGenerator: React.FC<AIScriptGeneratorProps> = ({
@@ -15,80 +33,152 @@ const AIScriptGenerator: React.FC<AIScriptGeneratorProps> = ({
   onGeneratedScript,
 }) => {
   const [prompt, setPrompt] = useState("");
+  const [selectedLanguage, setSelectedLanguage] = useState(
+    scriptType.toLowerCase()
+  );
+  const [selectedScriptType, setSelectedScriptType] = useState("automation");
   const [isGenerating, setIsGenerating] = useState(false);
   const [generatedScript, setGeneratedScript] = useState("");
   const [generatedFilename, setGeneratedFilename] = useState("");
+  const [error, setError] = useState("");
+  const [isFallback, setIsFallback] = useState(false);
+
+  const languages = [
+    { value: "python", label: "Python" },
+    { value: "powershell", label: "PowerShell" },
+    { value: "shell", label: "Shell/Bash" },
+    { value: "javascript", label: "JavaScript" },
+  ];
+
+  const scriptTypes = [
+    { value: "automation", label: "Automation" },
+    { value: "utility", label: "Utility" },
+    { value: "data-processing", label: "Data Processing" },
+    { value: "web-scraping", label: "Web Scraping" },
+    { value: "file-management", label: "File Management" },
+    { value: "system-admin", label: "System Administration" },
+    { value: "custom", label: "Custom" },
+  ];
+
+  const API_BASE_URL = "http://localhost:3001";
 
   const handleGenerate = async () => {
     if (!prompt.trim()) return;
 
     setIsGenerating(true);
+    setError("");
+    setIsFallback(false);
 
-    // TODO: Replace with actual API call
-    setTimeout(() => {
-      const mockScript = generateMockScript(scriptType, prompt);
-      const mockFilename = generateMockFilename(scriptType);
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/generate-script`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          prompt: prompt.trim(),
+          scriptType: selectedScriptType,
+          language: selectedLanguage,
+        }),
+      });
 
-      setGeneratedScript(mockScript);
-      setGeneratedFilename(mockFilename);
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const data: GenerateScriptResponse = await response.json();
+
+      if (data.success) {
+        setGeneratedScript(data.script);
+        setGeneratedFilename(data.filename);
+        setIsFallback(data.fallback || false);
+      } else {
+        throw new Error(data.message || "Failed to generate script");
+      }
+    } catch (err) {
+      console.error("Error generating script:", err);
+      setError(
+        err instanceof Error ? err.message : "Failed to generate script"
+      );
+
+      // Generate a basic fallback script locally as last resort
+      const fallbackResult = generateLocalFallback();
+      setGeneratedScript(fallbackResult.script);
+      setGeneratedFilename(fallbackResult.filename);
+      setIsFallback(true);
+    } finally {
       setIsGenerating(false);
-    }, 2000);
+    }
   };
 
-  const generateMockScript = (type: string, userPrompt: string) => {
-    switch (type.toLowerCase()) {
-      case "python":
-        return `#!/usr/bin/env python3
-# Generated script based on: ${userPrompt}
+  const generateLocalFallback = () => {
+    const timestamp = Date.now();
+    const templates = {
+      python: `#!/usr/bin/env python3
+"""
+Script generated for: ${prompt}
+Type: ${selectedScriptType}
+Generated: ${new Date().toISOString()}
+"""
 
 def main():
-    """
-    ${userPrompt}
-    """
-    print("Script generated for: ${userPrompt}")
-    # TODO: Implement functionality
+    """Main function"""
+    print("Script for: ${prompt}")
+    # TODO: Implement your logic here
+    pass
 
 if __name__ == "__main__":
     main()
-`;
-      case "powershell":
-        return `# Generated PowerShell script based on: ${userPrompt}
+`,
+      powershell: `# Script generated for: ${prompt}
+# Type: ${selectedScriptType}
+# Generated: ${new Date().toISOString()}
 
-Write-Host "Script generated for: ${userPrompt}"
-# TODO: Implement functionality
-`;
-      case "shell":
-        return `#!/bin/bash
-# Generated shell script based on: ${userPrompt}
+Write-Host "Script for: ${prompt}"
+# TODO: Implement your logic here
+`,
+      shell: `#!/bin/bash
+# Script generated for: ${prompt}
+# Type: ${selectedScriptType}
+# Generated: ${new Date().toISOString()}
 
-echo "Script generated for: ${userPrompt}"
-# TODO: Implement functionality
-`;
-      default:
-        return `// Generated JavaScript based on: ${userPrompt}
+echo "Script for: ${prompt}"
+# TODO: Implement your logic here
+`,
+      javascript: `/**
+ * Script generated for: ${prompt}
+ * Type: ${selectedScriptType}
+ * Generated: ${new Date().toISOString()}
+ */
 
-console.log("Script generated for: ${userPrompt}");
-// TODO: Implement functionality
-`;
-    }
+console.log("Script for: ${prompt}");
+// TODO: Implement your logic here
+`,
+    };
+
+    const extensions = {
+      python: "py",
+      powershell: "ps1",
+      shell: "sh",
+      javascript: "js",
+    };
+
+    return {
+      script:
+        templates[selectedLanguage as keyof typeof templates] ||
+        templates.python,
+      filename: `fallback_${timestamp}.${
+        extensions[selectedLanguage as keyof typeof extensions] || "txt"
+      }`,
+    };
   };
 
-  const generateMockFilename = (type: string) => {
-    const timestamp = Date.now();
-    switch (type.toLowerCase()) {
-      case "python":
-        return `ai_generated_${timestamp}.py`;
-      case "powershell":
-        return `ai_generated_${timestamp}.ps1`;
-      case "shell":
-        return `ai_generated_${timestamp}.sh`;
-      default:
-        return `ai_generated_${timestamp}.js`;
+  const handleCopyScript = async () => {
+    try {
+      await navigator.clipboard.writeText(generatedScript);
+    } catch (err) {
+      console.error("Failed to copy script:", err);
     }
-  };
-
-  const handleCopyScript = () => {
-    navigator.clipboard.writeText(generatedScript);
   };
 
   const handleAddToEditor = () => {
@@ -98,34 +188,107 @@ console.log("Script generated for: ${userPrompt}");
   };
 
   return (
-    <div className="h-full flex flex-col space-y-4 p-4">
+    <ScrollArea className="h-full flex flex-col space-y-4 p-4">
       <div className="flex items-center space-x-2 mb-4">
         <Wand2 size={20} className="text-purple-400" />
-        <h3 className="text-lg font-semibold text-white">Genie Script</h3>
+        <h3 className="text-lg font-semibold text-white">
+          AI Script Generator
+        </h3>
       </div>
+
+      {error && (
+        <Alert className="bg-red-900/20 border-red-800/50">
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription className="text-red-300">{error}</AlertDescription>
+        </Alert>
+      )}
 
       <Card className="bg-slate-800/60 border-slate-700/50">
         <CardHeader className="pb-3">
           <CardTitle className="text-sm text-slate-300">
-            Describe your script
+            Configure your script
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <Label
+                htmlFor="language"
+                className="text-xs text-slate-400 mb-2 block"
+              >
+                Language
+              </Label>
+              <Select
+                value={selectedLanguage}
+                onValueChange={setSelectedLanguage}
+                disabled={isGenerating}
+              >
+                <SelectTrigger className="bg-slate-700/50 border-slate-600/50 text-white">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="bg-slate-800 border-slate-700">
+                  {languages.map((lang) => (
+                    <SelectItem
+                      key={lang.value}
+                      value={lang.value}
+                      className="text-white hover:bg-slate-700"
+                    >
+                      {lang.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div>
+              <Label
+                htmlFor="scriptType"
+                className="text-xs text-slate-400 mb-2 block"
+              >
+                Script Type
+              </Label>
+              <Select
+                value={selectedScriptType}
+                onValueChange={setSelectedScriptType}
+                disabled={isGenerating}
+              >
+                <SelectTrigger className="bg-slate-700/50 border-slate-600/50 text-white">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="bg-slate-800 border-slate-700">
+                  {scriptTypes.map((type) => (
+                    <SelectItem
+                      key={type.value}
+                      value={type.value}
+                      className="text-white hover:bg-slate-700"
+                    >
+                      {type.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
           <div>
             <Label
               htmlFor="prompt"
               className="text-xs text-slate-400 mb-2 block"
             >
-              What do you want your {scriptType} script to do?
+              Describe what you want your script to do
             </Label>
             <Textarea
               id="prompt"
-              placeholder={`e.g., "Create a script that backs up files from one directory to another"`}
+              placeholder={`e.g., "Create a script that backs up files from one directory to another and logs the operation"`}
               value={prompt}
               onChange={(e) => setPrompt(e.target.value)}
-              className="bg-slate-700/50 border-slate-600/50 text-white placeholder:text-slate-500 min-h-[100px] resize-none"
+              className="bg-slate-700/50 border-slate-600/50 text-white placeholder:text-slate-500 min-h-[120px] resize-none"
               disabled={isGenerating}
+              maxLength={1000}
             />
+            <div className="text-xs text-slate-500 mt-1">
+              {prompt.length}/1000 characters
+            </div>
           </div>
 
           <Button
@@ -154,6 +317,11 @@ console.log("Script generated for: ${userPrompt}");
             <div className="flex items-center justify-between">
               <CardTitle className="text-sm text-slate-300">
                 Generated Script
+                {isFallback && (
+                  <span className="ml-2 text-xs text-yellow-400">
+                    (Fallback)
+                  </span>
+                )}
               </CardTitle>
               <div className="flex space-x-2">
                 <Button
@@ -161,6 +329,7 @@ console.log("Script generated for: ${userPrompt}");
                   size="sm"
                   onClick={handleCopyScript}
                   className="text-slate-400 hover:text-white h-8 w-8 p-0"
+                  title="Copy to clipboard"
                 >
                   <Copy size={14} />
                 </Button>
@@ -169,6 +338,7 @@ console.log("Script generated for: ${userPrompt}");
                   size="sm"
                   onClick={handleAddToEditor}
                   className="text-green-400 hover:text-green-300 h-8 w-8 p-0"
+                  title="Add to editor"
                 >
                   <Plus size={14} />
                 </Button>
@@ -177,27 +347,41 @@ console.log("Script generated for: ${userPrompt}");
           </CardHeader>
           <CardContent>
             <div className="bg-slate-900/50 rounded-md p-3 max-h-[300px] overflow-y-auto">
-              <pre className="text-xs text-slate-300 whitespace-pre-wrap">
+              <pre className="text-xs text-slate-300 whitespace-pre-wrap font-mono">
                 {generatedScript}
               </pre>
             </div>
-            <div className="mt-3">
+            <div className="mt-3 flex justify-between items-center">
               <p className="text-xs text-slate-500">
                 Filename:{" "}
                 <span className="text-slate-400">{generatedFilename}</span>
               </p>
+              <p className="text-xs text-slate-500">
+                Language:{" "}
+                <span className="text-slate-400 capitalize">
+                  {selectedLanguage}
+                </span>
+              </p>
             </div>
+            {isFallback && (
+              <Alert className="mt-3 bg-yellow-900/20 border-yellow-800/50">
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription className="text-yellow-300 text-xs">
+                  This is a basic template. AI generation was unavailable.
+                </AlertDescription>
+              </Alert>
+            )}
           </CardContent>
         </Card>
       )}
 
       <div className="text-xs text-slate-500 mt-auto">
         <p>
-          💡 Tip: Be specific about what you want the script to accomplish for
-          better results.
+          💡 Tip: Be specific about inputs, outputs, and edge cases for better
+          AI-generated scripts.
         </p>
       </div>
-    </div>
+    </ScrollArea>
   );
 };
 

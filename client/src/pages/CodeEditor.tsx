@@ -110,12 +110,11 @@ const CodeEditor = () => {
   }, [scriptType]);
 
   const handleGeneratedScript = (script: string, filename: string) => {
-    const langInfo = getLanguageInfo(scriptType);
     const newFile: ScriptFile = {
       id: `${Date.now()}-${Math.random()}`,
       name: filename,
       content: script,
-      language: langInfo.language,
+      language: getLanguageFromExtension(filename),
       lastModified: new Date(),
       source: "editor",
     };
@@ -325,8 +324,25 @@ const CodeEditor = () => {
     setHasUnsavedChanges(true);
   };
 
+  const getLanguageFromExtension = (filename: string): ScriptLanguage => {
+    const ext = filename.split(".").pop()?.toLowerCase() || "";
+    switch (ext) {
+      case "py":
+        return "python";
+      case "ps1":
+        return "powershell";
+      case "sh":
+        return "shell";
+      case "js":
+        return "javascript";
+      default:
+        return "javascript";
+    }
+  };
+
   const selectFile = (file: ScriptFile) => {
-    setCurrentFile(file);
+    const language = getLanguageFromExtension(file.name);
+    setCurrentFile({ ...file, language });
     setHasUnsavedChanges(false);
   };
 
