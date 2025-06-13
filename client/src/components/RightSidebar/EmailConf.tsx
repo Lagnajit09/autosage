@@ -1,7 +1,14 @@
 import React from "react";
 import { Plus, Minus } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { BaseConfigProps } from "@/utils/types";
+import { BaseConfigProps, Credential } from "@/utils/types";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 export const EmailConf: React.FC<BaseConfigProps> = ({
   selectedNode,
@@ -48,16 +55,16 @@ export const EmailConf: React.FC<BaseConfigProps> = ({
       host: "",
       port: 587,
       secure: false,
-      auth: { username: "", password: "" },
+      selectedCredential: undefined,
     };
 
-    if (field.startsWith("auth.")) {
-      const authField = field.replace("auth.", "");
+    if (field.startsWith("selectedCredential.")) {
+      const authField = field.replace("selectedCredential.", "");
       onUpdateNode(selectedNode.id, {
         smtpConfig: {
           ...currentConfig,
-          auth: {
-            ...currentConfig.auth,
+          selectedCredential: {
+            ...currentConfig.selectedCredential,
             [authField]: value,
           },
         },
@@ -70,6 +77,48 @@ export const EmailConf: React.FC<BaseConfigProps> = ({
         },
       });
     }
+  };
+
+  const getSavedCredentials = () => {
+    try {
+      const savedCredentials = sessionStorage.getItem("workflowCredentials");
+      if (savedCredentials) {
+        return JSON.parse(savedCredentials);
+      }
+    } catch (error) {
+      console.error("Error loading credentials:", error);
+    }
+    return [];
+  };
+
+  const handleCredentialSelect = (credentialId: string) => {
+    const selectedCred = getSavedCredentials().find(
+      (cred: Credential) => cred.id === credentialId
+    );
+    if (selectedCred) {
+      onUpdateNode(selectedNode.id, {
+        smtpConfig: {
+          ...selectedNode.data?.smtpConfig,
+          selectedCredential: {
+            id: selectedCred.id,
+            name: selectedCred.name,
+            username: selectedCred.username,
+            password: selectedCred.password,
+            createdAt: selectedCred.createdAt,
+          },
+        },
+      });
+    }
+  };
+
+  const getSelectedCredentialId = () => {
+    const selectedCred = selectedNode.data?.smtpConfig?.selectedCredential;
+    if (typeof selectedCred === "string") {
+      return selectedCred;
+    } else if (selectedCred && typeof selectedCred === "object") {
+      return selectedCred.id;
+    }
+    return "";
   };
 
   return (
@@ -291,40 +340,56 @@ export const EmailConf: React.FC<BaseConfigProps> = ({
           </label>
         </div>
 
-        <div className="grid grid-cols-1 gap-3">
-          <div>
-            <label className="block text-xs font-medium text-slate-300 mb-1">
-              Username
-            </label>
-            <input
-              type="text"
-              value={String(
-                selectedNode.data?.smtpConfig?.auth?.username || ""
+        <div>
+          <label className="block text-sm font-medium text-slate-300 mb-2">
+            Credentials
+          </label>
+          <Select
+            onValueChange={handleCredentialSelect}
+            value={getSelectedCredentialId()}
+          >
+            <SelectTrigger className="w-full h-11 text-sm bg-slate-700/50 border border-slate-600/50 text-white">
+              <SelectValue placeholder="Select credentials..." />
+            </SelectTrigger>
+            <SelectContent className="bg-slate-700 border border-slate-600 text-white">
+              {getSavedCredentials().map((credential: Credential) => (
+                <SelectItem
+                  key={credential.id}
+                  value={credential.id}
+                  className="text-sm hover:bg-slate-600 focus:bg-slate-600"
+                >
+                  <div className="flex items-center space-x-2">
+                    <svg
+                      className="w-3 h-3"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"
+                      />
+                    </svg>
+                    <span>{credential.name}</span>
+                  </div>
+                </SelectItem>
+              ))}
+              {getSavedCredentials().length === 0 && (
+                <SelectItem
+                  value="none"
+                  disabled
+                  className="text-sm text-slate-500"
+                >
+                  No credentials available
+                </SelectItem>
               )}
-              onChange={(e) =>
-                handleSMTPConfigChange("auth.username", e.target.value)
-              }
-              className="w-full px-2 py-2 text-sm bg-slate-700/50 border border-slate-600/50 rounded-md text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/50"
-              placeholder="SMTP username"
-            />
-          </div>
-
-          <div>
-            <label className="block text-xs font-medium text-slate-300 mb-1">
-              Password
-            </label>
-            <input
-              type="password"
-              value={String(
-                selectedNode.data?.smtpConfig?.auth?.password || ""
-              )}
-              onChange={(e) =>
-                handleSMTPConfigChange("auth.password", e.target.value)
-              }
-              className="w-full px-2 py-2 text-sm bg-slate-700/50 border border-slate-600/50 rounded-md text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/50"
-              placeholder="SMTP password"
-            />
-          </div>
+            </SelectContent>
+          </Select>
+          <p className="text-xs text-slate-500 mt-2">
+            Add credentials via the hamburger menu
+          </p>
         </div>
       </div>
     </div>

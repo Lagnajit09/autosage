@@ -71,10 +71,7 @@ export interface NodeData {
     host: string;
     port: number;
     secure: boolean;
-    auth: {
-      username: string;
-      password: string;
-    };
+    selectedCredential?: Credential;
   };
 }
 

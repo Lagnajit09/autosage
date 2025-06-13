@@ -173,7 +173,7 @@ Each node should have:
 - position: {x, y} coordinates for canvas placement
 - data: node configuration including label, type (script, email), description, parameters, etc.
 
-For script actions, include:
+For script actions, include the following in the data object:
 - type: "script" (for email, type is "email")
 - scriptType: "Python Script" | "Powershell Script" | "Shell Script"
 - executionMode: "local" | "remote"
@@ -181,7 +181,18 @@ For script actions, include:
 - selectedCredential: credential object if needed
 - parameters: array of input parameters (id, name, type (string, number, boolean), description)
 
-For decision nodes, include:
+For email actions, include the following in the data object:
+- type: "email"
+- from: email address
+- to: array of email addresses
+- cc: array of email addresses
+- bcc: array of email addresses
+- subject: email subject
+- body: email body
+- isHTML: boolean
+- smtpConfig: object with smtp server configuration (host, port, secure, selectedCredential)
+
+For decision nodes, include the following in the data object:
 - condition: the condition to evaluate
 - trueLabel: array of node IDs for true path
 - falseLabel: array of node IDs for false path

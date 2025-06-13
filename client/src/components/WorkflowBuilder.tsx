@@ -124,12 +124,6 @@ const WorkflowBuilderContent = () => {
           ...nodeData,
           label: nodeData.label,
           description: "",
-          executionMode: type === "action" ? "local" : undefined,
-          serverAddress: type === "action" ? "" : undefined,
-          selectedCredential: type === "action" ? "" : undefined,
-          condition: type === "decision" ? "" : undefined,
-          trueLabel: type === "decision" ? [] : undefined,
-          falseLabel: type === "decision" ? [] : undefined,
         },
       };
 
