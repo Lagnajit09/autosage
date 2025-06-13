@@ -192,6 +192,13 @@ For edges, include:
 - type: edge type (smoothstep)
 - style: { stroke: "#64748b", strokeWidth: 2 }
 
+For true and false edges, include:
+- id: unique identifier that includes the source node ID and the target node ID and then the sourceHandle (example "id": "decision-xxx-action-xxx-false" or "decision-xxx-action-xxx-true")
+- sourceHandle: "false" or "true"
+- label: "true" or "false"
+- style: ef4444 for false and 10b981 for true, strokeWidth: 2
+- everything else is the same as the edge object
+
 Generate realistic server addresses (like 192.168.1.x or 10.0.0.x), parameter names, and conditions based on the prompt.
 
 Return ONLY a valid JSON object with nodes and edges arrays. Do not include any explanation or markdown formatting.`;
