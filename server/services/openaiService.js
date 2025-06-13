@@ -171,9 +171,10 @@ Each node should have:
 - id: unique identifier (use timestamp-based IDs with a prefix "trigger-", "action-", "decision-")
 - type: node type
 - position: {x, y} coordinates for canvas placement
-- data: node configuration including label, description, parameters, etc.
+- data: node configuration including label, type (script, email), description, parameters, etc.
 
 For script actions, include:
+- type: "script" (for email, type is "email")
 - scriptType: "Python Script" | "Powershell Script" | "Shell Script"
 - executionMode: "local" | "remote"
 - serverAddress: for remote execution
