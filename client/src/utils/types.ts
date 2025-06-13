@@ -24,19 +24,58 @@ export interface Parameter {
   description?: string;
 }
 
+export interface Attachment {
+  id: string;
+  name: string;
+  url: string;
+  size: number;
+  createdAt: string;
+}
+
 export interface NodeData {
   label?: string;
   type?: string;
   description?: string;
+  parameters?: Parameter[];
+
+  // Script specific fields
   scriptType?: "Python Script" | "Powershell Script" | "Shell Script";
   executionMode?: "local" | "remote";
   serverAddress?: string;
   selectedCredential?: Credential;
   selectedScript?: string;
-  parameters?: Parameter[];
+
+  // Decision specific fields
   condition?: string;
   trueLabel?: string[];
   falseLabel?: string[];
+
+  // Trigger specific fields
+  schedule?: string;
+  watchPath?: string;
+  webhookUrl?: string;
+  webhookMethod?: "GET" | "POST" | "PUT" | "DELETE" | "PATCH";
+  webhookHeaders?: Record<string, string>;
+  webhookBody?: string;
+
+  // Email specific fields
+  from?: string;
+  to?: string[];
+  cc?: string[];
+  bcc?: string[];
+  subject?: string;
+  body?: string;
+  isHTML?: boolean;
+  attachments?: Attachment[];
+  smtpConfig?: {
+    host: string;
+    port: number;
+    secure: boolean;
+    auth: {
+      username: string;
+      password: string;
+    };
+  };
 }
 
 interface Position {
@@ -68,4 +107,24 @@ export interface Edge {
 export interface WorkflowData {
   nodes: Node[];
   edges: Edge[];
+}
+
+export interface BaseConfigProps {
+  selectedNode: Node;
+  onUpdateNode: (nodeId: string, data: Partial<NodeData>) => void;
+}
+
+export interface EdgeConfigProps {
+  selectedEdge: Edge;
+  onUpdateEdge: (edgeId: string, updates: Partial<Edge>) => void;
+  onDeleteEdge: (edgeId: string) => void;
+}
+
+export interface DecisionConfigProps extends BaseConfigProps {
+  nodes: Node[];
+  onCreateEdge?: (
+    sourceId: string,
+    targetId: string,
+    sourceHandle?: string
+  ) => void;
 }
