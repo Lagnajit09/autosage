@@ -171,25 +171,27 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({
             </div>
 
             {/* Parameters Section */}
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <label className="block text-sm font-medium text-slate-300">
-                  Parameters
-                </label>
-                <Button
-                  onClick={() => setShowParametersModal(true)}
-                  size="sm"
-                  className="text-xs py-1.5 px-3 bg-purple-600/20 hover:bg-purple-600/30 border border-purple-500/30 text-purple-400 hover:text-purple-300 transition-all duration-200"
-                >
-                  <Settings size={12} className="mr-1" />
-                  Configure
-                </Button>
+            {!(selectedNode.type === "trigger") && (
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <label className="block text-sm font-medium text-slate-300">
+                    Parameters
+                  </label>
+                  <Button
+                    onClick={() => setShowParametersModal(true)}
+                    size="sm"
+                    className="text-xs py-1.5 px-3 bg-purple-600/20 hover:bg-purple-600/30 border border-purple-500/30 text-purple-400 hover:text-purple-300 transition-all duration-200"
+                  >
+                    <Settings size={12} className="mr-1" />
+                    Configure
+                  </Button>
+                </div>
+                <div className="text-xs text-slate-500">
+                  {selectedNode.data?.parameters?.length || 0} parameter(s)
+                  configured
+                </div>
               </div>
-              <div className="text-xs text-slate-500">
-                {selectedNode.data?.parameters?.length || 0} parameter(s)
-                configured
-              </div>
-            </div>
+            )}
 
             {/* Action Type Selection for Action Nodes */}
             {selectedNode.type === "action" && (

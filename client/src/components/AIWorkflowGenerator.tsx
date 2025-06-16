@@ -9,6 +9,13 @@ import {
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { WorkflowData } from "@/utils/types";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "./ui/select";
 
 interface AIWorkflowGeneratorProps {
   isOpen: boolean;
@@ -23,7 +30,8 @@ export const AIWorkflowGenerator: React.FC<AIWorkflowGeneratorProps> = ({
 }) => {
   const [prompt, setPrompt] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
-
+  const [workflowType, setWorkflowType] = useState("");
+  const [generationType, setGenerationType] = useState("");
   const handleGenerate = async () => {
     if (!prompt.trim()) return;
 
@@ -96,6 +104,58 @@ export const AIWorkflowGenerator: React.FC<AIWorkflowGeneratorProps> = ({
               className="w-full px-3 py-3 text-sm bg-slate-700/50 border border-slate-600/50 rounded-md text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-purple-500/50 focus:border-transparent resize-none"
               rows={4}
             />
+          </div>
+
+          {/* Generation Configuration */}
+          <div className="flex items-center justify-between gap-2">
+            <div className="w-1/2">
+              <Select
+                value={workflowType}
+                onValueChange={(value) => setWorkflowType(value)}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Workflow Type" />
+                </SelectTrigger>
+                <SelectContent className="bg-slate-700 text-white">
+                  <SelectItem
+                    value="complete"
+                    className="hover:text-gray-800 hover:bg-slate-300"
+                  >
+                    New Workflow
+                  </SelectItem>
+                  <SelectItem
+                    value="workflow"
+                    className="hover:text-gray-800 hover:bg-slate-300"
+                  >
+                    Edit existing workflow
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="w-1/2">
+              <Select
+                value={generationType}
+                onValueChange={(value) => setGenerationType(value)}
+              >
+                <SelectTrigger className="">
+                  <SelectValue placeholder="Generation Type" />
+                </SelectTrigger>
+                <SelectContent className="bg-slate-700 text-white">
+                  <SelectItem
+                    value="complete"
+                    className="hover:text-gray-800 hover:bg-slate-300"
+                  >
+                    Workflow + Scripts
+                  </SelectItem>
+                  <SelectItem
+                    value="workflow"
+                    className="hover:text-gray-800 hover:bg-slate-300"
+                  >
+                    Workflow
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
           </div>
 
           <div className="bg-slate-700/30 rounded-lg p-3 border border-slate-600/30">
