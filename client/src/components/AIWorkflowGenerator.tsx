@@ -38,9 +38,25 @@ export const AIWorkflowGenerator: React.FC<AIWorkflowGeneratorProps> = ({
     setIsGenerating(true);
 
     try {
-      const response = await fetch(
-        "http://localhost:3001/api/generate-workflow",
-        {
+      let response;
+      if (generationType === "complete") {
+        // Use master agent endpoint for Workflow + Scripts
+        response = await fetch(
+          "http://localhost:3001/api/generate-workflow-with-scripts",
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              prompt: prompt.trim(),
+              // Script type optional
+            }),
+          }
+        );
+      } else {
+        // Use original endpoint for Workflow only
+        response = await fetch("http://localhost:3001/api/generate-workflow", {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -48,8 +64,8 @@ export const AIWorkflowGenerator: React.FC<AIWorkflowGeneratorProps> = ({
           body: JSON.stringify({
             prompt: prompt.trim(),
           }),
-        }
-      );
+        });
+      }
 
       const data = await response.json();
 
@@ -58,18 +74,49 @@ export const AIWorkflowGenerator: React.FC<AIWorkflowGeneratorProps> = ({
       }
 
       if (data.success && data.workflow) {
+        // Save generated scripts to localStorage if present in workflow nodes
+        const scriptFiles = [];
+        for (const node of data.workflow.nodes || []) {
+          if (node.data && node.data.scriptFile) {
+            scriptFiles.push(node.data.scriptFile);
+          }
+        }
+        if (scriptFiles.length > 0) {
+          // Merge with existing script files in localStorage
+          const savedFiles = localStorage.getItem("scriptFiles");
+          const files: import("@/utils/types").ScriptFile[] = savedFiles
+            ? (JSON.parse(savedFiles) as import("@/utils/types").ScriptFile[])
+            : [];
+          // Avoid duplicates by id
+          for (const file of scriptFiles) {
+            if (!files.some((f) => f.id === file.id)) {
+              files.push(file);
+            }
+          }
+          localStorage.setItem("scriptFiles", JSON.stringify(files));
+        }
         onGenerate(data.workflow);
         setPrompt("");
         onClose();
 
         if (data.fallback) {
-          console.warn("Generated fallback workflow:", data.message);
+          console.warn(
+            generationType === "complete"
+              ? "Generated fallback workflow+scripts:"
+              : "Generated fallback workflow:",
+            data.message
+          );
         }
       } else {
         throw new Error("Invalid response from server");
       }
     } catch (error) {
-      console.error("Error generating workflow:", error);
+      console.error(
+        generationType === "complete"
+          ? "Error generating workflow+scripts:"
+          : "Error generating workflow:",
+        error
+      );
       // setError(
       //   error instanceof Error ? error.message : "An unexpected error occurred"
       // );

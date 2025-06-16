@@ -6,6 +6,7 @@ require("dotenv").config();
 const healthRoutes = require("./routes/health");
 const workflowRoutes = require("./routes/workflow");
 const scriptRoutes = require("./routes/script");
+const masterAgentRoutes = require("./routes/masterAgent");
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -19,6 +20,7 @@ app.use(express.urlencoded({ extended: true }));
 app.use("/health", healthRoutes);
 app.use("/api", workflowRoutes);
 app.use("/api", scriptRoutes);
+app.use("/api", masterAgentRoutes);
 
 // Error handling middleware
 app.use((error, req, res, next) => {
