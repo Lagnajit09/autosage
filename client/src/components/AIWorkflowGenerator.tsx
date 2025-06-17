@@ -40,6 +40,7 @@ export const AIWorkflowGenerator: React.FC<AIWorkflowGeneratorProps> = ({
     try {
       let response;
       if (generationType === "complete") {
+        console.log("Workflow + Scripts requested.");
         // Use master agent endpoint for Workflow + Scripts
         response = await fetch(
           "http://localhost:3001/api/generate-workflow-with-scripts",
@@ -55,6 +56,7 @@ export const AIWorkflowGenerator: React.FC<AIWorkflowGeneratorProps> = ({
           }
         );
       } else {
+        console.log("Workflow requested.");
         // Use original endpoint for Workflow only
         response = await fetch("http://localhost:3001/api/generate-workflow", {
           method: "POST",
@@ -212,6 +214,22 @@ export const AIWorkflowGenerator: React.FC<AIWorkflowGeneratorProps> = ({
               <li>• Suggests parameters and configurations</li>
               <li>• Creates decision logic and branching</li>
             </ul>
+            <div className="mt-3 p-2 bg-slate-800/60 rounded text-xs text-blue-300 border border-blue-700/30">
+              <b>Tip:</b> You can specify the script language for each step in
+              your prompt.
+              <br />
+              <span className="text-slate-400">
+                Example:{" "}
+                <i>
+                  "Check disk usage in Python, then archive logs using Bash, and
+                  send an alert email."
+                </i>
+              </span>
+              <br />
+              If you don't specify a language, the AI will choose the most
+              suitable one for each step. Mixed-language workflows are
+              supported!
+            </div>
           </div>
 
           <div className="flex space-x-3">

@@ -1,9 +1,9 @@
 const openaiService = require("./openaiService");
 
 class WorkflowService {
-  async generateWorkflow(prompt) {
+  async generateWorkflow(prompt, type = "workflow") {
     try {
-      const result = await openaiService.generateWorkflow(prompt);
+      const result = await openaiService.generateWorkflow(prompt, type);
 
       if (result.success) {
         // Parse the AI response as JSON

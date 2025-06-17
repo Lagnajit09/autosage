@@ -14,7 +14,7 @@ router.post("/generate-workflow", async (req, res) => {
       });
     }
 
-    const result = await workflowService.generateWorkflow(prompt);
+    const result = await workflowService.generateWorkflow(prompt, "workflow");
 
     if (result.success) {
       res.json({

@@ -1,5 +1,4 @@
 const workflowService = require("./workflowService");
-const scriptService = require("./scriptService");
 
 class MasterAgentService {
   /**
@@ -9,8 +8,11 @@ class MasterAgentService {
    * @returns {Promise<object>} The workflow with scripts attached to script nodes.
    */
   async generateWorkflowWithScripts(prompt, scriptLanguage = "python") {
-    // Step 1: Generate the workflow structure
-    const workflowResult = await workflowService.generateWorkflow(prompt);
+    // Step 1: Generate the workflow structure with scripts
+    const workflowResult = await workflowService.generateWorkflow(
+      prompt,
+      "complete"
+    );
     let workflow = workflowResult.workflow;
 
     if (!workflow || !workflow.nodes) {
@@ -21,46 +23,37 @@ class MasterAgentService {
       };
     }
 
-    // Step 2: For each script node, generate a script and attach it
+    // Step 2: Process script nodes and create script files
     const scriptNodeTypes = ["action"];
-    const scriptTypeMap = {
-      "Python Script": "python",
-      "Powershell Script": "powershell",
-      "Shell Script": "shell",
-      "JavaScript Script": "javascript",
-    };
-
     for (const node of workflow.nodes) {
       if (
         scriptNodeTypes.includes(node.type) &&
         node.data &&
-        node.data.type === "script"
+        node.data.type === "script" &&
+        node.data.script
       ) {
-        // Determine language
-        let language = scriptTypeMap[node.data.scriptType] || scriptLanguage;
-        // Compose script prompt
-        const scriptPrompt = node.data.description || prompt;
-        // Generate script
-        const scriptResult = await scriptService.generateScript(
-          scriptPrompt,
-          node.data.scriptType || "automation",
-          language
-        );
         // Generate unique script id
         const scriptId = `${Date.now()}-${Math.random()}`;
-        // Compose script file object
+
+        // Create script file object from the node's script data
         const scriptFile = {
           id: scriptId,
-          name: scriptResult.filename,
-          content: scriptResult.script,
-          language: language,
+          name: node.data.scriptName || `script_${scriptId}`,
+          content: node.data.script,
+          language: node.data.scriptLanguage || scriptLanguage,
           lastModified: new Date().toISOString(),
           source: "Written in Editor",
           codeLink: `http://localhost:8080/raw/${scriptId}`,
         };
+
         // Attach script file details to node
         node.data.selectedScript = scriptId;
         node.data.scriptFile = { ...scriptFile };
+
+        // Remove the raw script data from the node
+        delete node.data.script;
+        delete node.data.scriptLanguage;
+        delete node.data.scriptName;
       }
     }
 

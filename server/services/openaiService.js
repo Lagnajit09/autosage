@@ -51,8 +51,8 @@ class OpenAIService {
     }
   }
 
-  async generateWorkflow(prompt) {
-    const systemPrompt = this.getWorkflowSystemPrompt();
+  async generateWorkflow(prompt, type = "workflow") {
+    const systemPrompt = this.getWorkflowSystemPrompt(type);
 
     try {
       const completion = await this.client.chat.completions.create({
@@ -155,7 +155,7 @@ Language: ${language}
 Generate ONLY the script code without any markdown formatting or explanations outside the code. The script should be immediately executable.`;
   }
 
-  getWorkflowSystemPrompt() {
+  getWorkflowSystemPrompt(type = "workflow") {
     return `You are an expert workflow automation designer. Generate a complete workflow JSON object based on the user's description. 
 
 The workflow should follow this structure:
@@ -180,6 +180,22 @@ For script actions, include the following in the data object:
 - serverAddress: for remote execution
 - selectedCredential: credential object if needed
 - parameters: array of input parameters (id, name, type (string, number, boolean), description)
+${
+  type === "complete"
+    ? `
+- script: The complete script content for this node. The script should be a complete, production-ready script that implements the node's functionality.
+- scriptLanguage: The language of the script (python, powershell, shell, javascript)
+- scriptName: A descriptive name for the script file
+
+IMPORTANT: For each script/action node:
+1. If the user specifies a script language (e.g., 'in Python', 'using Bash', 'PowerShell', 'JavaScript'), use that language for the scriptType and scriptLanguage.
+2. If the user does not specify a language for a node, infer the most appropriate language based on the node's description and task.
+3. The workflow may contain nodes with different script languages.
+4. Generate a complete, production-ready script for each script node that implements the node's functionality.
+5. Include appropriate error handling, input validation, and best practices for the chosen language.
+6. The script should be immediately executable and include all necessary imports/dependencies.`
+    : ""
+}
 
 For email actions, include the following in the data object:
 - type: "email"
