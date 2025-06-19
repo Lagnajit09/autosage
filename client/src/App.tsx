@@ -9,6 +9,7 @@ import SignUp from "./pages/SignUp";
 import SignIn from "./pages/SignIn";
 import CodeEditor from "./pages/CodeEditor";
 import ScriptViewer from "./pages/ScriptViewer";
+import Landing from "./pages/Landing";
 
 const queryClient = new QueryClient();
 
@@ -24,7 +25,7 @@ const App = () => (
           <Route path="/signin" element={<SignIn />} />
           <Route path="/code-editor" element={<CodeEditor />} />
           <Route path="/raw/:id" element={<ScriptViewer />} />
-          {/* <Route path="/" element={<Landing />} /> */}
+          <Route path="/" element={<Landing />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>
