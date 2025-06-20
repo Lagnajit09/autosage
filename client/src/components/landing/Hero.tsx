@@ -2,6 +2,7 @@ import { Button } from "@/components/ui/button";
 import { ArrowDown, Play } from "lucide-react";
 import { useEffect, useState } from "react";
 import Logo from "../Logo";
+import { Link } from "react-router-dom";
 
 const Hero = () => {
   const [isVisible, setIsVisible] = useState(false);
@@ -20,8 +21,23 @@ const Hero = () => {
       </div>
 
       {/* Logo */}
-      <div className="absolute top-4 left-8">
+      <div className="absolute top-0 w-[100%] px-8 py-4 flex justify-between items-center">
         <Logo />
+        <div className="flex gap-4">
+          <Link to={"/signup"} className="p-[3px] relative">
+            <div className="absolute inset-0 bg-gradient-to-r from-indigo-500 to-purple-500 rounded-lg" />
+            <div className="px-8 py-2  bg-black rounded-[6px]  relative group transition duration-200 text-white hover:bg-transparent">
+              SIGN UP
+            </div>
+          </Link>
+
+          <Link
+            to={"/signin"}
+            className="px-6 py-2 bg-transparent border border-black dark:border-white dark:text-white text-black rounded-lg font-medium transform hover:-translate-y-1 transition duration-400 outline-none"
+          >
+            SIGN IN
+          </Link>
+        </div>
       </div>
 
       <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
@@ -73,8 +89,15 @@ const Hero = () => {
                 <div className="w-3 h-3 bg-green-500 rounded-full"></div>
                 <div className="ml-4 text-sm text-gray-400">autogen.app</div>
               </div>
-              <div className="bg-gradient-to-br from-gray-700 to-gray-600 h-64 rounded-lg flex items-center justify-center">
-                <div className="text-center">
+              <div className="relative h-64 rounded-lg overflow-hidden flex items-center justify-center">
+                {/* Background Image with Blur */}
+                <div className="absolute inset-0 bg-[url('../../../public/workflow-2.png')] bg-no-repeat bg-cover bg-center blur-sm"></div>
+
+                {/* Optional Gradient Overlay */}
+                <div className="absolute inset-0 bg-gradient-to-br from-gray-800/50 to-gray-700/50"></div>
+
+                {/* Foreground Content */}
+                <div className="relative z-10 text-center">
                   <div className="w-16 h-16 bg-gradient-to-r from-blue-500 to-purple-500 rounded-xl mx-auto mb-4 flex items-center justify-center">
                     <div className="w-8 h-8 bg-white rounded-lg"></div>
                   </div>
