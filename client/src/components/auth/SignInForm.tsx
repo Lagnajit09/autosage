@@ -133,7 +133,7 @@ export function SignInForm() {
               )}
             />
             <Link
-              to="/forgot-password"
+              to=""
               className="text-sm text-purple-400 hover:text-swift-dark-purple"
             >
               Forgot password?

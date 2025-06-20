@@ -189,17 +189,11 @@ export function SignUpForm() {
                 <div className="space-y-1 leading-none">
                   <FormLabel className="text-sm font-normal cursor-pointer">
                     I accept the{" "}
-                    <Link
-                      to="/terms-and-privacy"
-                      className="text-swift-purple hover:underline"
-                    >
+                    <Link to="" className="text-swift-purple hover:underline">
                       Terms of Service
                     </Link>{" "}
                     and{" "}
-                    <Link
-                      to="/terms-and-privacy"
-                      className="text-swift-purple hover:underline"
-                    >
+                    <Link to="" className="text-swift-purple hover:underline">
                       Privacy Policy
                     </Link>
                   </FormLabel>
