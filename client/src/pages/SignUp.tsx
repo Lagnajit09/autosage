@@ -1,163 +1,36 @@
-import React, { useState } from "react";
-import { Link } from "react-router-dom";
-import { Eye, EyeOff } from "lucide-react";
+import AuthHeader from "@/components/auth/AuthHeader";
+import { SignUpForm } from "@/components/auth/SignUpForm";
+import Logo from "@/components/Logo";
 
-const SignUp = () => {
-  const [showPassword, setShowPassword] = useState(false);
-  const [formData, setFormData] = useState({
-    name: "",
-    email: "",
-    password: "",
-    confirmPassword: "",
-  });
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    console.log("Sign up:", formData);
-  };
-
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setFormData((prev) => ({
-      ...prev,
-      [e.target.name]: e.target.value,
-    }));
-  };
-
+const Signup = () => {
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-white flex items-center justify-center px-4">
-      <div className="w-full max-w-md">
-        {/* Back Button
-        <Link
-          to="/"
-          className="inline-flex items-center space-x-2 text-slate-400 hover:text-white transition-colors duration-200 mb-8"
-        >
-          <ArrowLeft size={16} />
-          <span className="text-sm">Back to Home</span>
-        </Link> */}
+    <div
+      className="w-[100%] min-h-screen flex justify-center p-4"
+      style={{
+        background:
+          "linear-gradient(172deg,rgba(23, 26, 33, 1) 0%, rgba(33, 11, 79, 1) 50%, rgba(54, 0, 74, 1) 100%)",
+      }}
+    >
+      <div className="w-full min-h-[100%] animate-fade-in">
+        <div className="w-full animate-scale-in">
+          {/* Header */}
+          <AuthHeader route="/signin" />
 
-        {/* Sign Up Form */}
-        <div className="bg-slate-800/60 backdrop-blur-xl border border-slate-700/50 rounded-2xl p-8 shadow-2xl">
-          <div className="text-center mb-8">
-            <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl flex items-center justify-center mx-auto mb-4">
-              <svg
-                className="w-6 h-6 text-white"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M13 10V3L4 14h7v7l9-11h-7z"
-                />
-              </svg>
+          {/* Logo */}
+          <div className="flex justify-center mb-16 opacity-0 animate-[fade-in_0.6s_ease-out_0.4s_forwards]">
+            <div className="p-4 bg-gradient-to-br from-purple-800/50 to-slate-800/50 backdrop-blur-sm border border-purple-700/30 rounded-lg flex items-center justify-center hover:scale-110 transition-transform duration-300">
+              <Logo />
             </div>
-            <h1 className="text-2xl font-bold mb-2">Create Account</h1>
-            <p className="text-slate-400 text-sm">
-              Start automating your workflows today
-            </p>
           </div>
 
-          <form onSubmit={handleSubmit} className="space-y-5">
-            <div>
-              <label className="block text-sm font-medium text-slate-300 mb-2">
-                Full Name
-              </label>
-              <input
-                type="text"
-                name="name"
-                value={formData.name}
-                onChange={handleChange}
-                className="w-full px-4 py-2 bg-slate-700/50 border border-slate-600/50 rounded-xl text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-transparent transition-all duration-200"
-                placeholder="Enter your full name"
-                required
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-slate-300 mb-2">
-                Email Address
-              </label>
-              <input
-                type="email"
-                name="email"
-                value={formData.email}
-                onChange={handleChange}
-                className="w-full px-4 py-2 bg-slate-700/50 border border-slate-600/50 rounded-xl text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-transparent transition-all duration-200"
-                placeholder="Enter your email"
-                required
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-slate-300 mb-2">
-                Password
-              </label>
-              <div className="relative">
-                <input
-                  type={showPassword ? "text" : "password"}
-                  name="password"
-                  value={formData.password}
-                  onChange={handleChange}
-                  className="w-full px-4 py-2 bg-slate-700/50 border border-slate-600/50 rounded-xl text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-transparent transition-all duration-200 pr-12"
-                  placeholder="Create a password"
-                  required
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 transform -translate-y-1/2 text-slate-400 hover:text-white transition-colors duration-200"
-                >
-                  {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-                </button>
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-slate-300 mb-2">
-                Confirm Password
-              </label>
-              <input
-                type="password"
-                name="confirmPassword"
-                value={formData.confirmPassword}
-                onChange={handleChange}
-                className="w-full px-4 py-2 bg-slate-700/50 border border-slate-600/50 rounded-xl text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-transparent transition-all duration-200"
-                placeholder="Confirm your password"
-                required
-              />
-            </div>
-
-            <button
-              type="submit"
-              className="w-full py-3 bg-gradient-to-r from-blue-600 to-purple-600 rounded-xl hover:from-blue-500 hover:to-purple-500 transition-all duration-200 transform hover:scale-[1.02] hover:shadow-xl hover:shadow-blue-500/25 font-medium"
-            >
-              Create Account
-            </button>
-          </form>
-
-          <div className="mt-6 text-center">
-            <p className="text-slate-400 text-sm">
-              Already have an account?{" "}
-              <Link
-                to="/signin"
-                className="text-blue-400 hover:text-blue-300 transition-colors duration-200"
-              >
-                Sign in
-              </Link>
-            </p>
+          {/* Form */}
+          <div className="max-w-md mx-auto opacity-0 animate-[fade-in_0.6s_ease-out_0.6s_forwards]">
+            <SignUpForm />
           </div>
         </div>
-      </div>
-
-      {/* Background Effects */}
-      <div className="fixed inset-0 pointer-events-none">
-        <div className="absolute top-1/4 left-1/4 w-64 h-64 bg-blue-500/5 rounded-full blur-3xl"></div>
-        <div className="absolute bottom-1/4 right-1/4 w-64 h-64 bg-purple-500/5 rounded-full blur-3xl"></div>
       </div>
     </div>
   );
 };
 
-export default SignUp;
+export default Signup;
