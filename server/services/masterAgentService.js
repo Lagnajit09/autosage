@@ -39,7 +39,6 @@ class MasterAgentService {
         const scriptFile = {
           id: scriptId,
           name: node.data.scriptName || `script_${scriptId}`,
-          content: node.data.script,
           language: node.data.scriptLanguage || scriptLanguage,
           lastModified: new Date().toISOString(),
           source: "Written in Editor",
