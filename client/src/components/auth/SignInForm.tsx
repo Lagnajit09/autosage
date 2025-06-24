@@ -15,53 +15,63 @@ import {
 import { Input } from "../ui/input";
 import { Button } from "../ui/button";
 import { Checkbox } from "..//ui/checkbox";
-import { Lock, Phone } from "lucide-react";
+import { Lock, Mail, Phone } from "lucide-react";
 import { SigninFormSchema } from "../../lib/form";
 import { useLoading } from "../../contexts/LoadingContext";
 import { Spinner } from "../ui/spinner";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
+import { toast } from "@/hooks/use-toast";
+import { signin } from "@/lib/actions/auth";
 
 // Create a TypeScript type from the schema
 type FormValues = z.infer<typeof SigninFormSchema>;
 
 export function SignInForm() {
   const { isLoading, setIsLoading } = useLoading();
+  const navigate = useNavigate();
 
   // Initialize form with proper typing
   const form = useForm<FormValues>({
     resolver: zodResolver(SigninFormSchema),
     defaultValues: {
-      phone: "",
+      username: "",
       password: "",
       rememberMe: false,
     },
   });
 
-  const onSubmit = async () => {
-    // Handle authentication
+  // Form submission handler
+  const onSubmit = async (values: z.infer<typeof SigninFormSchema>) => {
+    // Handle registration
     setIsLoading(true);
-    // try {
-    //   const user = await signIn("credentials", {
-    //     ...values,
-    //     redirect: false,
-    //   });
-    //   if (!user?.ok) throw new Error("Incorrect phone or password!");
-    //   toast({
-    //     title: `Welcome!`,
-    //     description: "Signed in successfully.",
-    //     variant: "default",
-    //   });
-    //   router.push("/dashboard");
-    // } catch (error) {
-    //   console.error(error);
-    //   toast({
-    //     title: "Failed to Sign In!",
-    //     description: "Incorrect phone or password.",
-    //     variant: "destructive",
-    //   });
-    // } finally {
-    //   setIsLoading(false);
-    // }
+    const { username, password } = values;
+
+    try {
+      const res = await signin({ username, password });
+      if (res?.success) {
+        toast({
+          title: `Welcome, ${values.username}`,
+          description: res.message || "Signed In successfully!",
+          variant: "default",
+        });
+        navigate("/dashboard");
+      } else {
+        toast({
+          title: "Failed to Sign-In!",
+          description: res.message,
+          variant: "destructive",
+        });
+      }
+    } catch (error: any) {
+      toast({
+        title: "Failed to Sign-In!",
+        description: "An unexpected error occurred!",
+        variant: "destructive",
+      });
+      console.error(error);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -74,15 +84,15 @@ export function SignInForm() {
         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
           <FormField
             control={form.control}
-            name="phone"
+            name="username"
             render={({ field }) => (
               <FormItem>
-                <FormLabel className="text-gray-300">Phone</FormLabel>
+                <FormLabel className="text-gray-300">Username</FormLabel>
                 <FormControl>
                   <div className="relative">
-                    <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-300" />
+                    <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-300" />
                     <Input
-                      placeholder="+1 (555) 123-4567"
+                      placeholder="JohnDoe2004"
                       className="pl-10 text-gray-300"
                       {...field}
                     />
