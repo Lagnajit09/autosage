@@ -19,9 +19,8 @@ const phoneSchema = z
 
 export const SignupFormSchema = z
   .object({
-    name: z.string().min(2, { message: "Name must be at least 2 characters" }),
+    username: z.string().min(2, { message: "Username must be at least 2 characters" }),
     email: z.string().email({ message: "Please enter a valid email address" }),
-    phone: phoneSchema,
     password: passwordSchema,
     confirmPassword: z.string(),
     acceptTerms: z.boolean().refine((val) => val === true, {
@@ -34,7 +33,7 @@ export const SignupFormSchema = z
   });
 
 export const SigninFormSchema = z.object({
-  phone: phoneSchema,
+  username: z.string().min(2, { message: "Username must be at least 2 characters" }),
   password: z.string().min(1, { message: "Password is required" }),
   rememberMe: z.boolean().default(false).optional(),
 });
@@ -51,19 +50,4 @@ export const resetPasswordFormSchema = z
 
 export const forgotPasswordFormSchema = z.object({
   email: z.string().email({ message: "Please enter a valid email address" }),
-});
-
-export const profileFormSchema = z.object({
-  name: z
-    .string()
-    .min(1, "Name is required")
-    .regex(/^[a-zA-Z\s]+$/, "Name should only contain letters and spaces"),
-  email: z
-    .string()
-    .min(1, "Email is required")
-    .email("Please enter a valid email address"),
-  number: phoneSchema.or(z.string().min(1, "Phone number is required")),
-  address: z.string().optional(),
-  state: z.string().optional(),
-  country: z.string().optional(),
 });

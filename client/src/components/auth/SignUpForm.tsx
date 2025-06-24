@@ -21,16 +21,19 @@ import { SignupFormSchema } from "../../lib/form";
 // import signup from "@/app/lib/actions/signup";
 import { useLoading } from "../../contexts/LoadingContext";
 import { Spinner } from "../ui/spinner";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
+import { toast } from "@/hooks/use-toast";
+import { signup } from "@/lib/actions/auth";
 
 export function SignUpForm() {
   const { isLoading, setIsLoading } = useLoading();
+  const navigate = useNavigate();
 
   // Initialize form
   const form = useForm<z.infer<typeof SignupFormSchema>>({
     resolver: zodResolver(SignupFormSchema),
     defaultValues: {
-      name: "",
+      username: "",
       email: "",
       password: "",
       confirmPassword: "",
@@ -39,45 +42,37 @@ export function SignUpForm() {
   });
 
   // Form submission handler
-  const onSubmit = async () => {
+  const onSubmit = async (values: z.infer<typeof SignupFormSchema>) => {
     // Handle registration
     setIsLoading(true);
-    // const { name, email, phone, password } = values;
-    // try {
-    //   const res = await signup(name, email, phone, password);
-    //   if (res?.ok) {
-    //     const user = await signIn("credentials", {
-    //       ...values,
-    //       redirect: false,
-    //     });
-    //   } else {
-    //     if (res.status === 400) {
-    //       toast({
-    //         title: "Failed to Create Account!",
-    //         description: "An account with this Email or Phone already exists.",
-    //         variant: "destructive",
-    //       });
-    //       return;
-    //     }
-    //     throw new Error(res.message);
-    //   }
-    // } catch (error: any) {
-    //   toast({
-    //     title: "Failed to Create Account!",
-    //     description: "An error occured!",
-    //     variant: "destructive",
-    //   });
-    //   console.error(error);
-    //   return;
-    // } finally {
-    //   setIsLoading(false);
-    // }
-    // toast({
-    //   title: `Welcome, ${name}`,
-    //   description: "Account created successfully!",
-    //   variant: "default",
-    // });
-    // router.push("/email-confirmation");
+    const { username, email, password } = values;
+
+    try {
+      const res = await signup({ username, email, password });
+      if (res?.success) {
+        toast({
+          title: `Welcome, ${values.username}`,
+          description: "Account created successfully!",
+          variant: "default",
+        });
+        navigate("/dashboard");
+      } else {
+        toast({
+          title: "Failed to Create Account!",
+          description: res.message,
+          variant: "destructive",
+        });
+      }
+    } catch (error: any) {
+      toast({
+        title: "Failed to Create Account!",
+        description: "An unexpected error occurred!",
+        variant: "destructive",
+      });
+      console.error(error);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -90,7 +85,7 @@ export function SignUpForm() {
         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
           <FormField
             control={form.control}
-            name="name"
+            name="username"
             render={({ field }) => (
               <FormItem className="text-gray-300">
                 <FormLabel>Username</FormLabel>
@@ -98,8 +93,8 @@ export function SignUpForm() {
                   <div className="relative">
                     <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4" />
                     <Input
-                      placeholder="John Doe"
-                      className="pl-10"
+                      placeholder="JohnDoe2004"
+                      className="pl-10 autofill:bg-transparent"
                       {...field}
                     />
                   </div>

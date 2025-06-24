@@ -125,3 +125,26 @@ export interface DecisionConfigProps extends BaseConfigProps {
     sourceHandle?: string
   ) => void;
 }
+
+export interface Trigger {
+  id: string;
+  type: string;
+  name: string;
+}
+
+export interface SignUpData {
+  username: string;
+  email: string;
+  password: string;
+}
+
+export interface SignInData {
+  username: string;
+  password: string;
+}
+
+export interface AuthResponse {
+  success: boolean;
+  message: string;
+  user?: any;
+}
