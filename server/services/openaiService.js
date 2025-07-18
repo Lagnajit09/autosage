@@ -1,14 +1,10 @@
-const { OpenAI } = require("openai");
+const OpenAI = require("openai");
 
 class OpenAIService {
   constructor() {
     this.client = new OpenAI({
-      apiKey: process.env.AZURE_OPENAI_API_KEY,
-      baseURL: `${process.env.ENDPOINT_URL}openai/deployments/${process.env.DEPLOYMENT_NAME}`,
-      defaultQuery: { "api-version": "2024-02-15-preview" },
-      defaultHeaders: {
-        "api-key": process.env.AZURE_OPENAI_API_KEY,
-      },
+      apiKey: process.env.GITHUB_TOKEN,
+      baseURL: "https://models.github.ai/inference",
     });
   }
 
@@ -17,16 +13,10 @@ class OpenAIService {
 
     try {
       const completion = await this.client.chat.completions.create({
-        model: process.env.DEPLOYMENT_NAME,
+        model: "openai/gpt-4o",
         messages: [
-          {
-            role: "system",
-            content: systemPrompt,
-          },
-          {
-            role: "user",
-            content: prompt,
-          },
+          { role: "system", content: systemPrompt },
+          { role: "user", content: prompt },
         ],
         temperature: 0.7,
         max_tokens: 1500,
@@ -56,16 +46,10 @@ class OpenAIService {
 
     try {
       const completion = await this.client.chat.completions.create({
-        model: process.env.DEPLOYMENT_NAME,
+        model: "openai/gpt-4o",
         messages: [
-          {
-            role: "system",
-            content: systemPrompt,
-          },
-          {
-            role: "user",
-            content: `Generate a workflow for: ${prompt}`,
-          },
+          { role: "system", content: systemPrompt },
+          { role: "user", content: `Generate a workflow for: ${prompt}` },
         ],
         temperature: 0.7,
         max_tokens: 2000,
@@ -84,12 +68,9 @@ class OpenAIService {
   async testConnection() {
     try {
       const completion = await this.client.chat.completions.create({
-        model: process.env.DEPLOYMENT_NAME,
+        model: "openai/gpt-4o",
         messages: [
-          {
-            role: "user",
-            content: "Hello, this is a connection test.",
-          },
+          { role: "user", content: "Hello, this is a connection test." },
         ],
         max_tokens: 10,
       });
