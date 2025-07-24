@@ -1,6 +1,14 @@
 import React, { useState } from "react";
-import { X, Upload, FileText } from "lucide-react";
-import { Button } from "./ui/button";
+import { Upload, FileText } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
 import { WorkflowData, Node, Edge } from "@/utils/types";
 
 interface ImportWorkflowDialogProps {
@@ -17,8 +25,6 @@ export const ImportWorkflowDialog: React.FC<ImportWorkflowDialogProps> = ({
   const [jsonInput, setJsonInput] = useState("");
   const [error, setError] = useState("");
   const [isValidating, setIsValidating] = useState(false);
-
-  if (!isOpen) return null;
 
   const validateAndImport = () => {
     setIsValidating(true);
@@ -68,6 +74,8 @@ export const ImportWorkflowDialog: React.FC<ImportWorkflowDialogProps> = ({
 
       onImport(workflowData);
       setJsonInput("");
+      setError("");
+      onClose();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Invalid JSON format");
     } finally {
@@ -82,6 +90,7 @@ export const ImportWorkflowDialog: React.FC<ImportWorkflowDialogProps> = ({
       reader.onload = (e) => {
         const content = e.target?.result as string;
         setJsonInput(content);
+        setError("");
       };
       reader.readAsText(file);
     }
@@ -94,40 +103,23 @@ export const ImportWorkflowDialog: React.FC<ImportWorkflowDialogProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
-      <div className="bg-slate-800/95 backdrop-blur-xl border border-slate-700/50 rounded-xl shadow-2xl w-full max-w-2xl overflow-hidden">
-        {/* Header */}
-        <div className="flex items-center justify-between p-6 border-b border-slate-700/50">
-          <div className="flex items-center space-x-3">
-            <div className="w-8 h-8 bg-blue-600/20 rounded-lg flex items-center justify-center">
-              <FileText size={16} className="text-blue-400" />
-            </div>
-            <div>
-              <h2 className="text-lg font-semibold text-white">
-                Import Workflow
-              </h2>
-              <p className="text-sm text-slate-400">
-                Paste JSON or upload a file to create a visual workflow
-              </p>
-            </div>
-          </div>
-          <button
-            onClick={handleClose}
-            className="p-2 hover:bg-slate-700/50 rounded-lg transition-colors duration-200 text-slate-400 hover:text-white"
-          >
-            <X size={18} />
-          </button>
-        </div>
+    <Dialog open={isOpen} onOpenChange={handleClose}>
+      <DialogContent className="max-w-2xl bg-workflow-midnight/40 backdrop-blur-sm border border-slate-700 text-white">
+        <DialogHeader>
+          <DialogTitle className="text-white flex items-center">
+            <FileText size={18} className="mr-2 text-purple-400" />
+            Import Workflow
+          </DialogTitle>
+        </DialogHeader>
 
-        {/* Content */}
-        <div className="p-6 space-y-6">
+        <div className="space-y-4">
           {/* Upload File Option */}
           <div>
-            <label className="block text-sm font-medium text-slate-300 mb-3">
+            <Label className="text-sm text-slate-300 mb-2 block">
               Upload JSON File
-            </label>
+            </Label>
             <div className="relative">
-              <input
+              <Input
                 type="file"
                 accept=".json"
                 onChange={handleFileUpload}
@@ -136,35 +128,26 @@ export const ImportWorkflowDialog: React.FC<ImportWorkflowDialogProps> = ({
               />
               <label
                 htmlFor="json-file-upload"
-                className="w-full px-4 py-3 border-2 border-dashed border-slate-600/50 hover:border-slate-500/50 rounded-lg cursor-pointer transition-colors duration-200 flex items-center justify-center space-x-2 text-slate-400 hover:text-slate-300"
+                className="w-full px-4 py-3 border-2 border-dashed border-slate-600/50 hover:border-purple-500/50 rounded-md cursor-pointer transition-all duration-300 flex items-center justify-center space-x-3 text-slate-400 hover:text-slate-300 bg-bg-primary/20 hover:bg-bg-primary/30"
               >
-                <Upload size={18} />
+                <Upload size={16} className="text-purple-400" />
                 <span className="text-sm">Click to upload JSON file</span>
               </label>
             </div>
           </div>
 
-          {/* Divider */}
-          <div className="flex items-center">
-            <div className="flex-1 h-px bg-slate-700/50"></div>
-            <span className="px-3 text-xs text-slate-500 uppercase tracking-wider">
-              OR
-            </span>
-            <div className="flex-1 h-px bg-slate-700/50"></div>
-          </div>
-
           {/* JSON Input */}
           <div>
-            <label className="block text-sm font-medium text-slate-300 mb-3">
+            <Label className="text-sm text-slate-300 mb-2 block">
               Paste JSON
-            </label>
+            </Label>
             <textarea
               value={jsonInput}
               onChange={(e) => {
                 setJsonInput(e.target.value);
                 setError("");
               }}
-              className="w-full h-64 px-4 py-3 text-sm bg-slate-900/50 border border-slate-600/50 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-transparent transition-all duration-200 font-mono resize-none"
+              className="w-full h-64 px-3 py-3 text-sm bg-bg-primary/20 border border-slate-600/50 rounded-md text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-purple-500/50 focus:border-transparent resize-none font-mono"
               placeholder={`{
   "nodes": [
     {
@@ -181,30 +164,71 @@ export const ImportWorkflowDialog: React.FC<ImportWorkflowDialogProps> = ({
 
           {/* Error Display */}
           {error && (
-            <div className="p-3 bg-red-600/20 border border-red-500/30 rounded-lg">
-              <p className="text-sm text-red-400">{error}</p>
+            <div className="bg-red-900/30 border border-red-500/30 rounded-lg p-3">
+              <div className="flex items-center space-x-2">
+                <div className="w-4 h-4 text-red-400">
+                  <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                    />
+                  </svg>
+                </div>
+                <p className="text-sm text-red-300">{error}</p>
+              </div>
             </div>
           )}
 
-          {/* Actions */}
-          <div className="flex items-center justify-end space-x-3 pt-4 border-t border-slate-700/50">
-            <Button
-              onClick={handleClose}
-              variant="outline"
-              className="bg-slate-700/30 hover:bg-slate-600/30 border-slate-600/50 text-slate-300 hover:text-white"
-            >
-              Cancel
-            </Button>
+          <div className="bg-slate-700/30 rounded-lg p-3 border border-slate-600/30">
+            <p className="text-xs text-slate-400 mb-1">📁 Import Tips:</p>
+            <ul className="text-xs text-slate-500 space-y-1">
+              <li>• JSON must contain valid nodes and edges arrays</li>
+              <li>• Each node needs id, type, and position properties</li>
+              <li>• Each edge needs id, source, and target properties</li>
+            </ul>
+            <div className="mt-3 p-2 bg-slate-800/60 rounded text-xs text-blue-300 border border-blue-700/30">
+              <b>Supported formats:</b> Standard workflow JSON with nodes and
+              edges structure.
+              <br />
+              <span className="text-slate-400">
+                <i>
+                  Upload a .json file or paste the JSON content directly into
+                  the text area above.
+                </i>
+              </span>
+            </div>
+          </div>
+
+          <div className="flex space-x-3">
             <Button
               onClick={validateAndImport}
               disabled={!jsonInput.trim() || isValidating}
-              className="bg-blue-600/20 hover:bg-blue-600/30 border border-blue-500/30 text-blue-400 hover:text-blue-300"
+              className="flex-1 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white"
             >
-              {isValidating ? "Validating..." : "Import Workflow"}
+              {isValidating ? (
+                <>
+                  <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin mr-2" />
+                  Validating...
+                </>
+              ) : (
+                <>
+                  <FileText size={14} className="mr-2" />
+                  Import Workflow
+                </>
+              )}
+            </Button>
+            <Button
+              onClick={handleClose}
+              variant="outline"
+              className="border-slate-600 text-slate-800 hover:bg-slate-300"
+            >
+              Cancel
             </Button>
           </div>
         </div>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 };

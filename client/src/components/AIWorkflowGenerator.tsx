@@ -129,7 +129,7 @@ export const AIWorkflowGenerator: React.FC<AIWorkflowGeneratorProps> = ({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-lg bg-slate-800 border border-slate-700 text-white">
+      <DialogContent className="max-w-lg bg-workflow-midnight/40 backdrop-blur-sm border border-slate-700 text-white">
         <DialogHeader>
           <DialogTitle className="text-white flex items-center">
             <Wand2 size={18} className="mr-2 text-purple-400" />
@@ -150,7 +150,7 @@ export const AIWorkflowGenerator: React.FC<AIWorkflowGeneratorProps> = ({
               value={prompt}
               onChange={(e) => setPrompt(e.target.value)}
               placeholder="e.g., Create a workflow that monitors server health, checks disk usage, and sends alerts if usage is above 80%"
-              className="w-full px-3 py-3 text-sm bg-slate-700/50 border border-slate-600/50 rounded-md text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-purple-500/50 focus:border-transparent resize-none"
+              className="w-full px-3 py-3 text-sm bg-bg-primary/20 border border-slate-600/50 rounded-md text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-purple-500/50 focus:border-transparent resize-none"
               rows={4}
             />
           </div>
@@ -165,7 +165,7 @@ export const AIWorkflowGenerator: React.FC<AIWorkflowGeneratorProps> = ({
                 <SelectTrigger>
                   <SelectValue placeholder="Workflow Type" />
                 </SelectTrigger>
-                <SelectContent className="bg-slate-700 text-white">
+                <SelectContent className="bg-bg-primary text-text-primary border border-borders-active">
                   <SelectItem
                     value="complete"
                     className="hover:text-gray-800 hover:bg-slate-300"
@@ -189,7 +189,7 @@ export const AIWorkflowGenerator: React.FC<AIWorkflowGeneratorProps> = ({
                 <SelectTrigger className="">
                   <SelectValue placeholder="Generation Type" />
                 </SelectTrigger>
-                <SelectContent className="bg-slate-700 text-white">
+                <SelectContent className="bg-bg-primary text-text-primary border border-borders-active">
                   <SelectItem
                     value="complete"
                     className="hover:text-gray-800 hover:bg-slate-300"

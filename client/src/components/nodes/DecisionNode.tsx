@@ -12,57 +12,72 @@ interface DecisionNodeData {
 
 export const DecisionNode = ({ data }: { data: DecisionNodeData }) => {
   return (
-    <div className="group relative bg-slate-800/90 backdrop-blur-sm border-2 border-yellow-500/50 rounded-xl shadow-2xl min-w-[160px] hover:shadow-yellow-500/20 transition-all duration-300">
-      {/* Glow effect */}
-      <div className="absolute inset-0 bg-gradient-to-r from-yellow-500/20 to-orange-500/20 rounded-xl blur-xl opacity-0 group-hover:opacity-100 transition-opacity duration-300 -z-10"></div>
-
+    <div className="group relative bg-node-decision/25 backdrop-blur-xl border-2 border-node-decision_border rounded-2xl shadow-2xl min-w-[180px] hover:shadow-status-pending/30">
       <Handle
         type="target"
         position={Position.Left}
-        className="w-3 h-3 bg-yellow-500 border-2 border-slate-800 shadow-lg hover:scale-125 transition-transform duration-200"
+        className="w-4 h-4 bg-node-decision_border shadow-lg hover:shadow-status-pending/50"
       />
 
-      <div className="relative p-3">
-        <div className="flex items-center space-x-2 mb-2">
-          <div className="p-1.5 bg-yellow-500/20 rounded-lg">
-            <GitBranch size={12} className="text-yellow-400" />
+      <div className="relative p-4 z-10">
+        {/* Enhanced header */}
+        <div className="flex items-center space-x-3 mb-3">
+          <div className="p-2 bg-gradient-to-br from-status-pending/40 via-node-warning/30 to-status-pending/20 rounded-xl backdrop-blur-sm border border-status-pending/30 group-hover:scale-110 transition-transform duration-300">
+            <GitBranch size={14} className="text-status-pending" />
           </div>
           <div className="flex-1 min-w-0">
-            <h4 className="font-semibold text-white text-xs truncate">
+            <h4 className="font-bold text-text-primary text-sm truncate">
               {data.label || "Decision"}
             </h4>
           </div>
         </div>
 
+        {/* Enhanced condition display */}
         {data.condition && (
-          <div className="text-xs text-yellow-300 mb-2 truncate">
+          <div className="text-xs text-text-primary mb-3 truncate bg-gradient-to-r from-status-pending/10 to-node-warning/10 px-2 py-1 rounded-lg backdrop-blur-sm border border-status-pending/20">
             {data.condition}
           </div>
         )}
 
+        {/* Enhanced footer */}
         <div className="flex items-center justify-between">
-          <div className="inline-flex items-center px-1.5 py-0.5 bg-yellow-500/20 text-yellow-300 text-xs font-medium rounded-md">
+          <div className="inline-flex items-center px-2.5 py-1 bg-gradient-to-r from-status-pending/30 to-node-warning/20 text-status-pending text-xs font-semibold rounded-lg backdrop-blur-sm border border-status-pending/20">
             ⚡ Decision
           </div>
-          <div className="w-1.5 h-1.5 bg-yellow-500 rounded-full animate-pulse"></div>
+          <div className="w-2 h-2 bg-gradient-to-r from-status-pending to-node-warning rounded-full animate-pulse-glow shadow-lg shadow-status-pending/50"></div>
         </div>
       </div>
 
-      {/* Multiple output handles for different conditions */}
-      <Handle
-        type="source"
-        position={Position.Right}
-        id="true"
-        style={{ top: "30%" }}
-        className="w-3 h-3 bg-green-500 border-2 border-slate-800 shadow-lg hover:scale-125 transition-transform duration-200"
-      />
-      <Handle
-        type="source"
-        position={Position.Right}
-        id="false"
-        style={{ top: "70%" }}
-        className="w-3 h-3 bg-red-500 border-2 border-slate-800 shadow-lg hover:scale-125 transition-transform duration-200"
-      />
+      {/* Enhanced output handles with labels */}
+      <div className="absolute right-0 top-1/2 transform translate-x-1/2 -translate-y-1/2 flex flex-col space-y-4">
+        {/* True handle */}
+        <div className="relative group/handle">
+          <Handle
+            type="source"
+            position={Position.Right}
+            id="true"
+            style={{ position: "static", transform: "none" }}
+            className="w-4 h-4 bg-node-trigger_border shadow-lg hover:shadow-node-success/50"
+          />
+          <div className="absolute left-6 top-1/2 transform -translate-y-1/2 bg-gradient-to-r from-node-success/20 to-status-online/10 px-2 py-1 rounded-md backdrop-blur-sm border border-node-success/30 opacity-0 group-hover/handle:opacity-100 transition-opacity duration-300 whitespace-nowrap">
+            <span className="text-xs font-medium text-node-success">True</span>
+          </div>
+        </div>
+
+        {/* False handle */}
+        <div className="relative group/handle">
+          <Handle
+            type="source"
+            position={Position.Right}
+            id="false"
+            style={{ position: "static", transform: "none" }}
+            className="w-4 h-4 bg-node-error shadow-lg hover:shadow-node-error/50"
+          />
+          <div className="absolute left-6 top-1/2 transform -translate-y-1/2 bg-gradient-to-r from-node-error/20 to-status-error/10 px-2 py-1 rounded-md backdrop-blur-sm border border-node-error/30 opacity-0 group-hover/handle:opacity-100 transition-opacity duration-300 whitespace-nowrap">
+            <span className="text-xs font-medium text-node-error">False</span>
+          </div>
+        </div>
+      </div>
     </div>
   );
 };

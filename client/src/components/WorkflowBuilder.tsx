@@ -17,12 +17,18 @@ import { RightSidebar } from "./RightSidebar";
 import { TriggerNode } from "./nodes/TriggerNode";
 import { ActionNode } from "./nodes/ActionNode";
 import { LeftSidebar } from "./LeftSidebar";
-import { NavigationMenu } from "./NavigationMenu";
 import { Edge, NodeData, ScriptFile, WorkflowData } from "@/utils/types";
 import { ImportWorkflowDialog } from "./ImportWorkflowDialog";
 import { DecisionNode } from "./nodes/DecisionNode";
 import { AIWorkflowGenerator } from "./AIWorkflowGenerator";
 import GenieButton from "./GenieButton";
+import { CircleUserRound, FileInput, Key } from "lucide-react";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { CredentialVault } from "./CredentialVault";
 
 const nodeTypes = {
   trigger: TriggerNode,
@@ -36,6 +42,7 @@ const WorkflowBuilderContent = () => {
   const [selectedNode, setSelectedNode] = useState<Node | null>(null);
   const [selectedEdge, setSelectedEdge] = useState<Edge | null>(null);
   const [showImportDialog, setShowImportDialog] = useState(false);
+  const [showCredentialVault, setShowCredentialVault] = useState(false);
   const [showAIGenerator, setShowAIGenerator] = useState(false);
   const [reactFlowInstance, setReactFlowInstance] =
     useState<ReactFlowInstance | null>(null);
@@ -220,7 +227,7 @@ const WorkflowBuilderContent = () => {
               ? "#10b981"
               : sourceHandle === "false"
               ? "#ef4444"
-              : "#64748b",
+              : "#ffffff",
           strokeWidth: 2,
         },
         label:
@@ -323,14 +330,14 @@ const WorkflowBuilderContent = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-white overflow-hidden">
-      <div className="w-full h-screen bg-slate-900/50 backdrop-blur-xl border border-slate-700/50 shadow-2xl overflow-hidden">
-        {/* Header */}
-        <div className="h-12 bg-slate-800/80 backdrop-blur-sm border-b border-slate-700/50 flex items-center justify-between px-5 relative z-10">
-          <div className="flex items-center space-x-3">
-            <div className="w-6 h-6 bg-gradient-to-br from-blue-500 to-purple-600 rounded-lg flex items-center justify-center">
+    <div className="min-h-screen bg-gradient-to-br from-workflow-void via-workflow-midnight to-workflow-deep overflow-hidden">
+      <div className="w-full h-screen bg-bg-card backdrop-blur-xl border border-borders-primary/20 shadow-2xl overflow-hidden">
+        {/* Enhanced Header */}
+        <div className="h-14 bg-gradient-to-r from-workflow-void/80 via-workflow-deep/50 to-workflow-void/80 backdrop-blur-lg border-b border-borders-primary/30 flex items-center justify-between px-6 shadow-lg">
+          <div className="flex items-center space-x-4">
+            <div className="w-8 h-8 bg-gradient-to-br from-workflow-royal via-workflow-nebula to-workflow-royal rounded-xl flex items-center justify-center shadow-lg shadow-workflow-royal/30">
               <svg
-                className="w-4 h-4 text-white"
+                className="w-5 h-5 text-workflow-whisper"
                 fill="none"
                 stroke="currentColor"
                 viewBox="0 0 24 24"
@@ -344,38 +351,88 @@ const WorkflowBuilderContent = () => {
               </svg>
             </div>
             <div>
-              <h1 className="text-base font-semibold text-white">
+              <h1 className="text-lg font-bold bg-gradient-to-r from-text-primary via-workflow-aurora to-text-secondary bg-clip-text text-transparent">
                 Workflow Studio
               </h1>
-              <p className="text-xs text-slate-400">
-                Design and automate your workflows
+              <p className="text-sm text-text-tertiary">
+                Design and automate your intelligent workflows
               </p>
             </div>
           </div>
 
-          <div className="flex items-center space-x-4">
-            <div className="flex items-center space-x-2">
-              <div className="text-xs text-slate-400">
-                {nodes.length} nodes • {edges.length} connections
+          <div className="flex items-center space-x-6">
+            <div className="flex items-center space-x-3">
+              <div className="px-3 py-1.5 bg-gradient-to-r from-workflow-royal/20 to-workflow-nebula/20 backdrop-blur-sm rounded-lg border border-borders-secondary/40">
+                <div className="text-sm text-text-secondary">
+                  {nodes.length} nodes • {edges.length} connections
+                </div>
               </div>
-              <div className="w-1 h-1 bg-green-500 rounded-full animate-pulse"></div>
-              <span className="text-xs text-green-400">Live</span>
+              {/* <div className="flex items-center space-x-2 px-3 py-1.5 bg-gradient-to-r from-status-online/20 to-status-online/10 backdrop-blur-sm rounded-lg border border-status-online/30">
+                <div className="w-2 h-2 bg-status-online rounded-full animate-pulse-glow"></div>
+                <span className="text-sm text-status-online font-medium">
+                  Live
+                </span>
+              </div> */}
             </div>
-            <button
+            {/* <button
               onClick={() => setShowImportDialog(true)}
-              className="px-3 py-1.5 text-xs bg-blue-600/20 hover:bg-blue-600/30 border border-blue-500/30 text-blue-400 hover:text-blue-300 rounded-md transition-all duration-200"
+              className="px-4 py-2 text-sm bg-gradient-to-r from-ai-primary/20 via-ai-secondary/20 to-ai-accent/20 
+                       hover:from-ai-primary/30 hover:via-ai-secondary/30 hover:to-ai-accent/30 
+                       border border-ai-primary/40 hover:border-ai-secondary/60
+                       text-text-secondary hover:text-text-primary 
+                       rounded-lg transition-all duration-300 ease-out backdrop-blur-sm
+                       hover:shadow-lg hover:shadow-ai-primary/20
+                       transform hover:scale-[1.02] hover:-translate-y-0.5"
             >
               Import JSON
-            </button>
-            <NavigationMenu />
+            </button> */}
+            <div className="flex gap-4 py-2 px-4 border-2 border-borders-active/50 rounded-full">
+              <Tooltip>
+                <TooltipTrigger onClick={() => setShowImportDialog(true)}>
+                  <FileInput className="text-text-primary w-4 h-4 transition-transform duration-200 ease-in-out hover:scale-125" />
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>Import Workflow</p>
+                </TooltipContent>
+              </Tooltip>
+
+              <Tooltip>
+                <TooltipTrigger
+                  onClick={() => setShowCredentialVault(!showCredentialVault)}
+                >
+                  <Key className="text-text-primary w-4 h-4 transition-transform duration-200 ease-in-out hover:scale-125" />
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>Credentials</p>
+                </TooltipContent>
+              </Tooltip>
+
+              <Tooltip>
+                <TooltipTrigger>
+                  <CircleUserRound className="text-text-primary w-4 h-4 transition-transform duration-200 ease-in-out hover:scale-125" />
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>Profile</p>
+                </TooltipContent>
+              </Tooltip>
+            </div>
           </div>
         </div>
-
-        {/* Main Content */}
-        <div className="h-[calc(100%-3rem)] flex">
+        {/* Enhanced Main Content */}
+        <div className="h-[calc(100%-3.5rem)] flex">
           <LeftSidebar onSaveWorkflow={saveWorkflow} />
 
-          <div className="flex-1 relative" ref={reactFlowWrapper}>
+          <div
+            className="flex-1 bg-gradient-to-br from-workflow-void/50 via-workflow-midnight/30 to-workflow-deep/40"
+            ref={reactFlowWrapper}
+          >
+            {/* Canvas background effects */}
+            <div className="absolute inset-0 bg-gradient-to-tr from-workflow-royal/5 via-transparent to-workflow-nebula/3 pointer-events-none" />
+            <div
+              className="absolute top-1/4 right-1/3 w-64 h-64 bg-workflow-aurora/5 rounded-full blur-3xl animate-pulse-glow"
+              style={{ animationDelay: "2s" }}
+            />
+
             <ReactFlow
               nodes={nodes}
               edges={edges}
@@ -390,27 +447,42 @@ const WorkflowBuilderContent = () => {
               onPaneClick={onPaneClick}
               nodeTypes={nodeTypes}
               fitView
-              className="bg-slate-900"
+              className="bg-transparent"
               defaultEdgeOptions={{
-                style: { stroke: "#64748b", strokeWidth: 2 },
+                style: {
+                  stroke: "#dedede",
+                  strokeWidth: 2.5,
+                  filter: "drop-shadow(0 0 4px rgba(179, 115, 231, 0.3))",
+                },
                 type: "smoothstep",
               }}
             >
-              <Controls className="bg-slate-800/90 backdrop-blur-sm border border-slate-700/50 rounded-xl shadow-2xl" />
+              <Controls className="bg-gradient-to-br from-workflow-deep/90 via-workflow-royal/80 to-workflow-nebula/70 backdrop-blur-xl border border-borders-primary/30 rounded-2xl shadow-2xl shadow-workflow-royal/20" />
               <Background
-                color="#334155"
-                gap={16}
-                size={0.8}
-                style={{ backgroundColor: "#0f172a" }}
+                color="#ffffff"
+                gap={20}
+                size={1}
+                style={{
+                  backgroundColor: "#080013",
+                  opacity: 0.5,
+                }}
               />
             </ReactFlow>
-            {/* Canvas Overlay Info */}
+
+            {/* Enhanced Canvas Overlay Info */}
             {nodes.length === 0 && (
               <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                <div className="text-center">
-                  <div className="w-12 h-12 bg-slate-700/50 rounded-full flex items-center justify-center mx-auto mb-3">
+                <div className="text-center relative">
+                  {/* Glow effect behind the icon */}
+                  <div className="absolute inset-0 bg-gradient-to-r from-workflow-royal/20 via-workflow-nebula/20 to-workflow-aurora/20 rounded-full blur-2xl scale-150"></div>
+
+                  <div
+                    className="w-16 h-16 bg-gradient-to-br from-workflow-royal/40 via-workflow-nebula/30 to-workflow-aurora/20 
+                                rounded-2xl flex items-center justify-center mx-auto mb-4 backdrop-blur-sm 
+                                border border-borders-primary/30 shadow-2xl shadow-workflow-royal/20 relative z-10"
+                  >
                     <svg
-                      className="w-6 h-6 text-slate-400"
+                      className="w-8 h-8 text-workflow-aurora"
                       fill="none"
                       stroke="currentColor"
                       viewBox="0 0 24 24"
@@ -423,16 +495,31 @@ const WorkflowBuilderContent = () => {
                       />
                     </svg>
                   </div>
-                  <h3 className="text-sm font-medium text-slate-300 mb-2">
+
+                  <h3 className="text-lg font-semibold bg-gradient-to-r from-text-primary via-workflow-aurora to-text-secondary bg-clip-text text-transparent mb-3">
                     Start Building Your Workflow
                   </h3>
-                  <p className="text-xs text-slate-500">
-                    Drag components from the sidebar to get started
+                  <p className="text-sm text-text-tertiary max-w-md">
+                    Drag components from the sidebar to create intelligent
+                    automation workflows
                   </p>
+
+                  {/* Animated hint */}
+                  <div className="mt-6 flex items-center justify-center space-x-2 text-workflow-nebula/60">
+                    <div className="w-1 h-1 bg-workflow-nebula rounded-full animate-pulse"></div>
+                    <span className="text-xs font-medium">
+                      Try the AI Generator for quick start
+                    </span>
+                    <div
+                      className="w-1 h-1 bg-workflow-nebula rounded-full animate-pulse"
+                      style={{ animationDelay: "0.5s" }}
+                    ></div>
+                  </div>
                 </div>
               </div>
             )}
-            {/* AI Automation Floating Button */}
+
+            {/* Enhanced AI Automation Floating Button */}
             <GenieButton onClick={() => setShowAIGenerator(true)} />
           </div>
 
@@ -450,12 +537,18 @@ const WorkflowBuilderContent = () => {
           />
         </div>
       </div>
+
       {/* Import Workflow Dialog */}
       <ImportWorkflowDialog
         isOpen={showImportDialog}
         onClose={() => setShowImportDialog(false)}
         onImport={importWorkflow}
       />
+
+      {/* Credential Vault */}
+      {showCredentialVault && (
+        <CredentialVault onClose={() => setShowCredentialVault(false)} />
+      )}
 
       {/* AI Workflow Generator */}
       <AIWorkflowGenerator

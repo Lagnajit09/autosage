@@ -10,6 +10,8 @@ import {
 } from "@/components/ui/select";
 import { Link } from "react-router-dom";
 import { BaseConfigProps, Credential, ScriptFile } from "@/utils/types";
+import { Label } from "../ui/label";
+import { Input } from "../ui/input";
 
 export const ScriptConf: React.FC<BaseConfigProps> = ({
   selectedNode,
@@ -125,19 +127,26 @@ export const ScriptConf: React.FC<BaseConfigProps> = ({
 
   return (
     <div className="space-y-5">
+      <h4 className="text-sm font-medium text-slate-300 border-b border-slate-600/30 pb-2">
+        Script Configuration
+      </h4>
       <div>
-        <label className="block text-sm font-medium text-slate-300 mb-2">
+        <Label className="block text-sm font-medium text-slate-300 mb-2">
           Script Type
-        </label>
-        <select
-          value={String(selectedNode.data?.scriptType || "Python Script")}
-          onChange={(e) => handleInputChange("scriptType", e.target.value)}
-          className="w-full px-3 py-2.5 text-sm bg-slate-700 border border-slate-600/50 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-transparent transition-all duration-200"
+        </Label>
+        <Select
+          value={selectedNode.data?.scriptType || "Python Script"}
+          onValueChange={(value) => handleInputChange("scriptType", value)}
         >
-          <option value="Python Script">Python Script</option>
-          <option value="Powershell Script">Powershell Script</option>
-          <option value="Shell Script">Shell Script</option>
-        </select>
+          <SelectTrigger className="w-full h-11 text-sm bg-slate-700/25 border border-slate-600/50 text-white">
+            <SelectValue placeholder="Select script type" />
+          </SelectTrigger>
+          <SelectContent className="bg-bg-primary text-text-primary border border-borders-primary">
+            <SelectItem value="Python Script">Python Script</SelectItem>
+            <SelectItem value="Powershell Script">Powershell Script</SelectItem>
+            <SelectItem value="Shell Script">Shell Script</SelectItem>
+          </SelectContent>
+        </Select>
       </div>
 
       <div className="space-y-4">
@@ -180,15 +189,15 @@ export const ScriptConf: React.FC<BaseConfigProps> = ({
             onValueChange={handleScriptSelect}
             value={selectedNode.data?.selectedScript || ""}
           >
-            <SelectTrigger className="w-full h-11 text-sm bg-slate-700/50 border border-slate-600/50 text-white">
+            <SelectTrigger className="w-full h-11 text-sm bg-slate-700/25 border border-slate-600/50 text-white">
               <SelectValue placeholder="Choose a script..." />
             </SelectTrigger>
-            <SelectContent className="bg-slate-700 border border-slate-600 text-white">
+            <SelectContent className="bg-bg-primary text-text-primary border border-borders-primary">
               {getSavedScripts().map((script: ScriptFile) => (
                 <SelectItem
                   key={script.id}
                   value={script.id}
-                  className="text-sm hover:bg-slate-600 focus:bg-slate-600"
+                  className="text-sm"
                 >
                   <div className="flex items-center space-x-2">
                     <FileText size={14} />
@@ -214,53 +223,57 @@ export const ScriptConf: React.FC<BaseConfigProps> = ({
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-slate-300 mb-2">
+        <Label className="block text-sm font-medium text-slate-300 mb-2">
           Execution Mode
-        </label>
-        <select
-          value={String(selectedNode.data?.executionMode || "local")}
-          onChange={(e) => handleInputChange("executionMode", e.target.value)}
-          className="w-full px-3 py-2.5 text-sm bg-slate-700 border border-slate-600/50 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-transparent transition-all duration-200"
+        </Label>
+        <Select
+          value={selectedNode.data?.executionMode || "local"}
+          onValueChange={(value) => handleInputChange("executionMode", value)}
         >
-          <option value="local">Local</option>
-          <option value="remote">Remote</option>
-        </select>
+          <SelectTrigger className="w-full h-11 text-sm bg-slate-700/25 border border-slate-600/50 text-white">
+            <SelectValue placeholder="Select execution mode" />
+          </SelectTrigger>
+          <SelectContent className="bg-bg-primary text-text-primary border border-borders-primary">
+            <SelectItem value="local">Local</SelectItem>
+            <SelectItem value="remote">Remote</SelectItem>
+          </SelectContent>
+        </Select>
       </div>
 
       {selectedNode.data?.executionMode === "remote" && (
         <>
           <div>
-            <label className="block text-sm font-medium text-slate-300 mb-2">
+            <Label className="block text-sm font-medium text-slate-300 mb-2">
               Server Address
-            </label>
-            <input
+            </Label>
+            <Input
               type="text"
               value={String(selectedNode.data?.serverAddress || "")}
               onChange={(e) =>
                 handleInputChange("serverAddress", e.target.value)
               }
-              className="w-full px-3 py-2.5 text-sm bg-slate-700/50 border border-slate-600/50 rounded-md text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-transparent transition-all duration-200"
+              className="w-full px-3 py-2.5 text-sm bg-slate-700/25 border border-slate-600/50 rounded-md text-white placeholder-slate-400 focus:outline-none"
               placeholder="Enter server address"
             />
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-slate-300 mb-2">
+            <Label className="block text-sm font-medium text-slate-300 mb-2">
               Credentials
-            </label>
+            </Label>
             <Select
               onValueChange={handleCredentialSelect}
               value={getSelectedCredentialId()}
             >
-              <SelectTrigger className="w-full h-11 text-sm bg-slate-700/50 border border-slate-600/50 text-white">
+              <SelectTrigger className="w-full h-11 text-sm bg-slate-700/25 border border-slate-600/50 text-white">
                 <SelectValue placeholder="Select credentials..." />
               </SelectTrigger>
-              <SelectContent className="bg-slate-700 border border-slate-600 text-white">
+              <SelectContent className="bg-bg-primary text-text-primary border border-borders-primary">
                 {getSavedCredentials().map((credential: Credential) => (
                   <SelectItem
                     key={credential.id}
                     value={credential.id}
-                    className="text-sm hover:bg-slate-600 focus:bg-slate-600"
+                    className="text-sm"
                   >
                     <div className="flex items-center space-x-2">
                       <svg

@@ -2,6 +2,15 @@ import React from "react";
 import { Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { EdgeConfigProps } from "@/utils/types";
+import { Label } from "../ui/label";
+import { Input } from "../ui/input";
+import {
+  Select,
+  SelectTrigger,
+  SelectValue,
+  SelectContent,
+  SelectItem,
+} from "@/components/ui/select";
 
 export const EdgeConf: React.FC<EdgeConfigProps> = ({
   selectedEdge,
@@ -37,72 +46,78 @@ export const EdgeConf: React.FC<EdgeConfigProps> = ({
 
       <div className="space-y-4">
         <div>
-          <label className="block text-sm font-medium text-slate-300 mb-2">
+          <Label className="block text-sm font-medium text-slate-300 mb-2">
             Label
-          </label>
-          <input
+          </Label>
+          <Input
             type="text"
             value={selectedEdge.label || ""}
             onChange={(e) => handleEdgeUpdate("label", e.target.value)}
-            className="w-full px-3 py-2.5 text-sm bg-slate-700/50 border border-slate-600/50 rounded-md text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-transparent transition-all duration-200"
+            className="w-full px-3 py-2.5 text-sm bg-slate-700/25 border border-slate-600/50 rounded-md text-white placeholder-slate-400 focus:outline-none"
             placeholder="Enter edge label"
           />
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-slate-300 mb-2">
+          <Label className="block text-sm font-medium text-slate-300 mb-2">
             Type
-          </label>
-          <select
+          </Label>
+          <Select
             value={selectedEdge.type || "default"}
-            onChange={(e) => handleEdgeUpdate("type", e.target.value)}
-            className="w-full px-3 py-2.5 text-sm bg-slate-700 border border-slate-600/50 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-transparent transition-all duration-200"
+            onValueChange={(value) => handleEdgeUpdate("type", value)}
           >
-            <option value="default">Default</option>
-            <option value="straight">Straight</option>
-            <option value="step">Step</option>
-            <option value="smoothstep">Smooth Step</option>
-            <option value="bezier">Bezier</option>
-          </select>
+            <SelectTrigger className="w-full h-11 text-sm bg-slate-700/25 border border-slate-600/50 text-white">
+              <SelectValue placeholder="Select edge type" />
+            </SelectTrigger>
+            <SelectContent className="bg-bg-primary text-text-primary border border-borders-primary">
+              <SelectItem value="default">Default</SelectItem>
+              <SelectItem value="straight">Straight</SelectItem>
+              <SelectItem value="step">Step</SelectItem>
+              <SelectItem value="smoothstep">Smooth Step</SelectItem>
+              <SelectItem value="bezier">Bezier</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-slate-300 mb-2">
+          <Label className="block text-sm font-medium text-slate-300 mb-2">
             Stroke Color
-          </label>
+          </Label>
           <div className="flex space-x-2">
-            <input
+            <Input
               type="color"
               value={selectedEdge.style?.stroke || "#64748b"}
               onChange={(e) => handleEdgeUpdate("stroke", e.target.value)}
               className="w-12 h-10 rounded border border-slate-600"
             />
-            <input
+            <Input
               type="text"
               value={selectedEdge.style?.stroke || "#64748b"}
               onChange={(e) => handleEdgeUpdate("stroke", e.target.value)}
-              className="flex-1 px-3 py-2 text-sm bg-slate-700/50 border border-slate-600/50 rounded-md text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/50"
+              className="w-full px-3 py-2.5 text-sm bg-slate-700/25 border border-slate-600/50 rounded-md text-white placeholder-slate-400 focus:outline-none"
               placeholder="#64748b"
             />
           </div>
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-slate-300 mb-2">
+          <Label className="block text-sm font-medium text-slate-300 mb-2">
             Stroke Width
-          </label>
-          <input
-            type="range"
-            min="1"
-            max="10"
-            value={selectedEdge.style?.strokeWidth || 2}
-            onChange={(e) =>
-              handleEdgeUpdate("strokeWidth", Number(e.target.value))
-            }
-            className="w-full"
-          />
-          <div className="text-center text-sm text-slate-400 mt-1">
-            {selectedEdge.style?.strokeWidth || 2}px
+          </Label>
+          <div className="flex items-center space-x-3">
+            <Input
+              type="range"
+              min="1"
+              max="10"
+              value={selectedEdge.style?.strokeWidth || 2}
+              onChange={(e) =>
+                handleEdgeUpdate("strokeWidth", Number(e.target.value))
+              }
+              className="w-full h-2 rounded-lg appearance-none cursor-pointer bg-slate-700/25 border border-slate-600/50 accent-blue-600"
+            />
+            <div className="text-sm text-slate-400 w-10 text-center">
+              {selectedEdge.style?.strokeWidth || 2}px
+            </div>
           </div>
         </div>
       </div>

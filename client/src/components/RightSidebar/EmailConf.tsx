@@ -9,6 +9,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Label } from "../ui/label";
+import { Input } from "../ui/input";
+import { Checkbox } from "../ui/checkbox";
 
 export const EmailConf: React.FC<BaseConfigProps> = ({
   selectedNode,
@@ -129,14 +132,14 @@ export const EmailConf: React.FC<BaseConfigProps> = ({
 
       {/* From */}
       <div>
-        <label className="block text-sm font-medium text-slate-300 mb-2">
+        <Label className="block text-sm font-medium text-slate-300 mb-2">
           From
-        </label>
-        <input
+        </Label>
+        <Input
           type="email"
           value={String(selectedNode.data?.from || "")}
           onChange={(e) => handleInputChange("from", e.target.value)}
-          className="w-full px-3 py-2.5 text-sm bg-slate-700/50 border border-slate-600/50 rounded-md text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-transparent transition-all duration-200"
+          className="w-full px-3 py-2.5 text-sm bg-slate-700/25 border border-slate-600/50 rounded-md text-white placeholder-slate-400 focus:outline-none"
           placeholder="sender@domain.com"
         />
       </div>
@@ -144,32 +147,34 @@ export const EmailConf: React.FC<BaseConfigProps> = ({
       {/* To Recipients */}
       <div>
         <div className="flex items-center justify-between mb-2">
-          <label className="text-sm font-medium text-slate-300">To</label>
+          <Label className="block text-sm font-medium text-slate-300 mb-2">
+            To
+          </Label>
           <Button
             onClick={() => addEmailRecipient("to")}
             size="sm"
             variant="ghost"
-            className="h-6 w-6 p-0 text-slate-400 hover:text-white"
+            className="h-6 w-6 p-0 text-slate-400 hover:text-black"
           >
             <Plus size={12} />
           </Button>
         </div>
         {(selectedNode.data?.to || []).map((email, index) => (
           <div key={index} className="flex items-center space-x-2 mb-2">
-            <input
+            <Input
               type="email"
               value={email}
               onChange={(e) =>
                 updateEmailRecipient("to", index, e.target.value)
               }
-              className="flex-1 px-3 py-2 text-sm bg-slate-700/50 border border-slate-600/50 rounded-md text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/50"
+              className="w-full px-3 py-2.5 text-sm bg-slate-700/25 border border-slate-600/50 rounded-md text-white placeholder-slate-400 focus:outline-none"
               placeholder="recipient@domain.com"
             />
             <Button
               onClick={() => removeEmailRecipient("to", index)}
               size="sm"
               variant="ghost"
-              className="h-8 w-8 p-0 text-red-400 hover:text-red-300"
+              className="h-8 w-8 p-0 text-red-400 hover:text-red-500"
             >
               <Minus size={12} />
             </Button>
@@ -180,32 +185,34 @@ export const EmailConf: React.FC<BaseConfigProps> = ({
       {/* CC Recipients */}
       <div>
         <div className="flex items-center justify-between mb-2">
-          <label className="text-sm font-medium text-slate-300">CC</label>
+          <Label className="block text-sm font-medium text-slate-300 mb-2">
+            CC
+          </Label>
           <Button
             onClick={() => addEmailRecipient("cc")}
             size="sm"
             variant="ghost"
-            className="h-6 w-6 p-0 text-slate-400 hover:text-white"
+            className="h-6 w-6 p-0 text-slate-400 hover:text-black"
           >
             <Plus size={12} />
           </Button>
         </div>
         {(selectedNode.data?.cc || []).map((email, index) => (
           <div key={index} className="flex items-center space-x-2 mb-2">
-            <input
+            <Input
               type="email"
               value={email}
               onChange={(e) =>
                 updateEmailRecipient("cc", index, e.target.value)
               }
-              className="flex-1 px-3 py-2 text-sm bg-slate-700/50 border border-slate-600/50 rounded-md text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/50"
+              className="w-full px-3 py-2.5 text-sm bg-slate-700/25 border border-slate-600/50 rounded-md text-white placeholder-slate-400 focus:outline-none"
               placeholder="cc@domain.com"
             />
             <Button
               onClick={() => removeEmailRecipient("cc", index)}
               size="sm"
               variant="ghost"
-              className="h-8 w-8 p-0 text-red-400 hover:text-red-300"
+              className="h-8 w-8 p-0 text-red-400 hover:text-red-500"
             >
               <Minus size={12} />
             </Button>
@@ -216,12 +223,14 @@ export const EmailConf: React.FC<BaseConfigProps> = ({
       {/* BCC Recipients */}
       <div>
         <div className="flex items-center justify-between mb-2">
-          <label className="text-sm font-medium text-slate-300">BCC</label>
+          <Label className="block text-sm font-medium text-slate-300 mb-2">
+            BCC
+          </Label>
           <Button
             onClick={() => addEmailRecipient("bcc")}
             size="sm"
             variant="ghost"
-            className="h-6 w-6 p-0 text-slate-400 hover:text-white"
+            className="h-6 w-6 p-0 text-slate-400 hover:text-black"
           >
             <Plus size={12} />
           </Button>
@@ -234,14 +243,14 @@ export const EmailConf: React.FC<BaseConfigProps> = ({
               onChange={(e) =>
                 updateEmailRecipient("bcc", index, e.target.value)
               }
-              className="flex-1 px-3 py-2 text-sm bg-slate-700/50 border border-slate-600/50 rounded-md text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/50"
+              className="w-full px-3 py-2.5 text-sm bg-slate-700/25 border border-slate-600/50 rounded-md text-white placeholder-slate-400 focus:outline-none"
               placeholder="bcc@domain.com"
             />
             <Button
               onClick={() => removeEmailRecipient("bcc", index)}
               size="sm"
               variant="ghost"
-              className="h-8 w-8 p-0 text-red-400 hover:text-red-300"
+              className="h-8 w-8 p-0 text-red-400 hover:text-red-500"
             >
               <Minus size={12} />
             </Button>
@@ -251,45 +260,47 @@ export const EmailConf: React.FC<BaseConfigProps> = ({
 
       {/* Subject */}
       <div>
-        <label className="block text-sm font-medium text-slate-300 mb-2">
+        <Label className="block text-sm font-medium text-slate-300 mb-2">
           Subject
-        </label>
-        <input
+        </Label>
+        <Input
           type="text"
           value={String(selectedNode.data?.subject || "")}
           onChange={(e) => handleInputChange("subject", e.target.value)}
-          className="w-full px-3 py-2.5 text-sm bg-slate-700/50 border border-slate-600/50 rounded-md text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-transparent transition-all duration-200"
+          className="w-full px-3 py-2.5 text-sm bg-slate-700/25 border border-slate-600/50 rounded-md text-white placeholder-slate-400 focus:outline-none"
           placeholder="Email subject"
         />
       </div>
 
       {/* Body */}
       <div>
-        <label className="block text-sm font-medium text-slate-300 mb-2">
+        <Label className="block text-sm font-medium text-slate-300 mb-2">
           Body
-        </label>
+        </Label>
         <textarea
           value={String(selectedNode.data?.body || "")}
           onChange={(e) => handleInputChange("body", e.target.value)}
-          className="w-full px-3 py-2.5 text-sm bg-slate-700/50 border border-slate-600/50 rounded-md text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-transparent transition-all duration-200 resize-none"
+          className="w-full px-3 py-2.5 text-sm bg-slate-700/25 border border-slate-600/50 rounded-md text-white placeholder-slate-400 focus:outline-none resize-none"
           rows={4}
           placeholder="Email body content"
         />
       </div>
 
       {/* HTML Toggle */}
-      <div className="flex items-center space-x-2">
-        <input
-          type="checkbox"
+      <Label
+        htmlFor="isHTML"
+        className="hover:bg-bg-secondary/50 flex items-start gap-3 rounded-lg border border-slate-600/50 p-3"
+      >
+        <Checkbox
           id="isHTML"
           checked={selectedNode.data?.isHTML || false}
-          onChange={(e) => handleInputChange("isHTML", e.target.checked)}
-          className="w-4 h-4 text-blue-600 bg-slate-700 border-slate-600 rounded focus:ring-blue-500"
+          onCheckedChange={(checked) => handleInputChange("isHTML", checked)}
+          className="data-[state=checked]:border-blue-600 data-[state=checked]:bg-blue-600 data-[state=checked]:text-white dark:data-[state=checked]:border-blue-700 dark:data-[state=checked]:bg-blue-700 data-[state=unchecked]:border-borders-primary"
         />
-        <label htmlFor="isHTML" className="text-sm text-slate-300">
-          HTML Format
-        </label>
-      </div>
+        <div className="grid gap-1.5 font-normal">
+          <p className="text-sm leading-none font-medium">HTML Format</p>
+        </div>
+      </Label>
 
       {/* SMTP Configuration */}
       <div className="space-y-4">
@@ -299,46 +310,52 @@ export const EmailConf: React.FC<BaseConfigProps> = ({
 
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <label className="block text-xs font-medium text-slate-300 mb-1">
+            <Label className="block text-sm font-medium text-slate-300 mb-2">
               Host
-            </label>
-            <input
+            </Label>
+            <Input
               type="text"
               value={String(selectedNode.data?.smtpConfig?.host || "")}
               onChange={(e) => handleSMTPConfigChange("host", e.target.value)}
-              className="w-full px-2 py-2 text-sm bg-slate-700/50 border border-slate-600/50 rounded-md text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/50"
+              className="w-full px-3 py-2.5 text-sm bg-slate-700/25 border border-slate-600/50 rounded-md text-white placeholder-slate-400 focus:outline-none"
               placeholder="smtp.domain.com"
             />
           </div>
 
           <div>
-            <label className="block text-xs font-medium text-slate-300 mb-1">
+            <Label className="block text-sm font-medium text-slate-300 mb-2">
               Port
-            </label>
-            <input
-              type="number"
+            </Label>
+            <Input
+              type="text"
               value={selectedNode.data?.smtpConfig?.port || 587}
               onChange={(e) =>
                 handleSMTPConfigChange("port", parseInt(e.target.value))
               }
-              className="w-full px-2 py-2 text-sm bg-slate-700/50 border border-slate-600/50 rounded-md text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/50"
+              className="w-full px-3 py-2.5 text-sm bg-slate-700/25 border border-slate-600/50 rounded-md text-white placeholder-slate-400 focus:outline-none"
               placeholder="587"
             />
           </div>
         </div>
 
-        <div className="flex items-center space-x-2">
-          <input
-            type="checkbox"
+        <Label
+          htmlFor="secure"
+          className="hover:bg-bg-secondary/50 flex items-start gap-3 rounded-lg border border-slate-600/50 p-3"
+        >
+          <Checkbox
             id="secure"
             checked={selectedNode.data?.smtpConfig?.secure || false}
-            onChange={(e) => handleSMTPConfigChange("secure", e.target.checked)}
-            className="w-4 h-4 text-blue-600 bg-slate-700 border-slate-600 rounded focus:ring-blue-500"
+            onCheckedChange={(checked) =>
+              handleSMTPConfigChange("secure", checked)
+            }
+            className="data-[state=checked]:border-blue-600 data-[state=checked]:bg-blue-600 data-[state=checked]:text-white dark:data-[state=checked]:border-blue-700 dark:data-[state=checked]:bg-blue-700 data-[state=unchecked]:border-borders-primary"
           />
-          <label htmlFor="secure" className="text-sm text-slate-300">
-            Secure Connection (TLS/SSL)
-          </label>
-        </div>
+          <div className="grid gap-1.5 font-normal">
+            <p className="text-sm leading-none font-medium">
+              Secure Connection (TLS/SSL)
+            </p>
+          </div>
+        </Label>
 
         <div>
           <label className="block text-sm font-medium text-slate-300 mb-2">
@@ -348,15 +365,15 @@ export const EmailConf: React.FC<BaseConfigProps> = ({
             onValueChange={handleCredentialSelect}
             value={getSelectedCredentialId()}
           >
-            <SelectTrigger className="w-full h-11 text-sm bg-slate-700/50 border border-slate-600/50 text-white">
+            <SelectTrigger className="w-full h-11 text-sm bg-slate-700/25 border border-slate-600/50 text-white">
               <SelectValue placeholder="Select credentials..." />
             </SelectTrigger>
-            <SelectContent className="bg-slate-700 border border-slate-600 text-white">
+            <SelectContent className="bg-bg-primary text-text-primary border border-borders-primary">
               {getSavedCredentials().map((credential: Credential) => (
                 <SelectItem
                   key={credential.id}
                   value={credential.id}
-                  className="text-sm hover:bg-slate-600 focus:bg-slate-600"
+                  className="text-sm"
                 >
                   <div className="flex items-center space-x-2">
                     <svg

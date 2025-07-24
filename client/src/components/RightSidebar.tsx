@@ -8,6 +8,14 @@ import { ScriptConf } from "./RightSidebar/ScriptConf";
 import { EmailConf } from "./RightSidebar/EmailConf";
 import { TriggerConf } from "./RightSidebar/TriggerConf";
 import { Node, Edge, Parameter, NodeData } from "@/utils/types";
+import {
+  Select,
+  SelectTrigger,
+  SelectValue,
+  SelectContent,
+  SelectItem,
+} from "@/components/ui/select";
+import { Label } from "@/components/ui/label";
 
 interface RightSidebarProps {
   selectedNode: Node | null;
@@ -101,21 +109,23 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({
   };
 
   return (
-    <div className="w-80 bg-slate-800/60 backdrop-blur-xl border-l border-slate-700/50 p-6 overflow-y-auto">
-      <div className="flex items-center justify-between mb-6">
-        <h3 className="text-sm font-semibold text-white flex items-center">
-          <div className="w-1 h-1 bg-blue-500 rounded-full mr-2"></div>
+    <div className="w-80 bg-bg-primary/40 backdrop-blur-xl border-l border-borders-primary/30 p-6 overflow-y-auto relative">
+      <div className="flex items-center justify-between mb-6 relative z-10">
+        <h3 className="text-sm font-semibold text-text-primary flex items-center">
+          <div className="w-1.5 h-1.5 bg-gradient-to-r from-ai-secondary to-ai-accent rounded-full mr-3 animate-pulse"></div>
           {selectedNode ? "Node Configuration" : "Edge Configuration"}
         </h3>
         <button
           onClick={onClose}
-          className="p-1.5 hover:bg-slate-700/50 rounded-md transition-colors duration-200 text-slate-400 hover:text-white"
+          className="p-2 hover:bg-bg-secondary/60 rounded-lg transition-all duration-200 
+                   text-text-tertiary hover:text-text-primary
+                   hover:scale-110 transform border border-transparent hover:border-borders-secondary/50"
         >
-          <X size={14} />
+          <X size={16} />
         </button>
       </div>
 
-      <div className="space-y-6">
+      <div className="space-y-6 relative z-10">
         {/* Edge Configuration */}
         {selectedEdge && (
           <EdgeConf
@@ -129,33 +139,52 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({
         {selectedNode && (
           <>
             {/* Node Info */}
-            <div className="bg-slate-700/30 backdrop-blur-sm rounded-lg p-4 border border-slate-600/30">
-              <div className="text-xs text-slate-400 mb-1">Node Type</div>
-              <div className="text-sm text-white font-medium capitalize mb-2">
+            <div
+              className="bg-gradient-to-r from-bg-secondary/40 to-bg-tertiary/20 
+                          backdrop-blur-sm rounded-xl p-4 
+                          border border-borders-primary/40
+                          hover:border-borders-primary/60 transition-all duration-300"
+            >
+              <div className="text-xs text-text-tertiary mb-2 uppercase tracking-wider">
+                Node Type
+              </div>
+              <div className="text-sm text-text-primary font-semibold capitalize mb-3 flex items-center">
+                <div
+                  className={`w-2 h-2 rounded-full mr-2 ${
+                    selectedNode.type === "trigger"
+                      ? "bg-node-success"
+                      : selectedNode.type === "action"
+                      ? "bg-workflow-nebula"
+                      : "bg-status-pending"
+                  }`}
+                ></div>
                 {selectedNode.type}
               </div>
-              <div className="text-xs text-slate-500">
+              <div className="text-xs text-text-muted bg-bg-card/50 px-2 py-1 rounded-md">
                 ID: {selectedNode.id}
               </div>
             </div>
 
             {/* Basic Settings */}
-            <div className="space-y-4">
+            <div className="space-y-5">
               <div>
-                <label className="block text-sm font-medium text-slate-300 mb-2">
+                <label className="block text-sm font-medium text-text-secondary mb-3">
                   Label
                 </label>
                 <input
                   type="text"
                   value={String(selectedNode.data?.label || "")}
                   onChange={(e) => handleInputChange("label", e.target.value)}
-                  className="w-full px-3 py-2.5 text-sm bg-slate-700/50 border border-slate-600/50 rounded-md text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-transparent transition-all duration-200"
+                  className="w-full px-4 py-3 text-sm bg-transparent
+                           border border-borders-primary rounded-xl 
+                           text-text-primary placeholder-text-muted 
+                           hover:border-borders-primary/50"
                   placeholder="Enter node label"
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-slate-300 mb-2">
+                <label className="block text-sm font-medium text-text-secondary mb-3">
                   Description
                 </label>
                 <textarea
@@ -163,7 +192,10 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({
                   onChange={(e) =>
                     handleInputChange("description", e.target.value)
                   }
-                  className="w-full px-3 py-2.5 text-sm bg-slate-700/50 border border-slate-600/50 rounded-md text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-transparent transition-all duration-200 resize-none"
+                  className="w-full px-4 py-3 text-sm bg-transparent
+                           border border-borders-primary rounded-xl 
+                           text-text-primary placeholder-text-muted 
+                           hover:border-borders-primary/50 resize-none"
                   rows={3}
                   placeholder="Enter description"
                 />
@@ -174,19 +206,24 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({
             {!(selectedNode.type === "trigger") && (
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
-                  <label className="block text-sm font-medium text-slate-300">
+                  <label className="block text-sm font-medium text-text-secondary">
                     Parameters
                   </label>
                   <Button
                     onClick={() => setShowParametersModal(true)}
                     size="sm"
-                    className="text-xs py-1.5 px-3 bg-purple-600/20 hover:bg-purple-600/30 border border-purple-500/30 text-purple-400 hover:text-purple-300 transition-all duration-200"
+                    className="text-xs py-2 px-3 
+                             bg-bg-secondary
+                             hover:from-ai-secondary/30 hover:to-ai-accent/30 
+                             border border-ai-secondary/40 hover:border-ai-accent/60
+                             text-ai-secondary hover:text-ai-accent rounded-lg
+                             transform hover:scale-105"
                   >
-                    <Settings size={12} className="mr-1" />
+                    <Settings size={12} className="mr-1.5" />
                     Configure
                   </Button>
                 </div>
-                <div className="text-xs text-slate-500">
+                <div className="text-xs text-text-muted bg-bg-card/30 px-3 py-2 rounded-lg">
                   {selectedNode.data?.parameters?.length || 0} parameter(s)
                   configured
                 </div>
@@ -196,17 +233,21 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({
             {/* Action Type Selection for Action Nodes */}
             {selectedNode.type === "action" && (
               <div>
-                <label className="block text-sm font-medium text-slate-300 mb-2">
+                <Label className="block text-sm font-medium text-text-secondary mb-3">
                   Action Type
-                </label>
-                <select
-                  value={String(selectedNode.data?.type || "script")}
-                  onChange={(e) => handleInputChange("type", e.target.value)}
-                  className="w-full px-3 py-2.5 text-sm bg-slate-700 border border-slate-600/50 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-transparent transition-all duration-200"
+                </Label>
+                <Select
+                  value={selectedNode.data?.type || "script"}
+                  onValueChange={(value) => handleInputChange("type", value)}
                 >
-                  <option value="script">Script</option>
-                  <option value="email">Email</option>
-                </select>
+                  <SelectTrigger className="w-full px-4 py-3 text-sm bg-transparent border border-borders-primary rounded-xl text-text-primary hover:border-borders-primary/50 focus:outline-none">
+                    <SelectValue placeholder="Select action type" />
+                  </SelectTrigger>
+                  <SelectContent className="bg-bg-primary text-text-primary border border-borders-primary">
+                    <SelectItem value="script">Script</SelectItem>
+                    <SelectItem value="email">Email</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
             )}
 
@@ -214,13 +255,18 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({
             {renderNodeSpecificConfig()}
 
             {/* Delete Node Button */}
-            <div className="pt-6 border-t border-slate-600/30">
+            <div className="pt-6 border-t border-borders-primary/20">
               <Button
                 onClick={handleDeleteNode}
                 variant="destructive"
-                className="w-full text-sm py-2.5 bg-red-600/20 hover:bg-red-600/30 border border-red-500/30 text-red-400 hover:text-red-300 transition-all duration-200"
+                className="w-full text-sm py-3 bg-bg-error/30
+                         hover:bg-bg-error/50
+                         border border-status-error/40 hover:border-status-error/60
+                         text-status-error hover:text-white 
+                         transition-all duration-300 rounded-xl
+                         transform hover:scale-[1.02] hover:-translate-y-0.5"
               >
-                <Trash2 size={14} className="mr-2" />
+                <Trash2 size={16} className="mr-2" />
                 Delete Node
               </Button>
             </div>

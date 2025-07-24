@@ -1,5 +1,14 @@
 import React from "react";
 import { BaseConfigProps } from "@/utils/types";
+import {
+  Select,
+  SelectTrigger,
+  SelectValue,
+  SelectContent,
+  SelectItem,
+} from "@/components/ui/select";
+import { Label } from "@/components/ui/label";
+import { Input } from "../ui/input";
 
 export const TriggerConf: React.FC<BaseConfigProps> = ({
   selectedNode,
@@ -12,31 +21,36 @@ export const TriggerConf: React.FC<BaseConfigProps> = ({
   return (
     <div className="space-y-4">
       <div>
-        <label className="block text-sm font-medium text-slate-300 mb-2">
+        <Label className="block text-sm font-medium text-slate-300 mb-2">
           Trigger Type
-        </label>
-        <select
-          value={String(selectedNode.data?.type || "schedule")}
-          onChange={(e) => handleInputChange("type", e.target.value)}
-          className="w-full px-3 py-2.5 text-sm bg-slate-700 border border-slate-600/50 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-transparent transition-all duration-200"
+        </Label>
+        <Select
+          value={selectedNode.data?.type || "schedule"}
+          onValueChange={(value) => handleInputChange("type", value)}
         >
-          <option value="schedule">Schedule</option>
-          <option value="webhook">Webhook</option>
-          <option value="file">File Watcher</option>
-          <option value="manual">Manual</option>
-        </select>
+          <SelectTrigger className="w-full h-11 text-sm bg-slate-700/25 border border-slate-600/50 text-white">
+            {" "}
+            <SelectValue placeholder="Select trigger type" />
+          </SelectTrigger>
+          <SelectContent className="bg-bg-primary text-text-primary border border-borders-primary">
+            <SelectItem value="schedule">Schedule</SelectItem>
+            <SelectItem value="webhook">Webhook</SelectItem>
+            <SelectItem value="file">File Watcher</SelectItem>
+            <SelectItem value="manual">Manual</SelectItem>
+          </SelectContent>
+        </Select>
       </div>
 
       {selectedNode.data?.type === "schedule" && (
         <div>
-          <label className="block text-sm font-medium text-slate-300 mb-2">
+          <Label className="block text-sm font-medium text-slate-300 mb-2">
             Schedule (Cron Expression)
-          </label>
-          <input
+          </Label>
+          <Input
             type="text"
             value={String(selectedNode.data?.schedule || "")}
             onChange={(e) => handleInputChange("schedule", e.target.value)}
-            className="w-full px-3 py-2.5 text-sm bg-slate-700/50 border border-slate-600/50 rounded-md text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-transparent transition-all duration-200"
+            className="w-full px-3 py-2.5 text-sm bg-slate-700/25 border border-slate-600/50 rounded-md text-white placeholder-slate-400 focus:outline-none"
             placeholder="0 9 * * 1-5"
           />
           <p className="text-xs text-slate-500 mt-1">
@@ -47,14 +61,14 @@ export const TriggerConf: React.FC<BaseConfigProps> = ({
 
       {selectedNode.data?.type === "webhook" && (
         <div>
-          <label className="block text-sm font-medium text-slate-300 mb-2">
+          <Label className="block text-sm font-medium text-slate-300 mb-2">
             Webhook URL
-          </label>
-          <input
+          </Label>
+          <Input
             type="url"
             value={String(selectedNode.data?.webhookUrl || "")}
             onChange={(e) => handleInputChange("webhookUrl", e.target.value)}
-            className="w-full px-3 py-2.5 text-sm bg-slate-700/50 border border-slate-600/50 rounded-md text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-transparent transition-all duration-200"
+            className="w-full px-3 py-2.5 text-sm bg-slate-700/25 border border-slate-600/50 rounded-md text-white placeholder-slate-400 focus:outline-none"
             placeholder="https://api.example.com/webhook"
           />
         </div>
@@ -62,14 +76,14 @@ export const TriggerConf: React.FC<BaseConfigProps> = ({
 
       {selectedNode.data?.type === "file" && (
         <div>
-          <label className="block text-sm font-medium text-slate-300 mb-2">
+          <Label className="block text-sm font-medium text-slate-300 mb-2">
             Watch Path
-          </label>
+          </Label>
           <input
             type="text"
             value={String(selectedNode.data?.watchPath || "")}
             onChange={(e) => handleInputChange("watchPath", e.target.value)}
-            className="w-full px-3 py-2.5 text-sm bg-slate-700/50 border border-slate-600/50 rounded-md text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-transparent transition-all duration-200"
+            className="w-full px-3 py-2.5 text-sm bg-slate-700/25 border border-slate-600/50 rounded-md text-white placeholder-slate-400 focus:outline-none"
             placeholder="/path/to/watch"
           />
         </div>

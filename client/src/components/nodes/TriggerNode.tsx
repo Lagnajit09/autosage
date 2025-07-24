@@ -23,37 +23,34 @@ const getIcon = (type: string) => {
 
 export const TriggerNode = ({ data }: { data: TriggerNodeData }) => {
   return (
-    <div className="group relative bg-slate-800/90 backdrop-blur-sm border-2 border-emerald-500/50 rounded-xl shadow-2xl min-w-[160px] hover:shadow-emerald-500/20 transition-all duration-300">
-      {/* Glow effect on hover */}
-      <div className="absolute inset-0 bg-gradient-to-r from-emerald-500/20 to-green-500/20 rounded-xl blur-xl opacity-0 group-hover:opacity-100 transition-opacity duration-300 -z-10"></div>
-
-      <div className="relative p-3">
-        {/* Header with icon and label */}
-        <div className="flex items-center space-x-2 mb-2">
-          <div className="p-1.5 bg-emerald-500/20 rounded-lg">
+    <div className="group relative bg-node-trigger/35 backdrop-blur-xl border-2 border-node-trigger_border rounded-2xl shadow-2xl min-w-[180px] hover:shadow-node-success/30">
+      <div className="relative p-4 z-10">
+        {/* Enhanced header */}
+        <div className="flex items-center space-x-3 mb-3">
+          <div className="p-2 bg-gradient-to-br from-node-success/40 via-status-online/30 to-node-success/20 rounded-xl backdrop-blur-sm border border-node-success/30 group-hover:scale-110 transition-transform duration-300">
             {getIcon(data.type)}
           </div>
           <div className="flex-1 min-w-0">
-            <h4 className="font-semibold text-white text-xs truncate">
+            <h4 className="font-bold text-text-primary text-sm truncate">
               {data.label || "Trigger"}
             </h4>
           </div>
         </div>
 
-        {/* Footer with badge and status indicator */}
+        {/* Enhanced footer */}
         <div className="flex items-center justify-between">
-          <div className="inline-flex items-center px-1.5 py-0.5 bg-emerald-500/20 text-emerald-300 text-xs font-medium rounded-md">
+          <div className="inline-flex items-center px-2.5 py-1 bg-gradient-to-r from-node-success/30 to-status-online/20 text-node-success text-xs font-semibold rounded-lg backdrop-blur-sm border border-node-success/20">
             ⚡ Trigger
           </div>
-          <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse"></div>
+          <div className="w-2 h-2 bg-gradient-to-r from-node-success to-status-online rounded-full animate-pulse-glow shadow-lg shadow-node-success/50"></div>
         </div>
       </div>
 
-      {/* Connection handle - only source (output) for triggers */}
+      {/* Output handle */}
       <Handle
         type="source"
         position={Position.Right}
-        className="w-3 h-3 bg-emerald-500 border-2 border-slate-800 shadow-lg hover:scale-125 transition-transform duration-200"
+        className="w-4 h-4 bg-node-trigger_border shadow-lg hover:shadow-node-success/50"
       />
     </div>
   );

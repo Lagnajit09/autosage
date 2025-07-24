@@ -145,9 +145,12 @@ export default {
 
         // Semantic colors for workflow components
         node: {
-          trigger: "#610094", // Royal purple for trigger nodes
-          action: "#3F0071", // Deep purple for action nodes
-          decision: "#B373E7", // Nebula for decision nodes
+          trigger: "#2C6935",
+          trigger_border: "#008314",
+          action: "#0F1F70",
+          action_border: "#25399A",
+          decision: "#998715",
+          decision_border: "#CDB200",
           success: "#22c55e", // Green for success states
           warning: "#f59e0b", // Amber for warnings
           error: "#ef4444", // Red for errors
