@@ -9,6 +9,7 @@ import {
   LucideIcon,
 } from "lucide-react";
 import { NodeData } from "@/utils/types";
+import Logo from "./Logo";
 
 interface LeftSidebarProps {
   onSaveWorkflow: () => void;
@@ -61,19 +62,27 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({ onSaveWorkflow }) => {
   ];
 
   return (
-    <div className="w-56 bg-bg-primary/30 backdrop-blur-xl border-r border-borders-primary/30 p-4 flex flex-col h-full relative">
+    <div className="w-56 h-[98%] my-auto bg-bg-primary/30 backdrop-blur-xl border-r-2 border-y border-borders-active/30 p-4 flex flex-col relative rounded-3xl">
       {/* Ambient glow effect */}
       <div className="absolute inset-0 bg-gradient-to-br from-workflow-royal/10 via-transparent to-workflow-nebula/5 pointer-events-none" />
 
       {/* Header */}
-      <div className="flex items-center mb-6 relative z-10">
-        <div className="w-2 h-2 bg-gradient-to-r from-workflow-nebula to-workflow-aurora rounded-full mr-3 animate-pulse-glow"></div>
-        <h2 className="text-sm font-semibold text-text-primary">Components</h2>
+      <div className="">
+        <div className="flex items-center gap-2 mb-2">
+          <Logo />
+        </div>
+
+        <div className="flex items-center mb-6 relative z-10">
+          <div className="w-2 h-2 bg-gradient-to-r from-workflow-nebula to-workflow-aurora rounded-full mr-3 animate-pulse-glow"></div>
+          <h2 className="text-sm font-semibold text-text-primary">
+            Components
+          </h2>
+        </div>
       </div>
 
       {/* Triggers Section */}
       <div className="mb-6 relative z-10">
-        <div className="text-xs text-text-tertiary mb-4 uppercase tracking-wider font-medium flex items-center">
+        <div className="text-xs text-text-primary mb-4 uppercase tracking-wider font-medium flex items-center">
           <div className="w-1 h-1 bg-node-success rounded-full mr-2"></div>
           Triggers
         </div>
@@ -111,7 +120,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({ onSaveWorkflow }) => {
                       className="text-node-success group-hover:text-white transition-colors duration-300"
                     />
                   </div>
-                  <span className="text-sm text-text-secondary group-hover:text-text-primary font-medium transition-colors duration-300">
+                  <span className="text-sm text-text-primary group-hover:text-text-primary font-medium transition-colors duration-300">
                     {trigger.label}
                   </span>
                 </div>
@@ -123,7 +132,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({ onSaveWorkflow }) => {
 
       {/* Actions Section */}
       <div className="mb-6 relative z-10">
-        <div className="text-xs text-text-tertiary mb-4 uppercase tracking-wider font-medium flex items-center">
+        <div className="text-xs text-text-primary mb-4 uppercase tracking-wider font-medium flex items-center">
           <div className="w-1 h-1 bg-ai-accent rounded-full mr-2"></div>
           Actions
         </div>
@@ -161,7 +170,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({ onSaveWorkflow }) => {
                       className="text-ai-accent group-hover:text-text-primary transition-colors duration-300"
                     />
                   </div>
-                  <span className="text-sm text-text-secondary group-hover:text-text-primary font-medium transition-colors duration-300">
+                  <span className="text-sm text-text-primary group-hover:text-text-primary font-medium transition-colors duration-300">
                     {action.label}
                   </span>
                 </div>
@@ -173,7 +182,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({ onSaveWorkflow }) => {
 
       {/* Decisions Section */}
       <div className="mb-6 relative z-10">
-        <div className="text-xs text-text-tertiary mb-4 uppercase tracking-wider font-medium flex items-center">
+        <div className="text-xs text-text-primary mb-4 uppercase tracking-wider font-medium flex items-center">
           <div className="w-1 h-1 bg-status-pending rounded-full mr-2"></div>
           Decisions
         </div>
@@ -210,7 +219,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({ onSaveWorkflow }) => {
                       className="text-status-pending group-hover:text-text-primary transition-colors duration-300"
                     />
                   </div>
-                  <span className="text-sm text-text-secondary group-hover:text-text-primary font-medium transition-colors duration-300">
+                  <span className="text-sm text-text-primary group-hover:text-text-primary font-medium transition-colors duration-300">
                     {decision.label}
                   </span>
                 </div>

@@ -22,13 +22,13 @@ import { ImportWorkflowDialog } from "./ImportWorkflowDialog";
 import { DecisionNode } from "./nodes/DecisionNode";
 import { AIWorkflowGenerator } from "./AIWorkflowGenerator";
 import GenieButton from "./GenieButton";
-import { CircleUserRound, FileInput, Key } from "lucide-react";
+import { CredentialVault } from "./CredentialVault";
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
-} from "@/components/ui/tooltip";
-import { CredentialVault } from "./CredentialVault";
+} from "@radix-ui/react-tooltip";
+import { CircleUserRound, FileInput, Key } from "lucide-react";
 
 const nodeTypes = {
   trigger: TriggerNode,
@@ -41,6 +41,7 @@ const WorkflowBuilderContent = () => {
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
   const [selectedNode, setSelectedNode] = useState<Node | null>(null);
   const [selectedEdge, setSelectedEdge] = useState<Edge | null>(null);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [showImportDialog, setShowImportDialog] = useState(false);
   const [showCredentialVault, setShowCredentialVault] = useState(false);
   const [showAIGenerator, setShowAIGenerator] = useState(false);
@@ -68,6 +69,10 @@ const WorkflowBuilderContent = () => {
     const workflowData = { nodes, edges, timestamp: new Date().toISOString() };
     localStorage.setItem("currentWorkflow", JSON.stringify(workflowData));
   }, [nodes, edges]);
+
+  useEffect(() => {
+    setSidebarOpen(!!(selectedNode || selectedEdge));
+  }, [selectedNode, selectedEdge]);
 
   const importWorkflow = (workflowData: WorkflowData) => {
     try {
@@ -324,106 +329,64 @@ const WorkflowBuilderContent = () => {
     );
   };
 
-  const handleCloseRightSidebar = () => {
-    setSelectedNode(null);
-    setSelectedEdge(null);
-  };
-
   return (
     <div className="min-h-screen bg-gradient-to-br from-workflow-void via-workflow-midnight to-workflow-deep overflow-hidden">
       <div className="w-full h-screen bg-bg-card backdrop-blur-xl border border-borders-primary/20 shadow-2xl overflow-hidden">
-        {/* Enhanced Header */}
-        <div className="h-14 bg-gradient-to-r from-workflow-void/80 via-workflow-deep/50 to-workflow-void/80 backdrop-blur-lg border-b border-borders-primary/30 flex items-center justify-between px-6 shadow-lg">
-          <div className="flex items-center space-x-4">
-            <div className="w-8 h-8 bg-gradient-to-br from-workflow-royal via-workflow-nebula to-workflow-royal rounded-xl flex items-center justify-center shadow-lg shadow-workflow-royal/30">
-              <svg
-                className="w-5 h-5 text-workflow-whisper"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M13 10V3L4 14h7v7l9-11h-7z"
-                />
-              </svg>
-            </div>
-            <div>
-              <h1 className="text-lg font-bold bg-gradient-to-r from-text-primary via-workflow-aurora to-text-secondary bg-clip-text text-transparent">
-                Workflow Studio
-              </h1>
-              <p className="text-sm text-text-tertiary">
-                Design and automate your intelligent workflows
-              </p>
-            </div>
-          </div>
-
-          <div className="flex items-center space-x-6">
-            <div className="flex items-center space-x-3">
-              <div className="px-3 py-1.5 bg-gradient-to-r from-workflow-royal/20 to-workflow-nebula/20 backdrop-blur-sm rounded-lg border border-borders-secondary/40">
-                <div className="text-sm text-text-secondary">
-                  {nodes.length} nodes • {edges.length} connections
+        {/* Header */}
+        <div className="w-[20%] absolute right-6 top-4 z-50 shadow-lg">
+          <div className="h-14 bg-bg-secondary/20 backdrop-blur-lg border-2 border-borders-active/30 flex items-center justify-between px-6 shadow-lg rounded-3xl">
+            <div className="w-full flex items-center justify-between space-x-6">
+              <div className="flex items-center space-x-3">
+                <div className="">
+                  <div className="text-sm text-text-secondary">
+                    {nodes.length} nodes
+                  </div>
+                  <div className="text-sm text-text-secondary">
+                    {edges.length} connections
+                  </div>
                 </div>
               </div>
-              {/* <div className="flex items-center space-x-2 px-3 py-1.5 bg-gradient-to-r from-status-online/20 to-status-online/10 backdrop-blur-sm rounded-lg border border-status-online/30">
-                <div className="w-2 h-2 bg-status-online rounded-full animate-pulse-glow"></div>
-                <span className="text-sm text-status-online font-medium">
-                  Live
-                </span>
-              </div> */}
-            </div>
-            {/* <button
-              onClick={() => setShowImportDialog(true)}
-              className="px-4 py-2 text-sm bg-gradient-to-r from-ai-primary/20 via-ai-secondary/20 to-ai-accent/20 
-                       hover:from-ai-primary/30 hover:via-ai-secondary/30 hover:to-ai-accent/30 
-                       border border-ai-primary/40 hover:border-ai-secondary/60
-                       text-text-secondary hover:text-text-primary 
-                       rounded-lg transition-all duration-300 ease-out backdrop-blur-sm
-                       hover:shadow-lg hover:shadow-ai-primary/20
-                       transform hover:scale-[1.02] hover:-translate-y-0.5"
-            >
-              Import JSON
-            </button> */}
-            <div className="flex gap-4 py-2 px-4 border-2 border-borders-active/50 rounded-full">
-              <Tooltip>
-                <TooltipTrigger onClick={() => setShowImportDialog(true)}>
-                  <FileInput className="text-text-primary w-4 h-4 transition-transform duration-200 ease-in-out hover:scale-125" />
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p>Import Workflow</p>
-                </TooltipContent>
-              </Tooltip>
 
-              <Tooltip>
-                <TooltipTrigger
-                  onClick={() => setShowCredentialVault(!showCredentialVault)}
-                >
-                  <Key className="text-text-primary w-4 h-4 transition-transform duration-200 ease-in-out hover:scale-125" />
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p>Credentials</p>
-                </TooltipContent>
-              </Tooltip>
+              <div className="flex gap-2">
+                <Tooltip>
+                  <TooltipTrigger onClick={() => setShowImportDialog(true)}>
+                    <FileInput className="text-gray-900 bg-gray-300 w-8 h-8 p-2 transition-transform duration-200 ease-in-out hover:scale-125 rounded-full" />
+                  </TooltipTrigger>
+                  <TooltipContent className="bg-bg-card text-text-primary text-sm">
+                    <p>Import Workflow</p>
+                  </TooltipContent>
+                </Tooltip>
 
-              <Tooltip>
-                <TooltipTrigger>
-                  <CircleUserRound className="text-text-primary w-4 h-4 transition-transform duration-200 ease-in-out hover:scale-125" />
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p>Profile</p>
-                </TooltipContent>
-              </Tooltip>
+                <Tooltip>
+                  <TooltipTrigger
+                    onClick={() => setShowCredentialVault(!showCredentialVault)}
+                  >
+                    <Key className="text-gray-900 bg-gray-300 w-8 h-8 p-2 transition-transform duration-200 ease-in-out hover:scale-125 rounded-full" />
+                  </TooltipTrigger>
+                  <TooltipContent className="bg-bg-card text-text-primary text-sm">
+                    <p>Credentials</p>
+                  </TooltipContent>
+                </Tooltip>
+
+                <Tooltip>
+                  <TooltipTrigger>
+                    <CircleUserRound className="text-gray-900 bg-gray-300 w-8 h-8 p-2 transition-transform duration-200 ease-in-out hover:scale-125 rounded-full" />
+                  </TooltipTrigger>
+                  <TooltipContent className="bg-bg-card text-text-primary text-sm">
+                    <p>Profile</p>
+                  </TooltipContent>
+                </Tooltip>
+              </div>
             </div>
           </div>
         </div>
-        {/* Enhanced Main Content */}
-        <div className="h-[calc(100%-3.5rem)] flex">
+
+        {/* Main Content */}
+        <div className="h-[calc(100%)] flex">
           <LeftSidebar onSaveWorkflow={saveWorkflow} />
 
           <div
-            className="flex-1 bg-gradient-to-br from-workflow-void/50 via-workflow-midnight/30 to-workflow-deep/40"
+            className="flex-1 bg-gradient-to-br from-workflow-void/50 via-workflow-midnight/30 to-workflow-deep/40 rounded-3xl"
             ref={reactFlowWrapper}
           >
             {/* Canvas background effects */}
@@ -530,10 +493,17 @@ const WorkflowBuilderContent = () => {
             onUpdateEdge={updateEdgeData}
             onDeleteNode={deleteNode}
             onDeleteEdge={deleteEdge}
-            onClose={handleCloseRightSidebar}
             onSaveWorkflow={saveWorkflow}
             onCreateEdge={handleCreateEdge}
             nodes={nodes}
+            open={sidebarOpen}
+            onOpenChange={(open) => {
+              setSidebarOpen(open);
+              if (!open) {
+                setSelectedNode(null);
+                setSelectedEdge(null);
+              }
+            }}
           />
         </div>
       </div>

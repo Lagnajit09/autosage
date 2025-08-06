@@ -298,7 +298,9 @@ export const EmailConf: React.FC<BaseConfigProps> = ({
           className="data-[state=checked]:border-blue-600 data-[state=checked]:bg-blue-600 data-[state=checked]:text-white dark:data-[state=checked]:border-blue-700 dark:data-[state=checked]:bg-blue-700 data-[state=unchecked]:border-borders-primary"
         />
         <div className="grid gap-1.5 font-normal">
-          <p className="text-sm leading-none font-medium">HTML Format</p>
+          <p className="text-sm leading-none font-medium text-text-primary">
+            HTML Format
+          </p>
         </div>
       </Label>
 
@@ -351,7 +353,7 @@ export const EmailConf: React.FC<BaseConfigProps> = ({
             className="data-[state=checked]:border-blue-600 data-[state=checked]:bg-blue-600 data-[state=checked]:text-white dark:data-[state=checked]:border-blue-700 dark:data-[state=checked]:bg-blue-700 data-[state=unchecked]:border-borders-primary"
           />
           <div className="grid gap-1.5 font-normal">
-            <p className="text-sm leading-none font-medium">
+            <p className="text-sm leading-none font-medium text-text-primary">
               Secure Connection (TLS/SSL)
             </p>
           </div>

@@ -16,6 +16,8 @@ import ProtectedRoute from "./components/auth/ProtectedRoute";
 
 const queryClient = new QueryClient();
 
+localStorage.setItem("authToken", "1234567890");
+
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <LoadingProvider>

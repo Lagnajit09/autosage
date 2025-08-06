@@ -4,10 +4,10 @@ const Logo = () => {
       {/* Add Logo SVG */}
 
       <span className="text-xl md:text-2xl font-extrabold">
-        <span className="bg-gradient-to-r from-blue-500 via-purple-500 to-pink-500 bg-clip-text text-transparent">
-          Auto
+        <span className="bg-gradient-to-r from-blue-500 via-purple-500 to-pink-500 bg-clip-text text-transparent font-semibold">
+          🇦🇺🇹🇴
         </span>
-        <span className="text-white">Ꮆen</span>
+        <span className="text-white">🇸🇦🇬🇪</span>
       </span>
     </div>
   );
