@@ -45,47 +45,6 @@
     --sidebar-border: 220 13% 91%;
     --sidebar-ring: 217.2 91.2% 59.8%;
   }
-
-  .dark {
-    /* Dark theme using your custom color palette */
-    --background: 252 100% 16%;      /* workflow-midnight: #150050 */
-    --foreground: 290 35% 92%;       /* text-primary: #ECDCF9 */
-
-    --card: 0 0% 0%;                 /* bg-card: #000000 */
-    --card-foreground: 290 35% 92%;  /* text-primary: #ECDCF9 */
-
-    --popover: 252 100% 16%;         /* bg-modal: #150050 */
-    --popover-foreground: 290 35% 92%; /* text-primary: #ECDCF9 */
-
-    --primary: 264 100% 29%;         /* workflow-royal: #610094 */
-    --primary-foreground: 290 35% 92%; /* text-primary: #ECDCF9 */
-
-    --secondary: 258 100% 22%;       /* workflow-deep: #3F0071 */
-    --secondary-foreground: 290 35% 92%; /* text-primary: #ECDCF9 */
-
-    --muted: 0 0% 22%;               /* neutral-charcoal: #393939 */
-    --muted-foreground: 0 0% 64%;    /* text-muted: #A3A3A3 */
-
-    --accent: 264 59% 69%;           /* workflow-nebula: #B373E7 */
-    --accent-foreground: 0 0% 0%;    /* text-inverse: #000000 */
-
-    --destructive: 0 84% 55%;        /* Error red */
-    --destructive-foreground: 290 35% 92%; /* text-primary: #ECDCF9 */
-
-    --border: 0 0% 22%;              /* border-subtle: #393939 */
-    --input: 0 0% 22%;               /* border-subtle: #393939 */
-    --ring: 264 59% 69%;             /* workflow-nebula: #B373E7 */
-
-    /* Sidebar using your color palette */
-    --sidebar-background: 252 100% 16%;    /* workflow-midnight: #150050 */
-    --sidebar-foreground: 290 35% 92%;     /* text-primary: #ECDCF9 */
-    --sidebar-primary: 264 100% 29%;       /* workflow-royal: #610094 */
-    --sidebar-primary-foreground: 290 35% 92%; /* text-primary: #ECDCF9 */
-    --sidebar-accent: 258 100% 22%;        /* workflow-deep: #3F0071 */
-    --sidebar-accent-foreground: 290 35% 92%; /* text-primary: #ECDCF9 */
-    --sidebar-border: 0 0% 22%;            /* border-subtle: #393939 */
-    --sidebar-ring: 264 59% 69%;           /* workflow-nebula: #B373E7 */
-  }
 }
 
 @layer base {

@@ -13,6 +13,8 @@ import Landing from "./pages/Landing";
 import { LoadingProvider } from "./contexts/LoadingContext";
 import Dashboard from "./pages/Dashboard";
 import ProtectedRoute from "./components/auth/ProtectedRoute";
+import "./App.css";
+import { ThemeProvider } from "./provider/theme-provider";
 
 const queryClient = new QueryClient();
 
@@ -20,31 +22,33 @@ localStorage.setItem("authToken", "1234567890");
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
-    <LoadingProvider>
-      <TooltipProvider>
-        <Toaster />
-        <Sonner />
-        <BrowserRouter>
-          <Routes>
-            {/* Protected Routes */}
-            <Route element={<ProtectedRoute />}>
-              <Route path="/workflow" element={<Workflow />} />
-              <Route path="/dashboard" element={<Dashboard />} />
-              <Route path="/code-editor" element={<CodeEditor />} />
-              <Route path="/raw/:id" element={<ScriptViewer />} />
-            </Route>
+    <ThemeProvider>
+      <LoadingProvider>
+        <TooltipProvider>
+          <Toaster />
+          <Sonner />
+          <BrowserRouter>
+            <Routes>
+              {/* Protected Routes */}
+              <Route element={<ProtectedRoute />}>
+                <Route path="/workflow" element={<Workflow />} />
+                <Route path="/dashboard" element={<Dashboard />} />
+                <Route path="/code-editor" element={<CodeEditor />} />
+                <Route path="/raw/:id" element={<ScriptViewer />} />
+              </Route>
 
-            {/* Public Routes */}
-            <Route path="/signup" element={<SignUp />} />
-            <Route path="/signin" element={<SignIn />} />
-            <Route path="/" element={<Landing />} />
+              {/* Public Routes */}
+              <Route path="/signup" element={<SignUp />} />
+              <Route path="/signin" element={<SignIn />} />
+              <Route path="/" element={<Landing />} />
 
-            {/* Catch-all Route */}
-            <Route path="*" element={<NotFound />} />
-          </Routes>
-        </BrowserRouter>
-      </TooltipProvider>
-    </LoadingProvider>
+              {/* Catch-all Route */}
+              <Route path="*" element={<NotFound />} />
+            </Routes>
+          </BrowserRouter>
+        </TooltipProvider>
+      </LoadingProvider>
+    </ThemeProvider>
   </QueryClientProvider>
 );
 
