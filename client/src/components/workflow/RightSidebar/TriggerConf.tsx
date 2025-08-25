@@ -8,7 +8,7 @@ import {
   SelectItem,
 } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
-import { Input } from "../ui/input";
+import { Input } from "@/components/ui/input";
 
 export const TriggerConf: React.FC<BaseConfigProps> = ({
   selectedNode,

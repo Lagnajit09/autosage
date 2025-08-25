@@ -7,7 +7,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { DecisionConfigProps } from "@/utils/types";
-import { Label } from "../ui/label";
+import { Label } from "@/components/ui/label";
 
 export const DecisionConf: React.FC<DecisionConfigProps> = ({
   selectedNode,

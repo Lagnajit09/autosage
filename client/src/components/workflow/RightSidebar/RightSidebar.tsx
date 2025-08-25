@@ -7,12 +7,12 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
-import { ParametersModal } from "./ParametersModal";
-import { EdgeConf } from "./RightSidebar/EdgeConf";
-import { DecisionConf } from "./RightSidebar/DecisionConf";
-import { ScriptConf } from "./RightSidebar/ScriptConf";
-import { EmailConf } from "./RightSidebar/EmailConf";
-import { TriggerConf } from "./RightSidebar/TriggerConf";
+import { ParametersModal } from "../ParametersModal";
+import { EdgeConf } from "./EdgeConf";
+import { DecisionConf } from "./DecisionConf";
+import { ScriptConf } from "./ScriptConf";
+import { EmailConf } from "./EmailConf";
+import { TriggerConf } from "./TriggerConf";
 import { Node, Edge, Parameter, NodeData } from "@/utils/types";
 import {
   Select,

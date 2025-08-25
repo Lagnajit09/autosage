@@ -9,7 +9,7 @@ import {
   LucideIcon,
 } from "lucide-react";
 import { NodeData } from "@/utils/types";
-import Logo from "./Logo";
+import Logo from "../Logo";
 
 interface LeftSidebarProps {
   onSaveWorkflow: () => void;

@@ -10,8 +10,8 @@ import {
 } from "@/components/ui/select";
 import { Link } from "react-router-dom";
 import { BaseConfigProps, Credential, ScriptFile } from "@/utils/types";
-import { Label } from "../ui/label";
-import { Input } from "../ui/input";
+import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
 
 export const ScriptConf: React.FC<BaseConfigProps> = ({
   selectedNode,

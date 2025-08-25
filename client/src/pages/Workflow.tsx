@@ -1,4 +1,4 @@
-import { WorkflowBuilder } from "@/components/WorkflowBuilder";
+import { WorkflowBuilder } from "@/components/workflow/WorkflowBuilder";
 
 const Index = () => {
   return (

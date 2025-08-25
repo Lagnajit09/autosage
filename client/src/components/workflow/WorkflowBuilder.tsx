@@ -13,15 +13,15 @@ import {
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 
-import { RightSidebar } from "./RightSidebar";
-import { TriggerNode } from "./nodes/TriggerNode";
-import { ActionNode } from "./nodes/ActionNode";
+import { RightSidebar } from "./RightSidebar/RightSidebar";
+import { TriggerNode } from "../nodes/TriggerNode";
+import { ActionNode } from "../nodes/ActionNode";
 import { LeftSidebar } from "./LeftSidebar";
 import { Edge, NodeData, ScriptFile, WorkflowData } from "@/utils/types";
 import { ImportWorkflowDialog } from "./ImportWorkflowDialog";
-import { DecisionNode } from "./nodes/DecisionNode";
+import { DecisionNode } from "../nodes/DecisionNode";
 import { AIWorkflowGenerator } from "./AIWorkflowGenerator";
-import GenieButton from "./GenieButton";
+import GenieButton from "../GenieButton";
 import { CredentialVault } from "./CredentialVault";
 import {
   Tooltip,
