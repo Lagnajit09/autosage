@@ -1,3 +1,4 @@
+import Hero from "@/components/landing/hero-section";
 import { Button } from "@/components/ui/button";
 import { useTheme } from "@/provider/theme-provider";
 import { Moon, Sun } from "lucide-react";
@@ -12,10 +13,10 @@ const Landing = () => {
           className="w-fit p-1 h-fit border-2 border-black"
           onClick={() => toggleTheme()}
         >
-          {isDark ? <Moon className="w-8 h-8" /> : <Sun className="w-8 h-8" />}
+          {isDark ? <Sun className="w-8 h-8" /> : <Moon className="w-8 h-8" />}
         </Button>
       </div>
-      <div className="">LANDING PAGE</div>
+      <Hero />
     </div>
   );
 };

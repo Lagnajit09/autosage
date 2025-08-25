@@ -62,9 +62,9 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({ onSaveWorkflow }) => {
   ];
 
   return (
-    <div className="w-56 h-[98%] my-auto bg-bg-primary/30 backdrop-blur-xl border-r-2 border-y border-borders-active/30 p-4 flex flex-col relative rounded-3xl">
+    <div className="w-56 h-[98%] my-auto bg-bg-primary/30 dark:bg-bg-primary/30 backdrop-blur-xl border-r-2 border-y border-borders-active/30 dark:border-borders-active/30 p-4 flex flex-col relative rounded-3xl">
       {/* Ambient glow effect */}
-      <div className="absolute inset-0 bg-gradient-to-br from-workflow-royal/10 via-transparent to-workflow-nebula/5 pointer-events-none" />
+      <div className="absolute inset-0 bg-gradient-to-br from-workflow-royal/10 via-transparent to-workflow-nebula/5 dark:from-workflow-royal/10 dark:via-transparent dark:to-workflow-nebula/5 pointer-events-none" />
 
       {/* Header */}
       <div className="">
@@ -73,8 +73,8 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({ onSaveWorkflow }) => {
         </div>
 
         <div className="flex items-center mb-6 relative z-10">
-          <div className="w-2 h-2 bg-gradient-to-r from-workflow-nebula to-workflow-aurora rounded-full mr-3 animate-pulse-glow"></div>
-          <h2 className="text-sm font-semibold text-text-primary">
+          <div className="w-2 h-2 bg-gradient-to-r from-workflow-nebula to-workflow-aurora dark:from-workflow-nebula dark:to-workflow-aurora rounded-full mr-3 animate-pulse-glow"></div>
+          <h2 className="text-sm font-semibold text-text-primary dark:text-text-primary">
             Components
           </h2>
         </div>
@@ -82,8 +82,8 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({ onSaveWorkflow }) => {
 
       {/* Triggers Section */}
       <div className="mb-6 relative z-10">
-        <div className="text-xs text-text-primary mb-4 uppercase tracking-wider font-medium flex items-center">
-          <div className="w-1 h-1 bg-node-success rounded-full mr-2"></div>
+        <div className="text-xs text-text-primary dark:text-text-primary mb-4 uppercase tracking-wider font-medium flex items-center">
+          <div className="w-1 h-1 bg-node-success dark:bg-node-success rounded-full mr-2"></div>
           Triggers
         </div>
         <div className="space-y-3">
@@ -100,27 +100,27 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({ onSaveWorkflow }) => {
                   })
                 }
                 className="group cursor-grab active:cursor-grabbing 
-                         bg-gradient-to-r from-bg-secondary/40 to-bg-tertiary/20 
-                         hover:from-node-success/20 hover:to-node-success/10
+                         bg-gradient-to-r from-bg-secondary/40 to-bg-tertiary/20 dark:from-bg-secondary/40 dark:to-bg-tertiary/20 
+                         hover:from-node-success/20 hover:to-node-success/10 dark:hover:from-node-success/20 dark:hover:to-node-success/10
                          backdrop-blur-sm rounded-xl p-3 
-                         border border-borders-secondary/40 
-                         hover:border-node-success/50 hover:shadow-lg
-                         hover:shadow-node-success/20
+                         border border-borders-secondary/40 dark:border-borders-secondary/40 
+                         hover:border-node-success/50 hover:shadow-lg dark:hover:border-node-success/50
+                         hover:shadow-node-success/20 dark:hover:shadow-node-success/20
                          transition-all duration-300 ease-out
                          transform hover:scale-[1.02] hover:-translate-y-0.5"
               >
                 <div className="flex items-center space-x-3">
                   <div
-                    className="p-2 bg-gradient-to-br from-node-success/30 to-node-success/20 
-                                rounded-lg group-hover:from-node-success/40 group-hover:to-node-success/30 
+                    className="p-2 bg-gradient-to-br from-node-success/30 to-node-success/20 dark:from-node-success/30 dark:to-node-success/20 
+                                rounded-lg group-hover:from-node-success/40 group-hover:to-node-success/30 dark:group-hover:from-node-success/40 dark:group-hover:to-node-success/30 
                                 transition-all duration-300 group-hover:scale-110"
                   >
                     <Icon
                       size={14}
-                      className="text-node-success group-hover:text-white transition-colors duration-300"
+                      className="text-node-success dark:text-node-success group-hover:text-white dark:group-hover:text-white transition-colors duration-300"
                     />
                   </div>
-                  <span className="text-sm text-text-primary group-hover:text-text-primary font-medium transition-colors duration-300">
+                  <span className="text-sm text-text-primary dark:text-text-primary group-hover:text-text-primary dark:group-hover:text-text-primary font-medium transition-colors duration-300">
                     {trigger.label}
                   </span>
                 </div>
@@ -132,8 +132,8 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({ onSaveWorkflow }) => {
 
       {/* Actions Section */}
       <div className="mb-6 relative z-10">
-        <div className="text-xs text-text-primary mb-4 uppercase tracking-wider font-medium flex items-center">
-          <div className="w-1 h-1 bg-ai-accent rounded-full mr-2"></div>
+        <div className="text-xs text-text-primary dark:text-text-primary mb-4 uppercase tracking-wider font-medium flex items-center">
+          <div className="w-1 h-1 bg-ai-accent dark:bg-ai-accent rounded-full mr-2"></div>
           Actions
         </div>
         <div className="space-y-3">
@@ -150,27 +150,27 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({ onSaveWorkflow }) => {
                   })
                 }
                 className="group cursor-grab active:cursor-grabbing 
-                         bg-gradient-to-r from-bg-secondary/40 to-bg-tertiary/20 
-                         hover:from-workflow-midnight/20 hover:to-workflow-midnight/10
+                         bg-gradient-to-r from-bg-secondary/40 to-bg-tertiary/20 dark:from-bg-secondary/40 dark:to-bg-tertiary/20 
+                         hover:from-workflow-midnight/20 hover:to-workflow-midnight/10 dark:hover:from-workflow-midnight/20 dark:hover:to-workflow-midnight/10
                          backdrop-blur-sm rounded-xl p-3 
-                         border border-borders-secondary/40 
-                         hover:border-node-action_border/90 hover:shadow-lg
-                         hover:shadow-ai-primary/20
+                         border border-borders-secondary/40 dark:border-borders-secondary/40 
+                         hover:border-node-action_border/90 hover:shadow-lg dark:hover:border-node-action_border/90
+                         hover:shadow-ai-primary/20 dark:hover:shadow-ai-primary/20
                          transition-all duration-300 ease-out
                          transform hover:scale-[1.02] hover:-translate-y-0.5"
               >
                 <div className="flex items-center space-x-3">
                   <div
-                    className="p-2 bg-gradient-to-br from-ai-primary/30 to-ai-secondary/20 
-                                rounded-lg group-hover:from-ai-primary/40 group-hover:to-ai-secondary/30 
+                    className="p-2 bg-gradient-to-br from-ai-primary/30 to-ai-secondary/20 dark:from-ai-primary/30 dark:to-ai-secondary/20 
+                                rounded-lg group-hover:from-ai-primary/40 group-hover:to-ai-secondary/30 dark:group-hover:from-ai-primary/40 dark:group-hover:to-ai-secondary/30 
                                 transition-all duration-300 group-hover:scale-110"
                   >
                     <Icon
                       size={14}
-                      className="text-ai-accent group-hover:text-text-primary transition-colors duration-300"
+                      className="text-ai-accent dark:text-ai-accent group-hover:text-text-primary dark:group-hover:text-text-primary transition-colors duration-300"
                     />
                   </div>
-                  <span className="text-sm text-text-primary group-hover:text-text-primary font-medium transition-colors duration-300">
+                  <span className="text-sm text-text-primary dark:text-text-primary group-hover:text-text-primary dark:group-hover:text-text-primary font-medium transition-colors duration-300">
                     {action.label}
                   </span>
                 </div>
@@ -182,8 +182,8 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({ onSaveWorkflow }) => {
 
       {/* Decisions Section */}
       <div className="mb-6 relative z-10">
-        <div className="text-xs text-text-primary mb-4 uppercase tracking-wider font-medium flex items-center">
-          <div className="w-1 h-1 bg-status-pending rounded-full mr-2"></div>
+        <div className="text-xs text-text-primary dark:text-text-primary mb-4 uppercase tracking-wider font-medium flex items-center">
+          <div className="w-1 h-1 bg-status-pending dark:bg-status-pending rounded-full mr-2"></div>
           Decisions
         </div>
         <div className="space-y-3">
@@ -199,27 +199,27 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({ onSaveWorkflow }) => {
                   })
                 }
                 className="group cursor-grab active:cursor-grabbing 
-                         bg-gradient-to-r from-bg-secondary/40 to-bg-tertiary/20 
-                         hover:from-status-pending/20 hover:to-status-pending/10
+                         bg-gradient-to-r from-bg-secondary/40 to-bg-tertiary/20 dark:from-bg-secondary/40 dark:to-bg-tertiary/20 
+                         hover:from-status-pending/20 hover:to-status-pending/10 dark:hover:from-status-pending/20 dark:hover:to-status-pending/10
                          backdrop-blur-sm rounded-xl p-3 
-                         border border-borders-secondary/40 
-                         hover:border-status-pending/50 hover:shadow-lg
-                         hover:shadow-status-pending/20
+                         border border-borders-secondary/40 dark:border-borders-secondary/40 
+                         hover:border-status-pending/50 hover:shadow-lg dark:hover:border-status-pending/50
+                         hover:shadow-status-pending/20 dark:hover:shadow-status-pending/20
                          transition-all duration-300 ease-out
                          transform hover:scale-[1.02] hover:-translate-y-0.5"
               >
                 <div className="flex items-center space-x-3">
                   <div
-                    className="p-2 bg-gradient-to-br from-status-pending/30 to-status-pending/20 
-                                rounded-lg group-hover:from-status-pending/40 group-hover:to-status-pending/30 
+                    className="p-2 bg-gradient-to-br from-status-pending/30 to-status-pending/20 dark:from-status-pending/30 dark:to-status-pending/20 
+                                rounded-lg group-hover:from-status-pending/40 group-hover:to-status-pending/30 dark:group-hover:from-status-pending/40 dark:group-hover:to-status-pending/30 
                                 transition-all duration-300 group-hover:scale-110"
                   >
                     <Icon
                       size={14}
-                      className="text-status-pending group-hover:text-text-primary transition-colors duration-300"
+                      className="text-status-pending dark:text-status-pending group-hover:text-text-primary dark:group-hover:text-text-primary transition-colors duration-300"
                     />
                   </div>
-                  <span className="text-sm text-text-primary group-hover:text-text-primary font-medium transition-colors duration-300">
+                  <span className="text-sm text-text-primary dark:text-text-primary group-hover:text-text-primary dark:group-hover:text-text-primary font-medium transition-colors duration-300">
                     {decision.label}
                   </span>
                 </div>
@@ -230,21 +230,21 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({ onSaveWorkflow }) => {
       </div>
 
       {/* Save Button at bottom */}
-      <div className="mt-auto pt-4 border-t border-borders-primary/20 relative z-10">
+      <div className="mt-auto pt-4 border-t border-borders-primary/20 dark:border-borders-primary/20 relative z-10">
         <button
           onClick={onSaveWorkflow}
-          className="w-full bg-gradient-to-r from-ai-primary/20 via-ai-secondary/20 to-ai-accent/20 
-                   hover:from-ai-primary/30 hover:via-ai-secondary/30 hover:to-ai-accent/30 
-                   border border-ai-primary/40 hover:border-ai-secondary/60
-                   text-text-secondary hover:text-text-primary 
+          className="w-full bg-gradient-to-r from-ai-primary/20 via-ai-secondary/20 to-ai-accent/20 dark:from-ai-primary/20 dark:via-ai-secondary/20 dark:to-ai-accent/20 
+                   hover:from-ai-primary/30 hover:via-ai-secondary/30 hover:to-ai-accent/30 dark:hover:from-ai-primary/30 dark:hover:via-ai-secondary/30 dark:hover:to-ai-accent/30 
+                   border border-ai-primary/40 hover:border-ai-secondary/60 dark:border-ai-primary/40 dark:hover:border-ai-secondary/60
+                   text-text-secondary hover:text-text-primary dark:text-text-secondary dark:hover:text-text-primary 
                    transition-all duration-300 ease-out
                    text-sm py-3 px-4 rounded-xl
                    backdrop-blur-sm
-                   hover:shadow-lg hover:shadow-ai-primary/20
+                   hover:shadow-lg hover:shadow-ai-primary/20 dark:hover:shadow-ai-primary/20
                    transform hover:scale-[1.02] hover:-translate-y-0.5"
         >
           <div className="flex items-center justify-center space-x-2">
-            <div className="w-2 h-2 bg-gradient-to-r from-ai-secondary to-ai-accent rounded-full animate-pulse"></div>
+            <div className="w-2 h-2 bg-gradient-to-r from-ai-secondary to-ai-accent dark:from-ai-secondary dark:to-ai-accent rounded-full animate-pulse"></div>
             <span className="font-medium">Save Workflow</span>
           </div>
         </button>

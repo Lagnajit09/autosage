@@ -97,19 +97,19 @@ export const CredentialVault: React.FC<CredentialVaultProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 top-16 right-4 backdrop-blur-sm flex items-start justify-end z-50">
-      <div className="mt-1 w-96 bg-workflow-midnight/80 border border-borders-active/50 rounded-xl shadow-xl overflow-hidden h-fit">
+    <div className="fixed inset-0 top-16 right-4 flex items-start justify-end z-50">
+      <div className="mt-1 w-96 bg-workflow-midnight/80 dark:bg-workflow-midnight/80 border border-borders-active/50 dark:border-borders-active/50 backdrop-blur-sm rounded-xl shadow-xl overflow-hidden h-fit">
         {/* Header */}
-        <div className="p-3 border-b border-slate-700/50 flex items-center justify-between">
+        <div className="p-3 border-b border-slate-700/50 dark:border-slate-700/50 flex items-center justify-between">
           <div className="flex items-center space-x-2">
-            <LockKeyhole className="text-text-secondary w-4 h-4" />
-            <h3 className="text-sm font-semibold text-white">
+            <LockKeyhole className="text-text-secondary dark:text-text-secondary w-4 h-4" />
+            <h3 className="text-sm font-semibold text-white dark:text-white">
               Credential Vault
             </h3>
           </div>
           <button
             onClick={onClose}
-            className="p-1 hover:bg-slate-700/50 rounded-md transition-colors duration-200 text-slate-400 hover:text-white"
+            className="p-1 hover:bg-slate-700/50 dark:hover:bg-slate-700/50 rounded-md transition-colors duration-200 text-slate-400 dark:text-slate-400 hover:text-white dark:hover:text-white"
           >
             <X size={14} />
           </button>
@@ -117,16 +117,16 @@ export const CredentialVault: React.FC<CredentialVaultProps> = ({
 
         {/* Tabs Content */}
         <Tabs defaultValue="view" className="h-full">
-          <TabsList className="grid w-full grid-cols-2 bg-bg-primary my-2 rounded-md">
+          <TabsList className="grid w-full grid-cols-2 bg-bg-primary dark:bg-bg-primary my-2 rounded-md">
             <TabsTrigger
               value="view"
-              className="text-xs text-slate-300 data-[state=active]:bg-slate-600/50 data-[state=active]:text-white"
+              className="text-xs text-slate-300 dark:text-slate-300 data-[state=active]:bg-slate-600/50 dark:data-[state=active]:bg-slate-600/50 data-[state=active]:text-white dark:data-[state=active]:text-white"
             >
               View Credentials
             </TabsTrigger>
             <TabsTrigger
               value="add"
-              className="text-xs text-slate-300 data-[state=active]:bg-slate-600/50 data-[state=active]:text-white"
+              className="text-xs text-slate-300 dark:text-slate-300 data-[state=active]:bg-slate-600/50 dark:data-[state=active]:bg-slate-600/50 data-[state=active]:text-white dark:data-[state=active]:text-white"
             >
               Add New
             </TabsTrigger>
@@ -136,10 +136,10 @@ export const CredentialVault: React.FC<CredentialVaultProps> = ({
             {credentials.length === 0 ? (
               <div className="flex items-center justify-center h-full">
                 <div className="text-center">
-                  <p className="text-xs text-slate-400 mb-2">
+                  <p className="text-xs text-slate-400 dark:text-slate-400 mb-2">
                     No credentials saved
                   </p>
-                  <p className="text-xs text-slate-500">
+                  <p className="text-xs text-slate-500 dark:text-slate-500">
                     Use the "Add New" tab to create your first credential
                   </p>
                 </div>
@@ -150,29 +150,33 @@ export const CredentialVault: React.FC<CredentialVaultProps> = ({
                   {credentials.map((credential) => (
                     <div
                       key={credential.id}
-                      className="bg-slate-700/30 rounded-lg p-3 border border-slate-600/30"
+                      className="bg-slate-700/30 dark:bg-slate-700/30 rounded-lg p-3 border border-slate-600/30 dark:border-slate-600/30"
                     >
                       <div className="flex items-center justify-between mb-2">
-                        <h4 className="text-sm font-medium text-white truncate">
+                        <h4 className="text-sm font-medium text-white dark:text-white truncate">
                           {credential.name}
                         </h4>
                         <button
                           onClick={() => handleDeleteCredential(credential.id)}
-                          className="p-1 hover:bg-red-600/20 rounded text-red-400 hover:text-red-300 transition-colors"
+                          className="p-1 hover:bg-red-600/20 dark:hover:bg-red-600/20 rounded text-red-400 dark:text-red-400 hover:text-red-300 dark:hover:text-red-300 transition-colors"
                         >
                           <Trash2 size={12} />
                         </button>
                       </div>
                       <div className="space-y-1">
-                        <div className="text-xs text-slate-300">
-                          <span className="text-slate-500">Username: </span>
+                        <div className="text-xs text-slate-300 dark:text-slate-300">
+                          <span className="text-slate-500 dark:text-slate-500">
+                            Username:{" "}
+                          </span>
                           <span className="font-mono">
                             {credential.username}
                           </span>
                         </div>
                         <div className="flex items-center justify-between">
-                          <div className="text-xs text-slate-300 flex-1">
-                            <span className="text-slate-500">Password: </span>
+                          <div className="text-xs text-slate-300 dark:text-slate-300 flex-1">
+                            <span className="text-slate-500 dark:text-slate-500">
+                              Password:{" "}
+                            </span>
                             <span className="font-mono">
                               {showPasswords[credential.id]
                                 ? credential.password
@@ -183,7 +187,7 @@ export const CredentialVault: React.FC<CredentialVaultProps> = ({
                             onClick={() =>
                               togglePasswordVisibility(credential.id)
                             }
-                            className="p-1 hover:bg-slate-600/50 rounded text-slate-400 hover:text-white transition-colors ml-2"
+                            className="p-1 hover:bg-slate-600/50 dark:hover:bg-slate-600/50 rounded text-slate-400 dark:text-slate-400 hover:text-white dark:hover:text-white transition-colors ml-2"
                           >
                             {showPasswords[credential.id] ? (
                               <EyeOff size={12} />
@@ -192,7 +196,7 @@ export const CredentialVault: React.FC<CredentialVaultProps> = ({
                             )}
                           </button>
                         </div>
-                        <div className="text-xs text-slate-500">
+                        <div className="text-xs text-slate-500 dark:text-slate-500">
                           Created:{" "}
                           {new Date(credential.createdAt).toLocaleDateString()}
                         </div>
@@ -206,7 +210,7 @@ export const CredentialVault: React.FC<CredentialVaultProps> = ({
 
           <TabsContent value="add" className="mt-0 h-80">
             <div className="p-3 h-full flex flex-col ">
-              <h4 className="text-sm font-medium text-white mb-3">
+              <h4 className="text-sm font-medium text-white dark:text-white mb-3">
                 Add New Credential
               </h4>
               <div className="space-y-3 flex-1">
@@ -216,14 +220,16 @@ export const CredentialVault: React.FC<CredentialVaultProps> = ({
                     placeholder="Credential name (must be unique)"
                     value={newCredential.name}
                     onChange={(e) => handleNameChange(e.target.value)}
-                    className={`w-full px-3 py-2 text-sm bg-slate-700/50 border rounded-md text-white placeholder-slate-400 focus:outline-none focus:ring-1 ${
+                    className={`w-full px-3 py-2 text-sm bg-slate-700/50 dark:bg-slate-700/50 border rounded-md text-white dark:text-white placeholder-slate-400 dark:placeholder-slate-400 focus:outline-none focus:ring-1 ${
                       nameError
-                        ? "border-red-500/50 focus:ring-red-500/50"
-                        : "border-slate-600/50 focus:ring-blue-500/50"
+                        ? "border-red-500/50 dark:border-red-500/50 focus:ring-red-500/50 dark:focus:ring-red-500/50"
+                        : "border-slate-600/50 dark:border-slate-600/50 focus:ring-blue-500/50 dark:focus:ring-blue-500/50"
                     }`}
                   />
                   {nameError && (
-                    <p className="text-xs text-red-400 mt-1">{nameError}</p>
+                    <p className="text-xs text-red-400 dark:text-red-400 mt-1">
+                      {nameError}
+                    </p>
                   )}
                 </div>
                 <input
@@ -236,7 +242,7 @@ export const CredentialVault: React.FC<CredentialVaultProps> = ({
                       username: e.target.value,
                     }))
                   }
-                  className="w-full px-3 py-2 text-sm bg-slate-700/50 border border-slate-600/50 rounded-md text-white placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-blue-500/50"
+                  className="w-full px-3 py-2 text-sm bg-slate-700/50 dark:bg-slate-700/50 border border-slate-600/50 dark:border-slate-600/50 rounded-md text-white dark:text-white placeholder-slate-400 dark:placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-blue-500/50 dark:focus:ring-blue-500/50"
                 />
                 <input
                   type="password"
@@ -248,7 +254,7 @@ export const CredentialVault: React.FC<CredentialVaultProps> = ({
                       password: e.target.value,
                     }))
                   }
-                  className="w-full px-3 py-2 text-sm bg-slate-700/50 border border-slate-600/50 rounded-md text-white placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-blue-500/50"
+                  className="w-full px-3 py-2 text-sm bg-slate-700/50 dark:bg-slate-700/50 border border-slate-600/50 dark:border-slate-600/50 rounded-md text-white dark:text-white placeholder-slate-400 dark:placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-blue-500/50 dark:focus:ring-blue-500/50"
                 />
               </div>
               <div className="mt-4">
@@ -260,7 +266,7 @@ export const CredentialVault: React.FC<CredentialVaultProps> = ({
                     !newCredential.password ||
                     !!nameError
                   }
-                  className="w-full text-sm py-2 bg-bg-secondary/80 hover:bg-bg-secondary/60 border border-borders-active/60 text-text-primary hover:text-gray-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="w-[100%] bg-blue-600/60 dark:bg-blue-600/60 hover:bg-blue-500/60 dark:hover:bg-blue-500/60 text-white dark:text-white"
                 >
                   <Plus size={14} className="mr-2" />
                   Add Credential

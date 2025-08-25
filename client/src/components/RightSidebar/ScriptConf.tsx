@@ -127,21 +127,21 @@ export const ScriptConf: React.FC<BaseConfigProps> = ({
 
   return (
     <div className="space-y-5">
-      <h4 className="text-sm font-medium text-slate-300 border-b border-slate-600/30 pb-2">
+      <h4 className="text-sm font-medium text-slate-300 dark:text-slate-300 border-b border-slate-600/30 dark:border-slate-600/30 pb-2">
         Script Configuration
       </h4>
       <div>
-        <Label className="block text-sm font-medium text-slate-300 mb-2">
+        <Label className="block text-sm font-medium text-slate-300 dark:text-slate-300 mb-2">
           Script Type
         </Label>
         <Select
           value={selectedNode.data?.scriptType || "Python Script"}
           onValueChange={(value) => handleInputChange("scriptType", value)}
         >
-          <SelectTrigger className="w-full h-11 text-sm bg-slate-700/25 border border-slate-600/50 text-white">
+          <SelectTrigger className="w-full h-11 text-sm bg-slate-700/25 dark:bg-slate-700/25 border border-slate-600/50 dark:border-slate-600/50 text-white dark:text-white">
             <SelectValue placeholder="Select script type" />
           </SelectTrigger>
-          <SelectContent className="bg-bg-primary text-text-primary border border-borders-primary">
+          <SelectContent className="bg-bg-primary dark:bg-bg-primary text-text-primary dark:text-text-primary border border-borders-primary dark:border-borders-primary">
             <SelectItem value="Python Script">Python Script</SelectItem>
             <SelectItem value="Powershell Script">Powershell Script</SelectItem>
             <SelectItem value="Shell Script">Shell Script</SelectItem>
@@ -150,7 +150,7 @@ export const ScriptConf: React.FC<BaseConfigProps> = ({
       </div>
 
       <div className="space-y-4">
-        <label className="block text-sm font-medium text-slate-300">
+        <label className="block text-sm font-medium text-slate-300 dark:text-slate-300">
           Script Management
         </label>
 
@@ -163,7 +163,7 @@ export const ScriptConf: React.FC<BaseConfigProps> = ({
           >
             <Button
               size="sm"
-              className="w-full text-sm py-2.5 bg-blue-600/20 hover:bg-blue-600/30 border border-blue-500/30 text-blue-400 hover:text-blue-300 transition-all duration-200"
+              className="w-full text-sm py-2.5 bg-blue-600/20 dark:bg-blue-600/20 hover:bg-blue-600/30 dark:hover:bg-blue-600/30 border border-blue-500/30 dark:border-blue-500/30 text-blue-400 dark:text-blue-400 hover:text-blue-300 dark:hover:text-blue-300 transition-all duration-200"
             >
               <Code size={14} className="mr-2" />
               Write Script
@@ -174,7 +174,7 @@ export const ScriptConf: React.FC<BaseConfigProps> = ({
             onClick={handleUploadScript}
             size="sm"
             variant="outline"
-            className="w-full text-sm py-2.5 bg-slate-700/30 hover:bg-slate-600/30 border border-slate-600/50 text-slate-300 hover:text-white transition-all duration-200"
+            className="w-full text-sm py-2.5 bg-slate-700/30 dark:bg-slate-700/30 hover:bg-slate-600/30 dark:hover:bg-slate-600/30 border border-slate-600/50 dark:border-slate-600/50 text-slate-300 dark:text-slate-300 hover:text-white dark:hover:text-white transition-all duration-200"
           >
             <Upload size={14} className="mr-2" />
             Upload Script
@@ -182,17 +182,17 @@ export const ScriptConf: React.FC<BaseConfigProps> = ({
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-slate-300 mb-2">
+          <label className="block text-sm font-medium text-slate-300 dark:text-slate-300 mb-2">
             Select Script
           </label>
           <Select
             onValueChange={handleScriptSelect}
             value={selectedNode.data?.selectedScript || ""}
           >
-            <SelectTrigger className="w-full h-11 text-sm bg-slate-700/25 border border-slate-600/50 text-white">
+            <SelectTrigger className="w-full h-11 text-sm bg-slate-700/25 dark:bg-slate-700/25 border border-slate-600/50 dark:border-slate-600/50 text-white dark:text-white">
               <SelectValue placeholder="Choose a script..." />
             </SelectTrigger>
-            <SelectContent className="bg-bg-primary text-text-primary border border-borders-primary">
+            <SelectContent className="bg-bg-primary dark:bg-bg-primary text-text-primary dark:text-text-primary border border-borders-primary dark:border-borders-primary">
               {getSavedScripts().map((script: ScriptFile) => (
                 <SelectItem
                   key={script.id}
@@ -202,7 +202,7 @@ export const ScriptConf: React.FC<BaseConfigProps> = ({
                   <div className="flex items-center space-x-2">
                     <FileText size={14} />
                     <span>{script.name}</span>
-                    <span className="text-xs text-slate-400">
+                    <span className="text-xs text-slate-400 dark:text-slate-400">
                       {script.source === "upload" ? "↑" : "✏️"}
                     </span>
                   </div>
@@ -212,7 +212,7 @@ export const ScriptConf: React.FC<BaseConfigProps> = ({
                 <SelectItem
                   value="none"
                   disabled
-                  className="text-sm text-slate-500"
+                  className="text-sm text-slate-500 dark:text-slate-500"
                 >
                   No scripts available
                 </SelectItem>
@@ -223,17 +223,17 @@ export const ScriptConf: React.FC<BaseConfigProps> = ({
       </div>
 
       <div>
-        <Label className="block text-sm font-medium text-slate-300 mb-2">
+        <Label className="block text-sm font-medium text-slate-300 dark:text-slate-300 mb-2">
           Execution Mode
         </Label>
         <Select
           value={selectedNode.data?.executionMode || "local"}
           onValueChange={(value) => handleInputChange("executionMode", value)}
         >
-          <SelectTrigger className="w-full h-11 text-sm bg-slate-700/25 border border-slate-600/50 text-white">
+          <SelectTrigger className="w-full h-11 text-sm bg-slate-700/25 dark:bg-slate-700/25 border border-slate-600/50 dark:border-slate-600/50 text-white dark:text-white">
             <SelectValue placeholder="Select execution mode" />
           </SelectTrigger>
-          <SelectContent className="bg-bg-primary text-text-primary border border-borders-primary">
+          <SelectContent className="bg-bg-primary dark:bg-bg-primary text-text-primary dark:text-text-primary border border-borders-primary dark:border-borders-primary">
             <SelectItem value="local">Local</SelectItem>
             <SelectItem value="remote">Remote</SelectItem>
           </SelectContent>
@@ -243,7 +243,7 @@ export const ScriptConf: React.FC<BaseConfigProps> = ({
       {selectedNode.data?.executionMode === "remote" && (
         <>
           <div>
-            <Label className="block text-sm font-medium text-slate-300 mb-2">
+            <Label className="block text-sm font-medium text-slate-300 dark:text-slate-300 mb-2">
               Server Address
             </Label>
             <Input
@@ -252,23 +252,23 @@ export const ScriptConf: React.FC<BaseConfigProps> = ({
               onChange={(e) =>
                 handleInputChange("serverAddress", e.target.value)
               }
-              className="w-full px-3 py-2.5 text-sm bg-slate-700/25 border border-slate-600/50 rounded-md text-white placeholder-slate-400 focus:outline-none"
+              className="w-full px-3 py-2.5 text-sm bg-slate-700/25 dark:bg-slate-700/25 border border-slate-600/50 dark:border-slate-600/50 rounded-md text-white dark:text-white placeholder-slate-400 dark:placeholder-slate-400 focus:outline-none"
               placeholder="Enter server address"
             />
           </div>
 
           <div>
-            <Label className="block text-sm font-medium text-slate-300 mb-2">
+            <Label className="block text-sm font-medium text-slate-300 dark:text-slate-300 mb-2">
               Credentials
             </Label>
             <Select
               onValueChange={handleCredentialSelect}
               value={getSelectedCredentialId()}
             >
-              <SelectTrigger className="w-full h-11 text-sm bg-slate-700/25 border border-slate-600/50 text-white">
+              <SelectTrigger className="w-full h-11 text-sm bg-slate-700/25 dark:bg-slate-700/25 border border-slate-600/50 dark:border-slate-600/50 text-white dark:text-white">
                 <SelectValue placeholder="Select credentials..." />
               </SelectTrigger>
-              <SelectContent className="bg-bg-primary text-text-primary border border-borders-primary">
+              <SelectContent className="bg-bg-primary dark:bg-bg-primary text-text-primary dark:text-text-primary border border-borders-primary dark:border-borders-primary">
                 {getSavedCredentials().map((credential: Credential) => (
                   <SelectItem
                     key={credential.id}
@@ -297,14 +297,14 @@ export const ScriptConf: React.FC<BaseConfigProps> = ({
                   <SelectItem
                     value="none"
                     disabled
-                    className="text-sm text-slate-500"
+                    className="text-sm text-slate-500 dark:text-slate-500"
                   >
                     No credentials available
                   </SelectItem>
                 )}
               </SelectContent>
             </Select>
-            <p className="text-xs text-slate-500 mt-2">
+            <p className="text-xs text-slate-500 dark:text-slate-500 mt-2">
               Add credentials via the hamburger menu
             </p>
           </div>

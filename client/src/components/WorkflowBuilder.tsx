@@ -28,7 +28,8 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@radix-ui/react-tooltip";
-import { CircleUserRound, FileInput, Key } from "lucide-react";
+import { CircleUserRound, FileInput, Key, Moon, Sun } from "lucide-react";
+import { useTheme } from "@/provider/theme-provider";
 
 const nodeTypes = {
   trigger: TriggerNode,
@@ -37,6 +38,7 @@ const nodeTypes = {
 };
 
 const WorkflowBuilderContent = () => {
+  const { isDark, toggleTheme } = useTheme();
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
   const [selectedNode, setSelectedNode] = useState<Node | null>(null);
@@ -330,18 +332,18 @@ const WorkflowBuilderContent = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-workflow-void via-workflow-midnight to-workflow-deep overflow-hidden">
-      <div className="w-full h-screen bg-bg-card backdrop-blur-xl border border-borders-primary/20 shadow-2xl overflow-hidden">
+    <div className="min-h-screen bg-gradient-to-br from-workflow-void via-workflow-midnight to-workflow-deep dark:from-workflow-void dark:via-workflow-midnight dark:to-workflow-deep overflow-hidden">
+      <div className="w-full h-screen bg-bg-card dark:bg-bg-card backdrop-blur-xl border border-borders-primary/20 dark:border-borders-primary/20 shadow-2xl overflow-hidden">
         {/* Header */}
-        <div className="w-[20%] absolute right-6 top-4 z-50 shadow-lg">
-          <div className="h-14 bg-bg-secondary/20 backdrop-blur-lg border-2 border-borders-active/30 flex items-center justify-between px-6 shadow-lg rounded-3xl">
+        <div className="w-[22%] absolute right-6 top-4 z-50 shadow-lg">
+          <div className="h-14 bg-bg-secondary/20 dark:bg-bg-secondary/20 backdrop-blur-lg border-2 border-borders-active/30 dark:border-borders-active/30 flex items-center justify-between px-6 shadow-lg rounded-3xl">
             <div className="w-full flex items-center justify-between space-x-6">
               <div className="flex items-center space-x-3">
                 <div className="">
-                  <div className="text-sm text-text-secondary">
+                  <div className="text-sm text-text-secondary dark:text-text-secondary">
                     {nodes.length} nodes
                   </div>
-                  <div className="text-sm text-text-secondary">
+                  <div className="text-sm text-text-secondary dark:text-text-secondary">
                     {edges.length} connections
                   </div>
                 </div>
@@ -350,9 +352,9 @@ const WorkflowBuilderContent = () => {
               <div className="flex gap-2">
                 <Tooltip>
                   <TooltipTrigger onClick={() => setShowImportDialog(true)}>
-                    <FileInput className="text-gray-900 bg-gray-300 w-8 h-8 p-2 transition-transform duration-200 ease-in-out hover:scale-125 rounded-full" />
+                    <FileInput className="text-gray-900 dark:text-gray-900 bg-gray-300 dark:bg-gray-300 w-8 h-8 p-2 transition-transform duration-200 ease-in-out hover:scale-125 rounded-full" />
                   </TooltipTrigger>
-                  <TooltipContent className="bg-bg-card text-text-primary text-sm">
+                  <TooltipContent className="bg-bg-card dark:bg-bg-card text-text-primary dark:text-text-primary text-sm">
                     <p>Import Workflow</p>
                   </TooltipContent>
                 </Tooltip>
@@ -361,19 +363,32 @@ const WorkflowBuilderContent = () => {
                   <TooltipTrigger
                     onClick={() => setShowCredentialVault(!showCredentialVault)}
                   >
-                    <Key className="text-gray-900 bg-gray-300 w-8 h-8 p-2 transition-transform duration-200 ease-in-out hover:scale-125 rounded-full" />
+                    <Key className="text-gray-900 dark:text-gray-900 bg-gray-300 dark:bg-gray-300 w-8 h-8 p-2 transition-transform duration-200 ease-in-out hover:scale-125 rounded-full" />
                   </TooltipTrigger>
-                  <TooltipContent className="bg-bg-card text-text-primary text-sm">
+                  <TooltipContent className="bg-bg-card dark:bg-bg-card text-text-primary dark:text-text-primary text-sm">
                     <p>Credentials</p>
                   </TooltipContent>
                 </Tooltip>
 
                 <Tooltip>
                   <TooltipTrigger>
-                    <CircleUserRound className="text-gray-900 bg-gray-300 w-8 h-8 p-2 transition-transform duration-200 ease-in-out hover:scale-125 rounded-full" />
+                    <CircleUserRound className="text-gray-900 dark:text-gray-900 bg-gray-300 dark:bg-gray-300 w-8 h-8 p-2 transition-transform duration-200 ease-in-out hover:scale-125 rounded-full" />
                   </TooltipTrigger>
-                  <TooltipContent className="bg-bg-card text-text-primary text-sm">
+                  <TooltipContent className="bg-bg-card dark:bg-bg-card text-text-primary dark:text-text-primary text-sm">
                     <p>Profile</p>
+                  </TooltipContent>
+                </Tooltip>
+
+                <Tooltip>
+                  <TooltipTrigger onClick={() => toggleTheme()}>
+                    {isDark ? (
+                      <Sun className="text-gray-900 dark:text-gray-900 bg-gray-300 dark:bg-gray-300 w-8 h-8 p-2 transition-transform duration-200 ease-in-out hover:scale-125 rounded-full" />
+                    ) : (
+                      <Moon className="text-gray-900 dark:text-gray-900 bg-gray-300 dark:bg-gray-300 w-8 h-8 p-2 transition-transform duration-200 ease-in-out hover:scale-125 rounded-full" />
+                    )}
+                  </TooltipTrigger>
+                  <TooltipContent className="bg-bg-card dark:bg-bg-card text-text-primary dark:text-text-primary text-sm">
+                    <p>{isDark ? "Light Mode" : "Dark Mode"}</p>
                   </TooltipContent>
                 </Tooltip>
               </div>
@@ -386,13 +401,13 @@ const WorkflowBuilderContent = () => {
           <LeftSidebar onSaveWorkflow={saveWorkflow} />
 
           <div
-            className="flex-1 bg-gradient-to-br from-workflow-void/50 via-workflow-midnight/30 to-workflow-deep/40 rounded-3xl"
+            className="flex-1 bg-gradient-to-br from-workflow-void/50 via-workflow-midnight/30 to-workflow-deep/40 dark:from-workflow-void/50 dark:via-workflow-midnight/30 dark:to-workflow-deep/40 rounded-3xl"
             ref={reactFlowWrapper}
           >
             {/* Canvas background effects */}
-            <div className="absolute inset-0 bg-gradient-to-tr from-workflow-royal/5 via-transparent to-workflow-nebula/3 pointer-events-none" />
+            <div className="absolute inset-0 bg-gradient-to-tr from-workflow-royal/5 via-transparent to-workflow-nebula/3 dark:from-workflow-royal/5 dark:via-transparent dark:to-workflow-nebula/3 pointer-events-none" />
             <div
-              className="absolute top-1/4 right-1/3 w-64 h-64 bg-workflow-aurora/5 rounded-full blur-3xl animate-pulse-glow"
+              className="absolute top-1/4 right-1/3 w-64 h-64 bg-workflow-aurora/5 dark:bg-workflow-aurora/5 rounded-full blur-3xl animate-pulse-glow"
               style={{ animationDelay: "2s" }}
             />
 
@@ -420,7 +435,7 @@ const WorkflowBuilderContent = () => {
                 type: "smoothstep",
               }}
             >
-              <Controls className="bg-gradient-to-br from-workflow-deep/90 via-workflow-royal/80 to-workflow-nebula/70 backdrop-blur-xl border border-borders-primary/30 rounded-2xl shadow-2xl shadow-workflow-royal/20" />
+              <Controls className="bg-gradient-to-br from-workflow-deep/90 via-workflow-royal/80 to-workflow-nebula/70 dark:from-workflow-deep/90 dark:via-workflow-royal/80 dark:to-workflow-nebula/70 backdrop-blur-xl border border-borders-primary/30 dark:border-borders-primary/30 rounded-2xl shadow-2xl shadow-workflow-royal/20 dark:shadow-workflow-royal/20" />
               <Background
                 color="#ffffff"
                 gap={20}
@@ -437,15 +452,15 @@ const WorkflowBuilderContent = () => {
               <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                 <div className="text-center relative">
                   {/* Glow effect behind the icon */}
-                  <div className="absolute inset-0 bg-gradient-to-r from-workflow-royal/20 via-workflow-nebula/20 to-workflow-aurora/20 rounded-full blur-2xl scale-150"></div>
+                  <div className="absolute inset-0 bg-gradient-to-r from-workflow-royal/20 via-workflow-nebula/20 to-workflow-aurora/20 dark:from-workflow-royal/20 dark:via-workflow-nebula/20 dark:to-workflow-aurora/20 rounded-full blur-2xl scale-150"></div>
 
                   <div
-                    className="w-16 h-16 bg-gradient-to-br from-workflow-royal/40 via-workflow-nebula/30 to-workflow-aurora/20 
+                    className="w-16 h-16 bg-gradient-to-br from-workflow-royal/40 via-workflow-nebula/30 to-workflow-aurora/20 dark:from-workflow-royal/40 dark:via-workflow-nebula/30 dark:to-workflow-aurora/20 
                                 rounded-2xl flex items-center justify-center mx-auto mb-4 backdrop-blur-sm 
-                                border border-borders-primary/30 shadow-2xl shadow-workflow-royal/20 relative z-10"
+                                border border-borders-primary/30 dark:border-borders-primary/30 shadow-2xl shadow-workflow-royal/20 dark:shadow-workflow-royal/20 relative z-10"
                   >
                     <svg
-                      className="w-8 h-8 text-workflow-aurora"
+                      className="w-8 h-8 text-workflow-aurora dark:text-workflow-aurora"
                       fill="none"
                       stroke="currentColor"
                       viewBox="0 0 24 24"
@@ -459,22 +474,22 @@ const WorkflowBuilderContent = () => {
                     </svg>
                   </div>
 
-                  <h3 className="text-lg font-semibold bg-gradient-to-r from-text-primary via-workflow-aurora to-text-secondary bg-clip-text text-transparent mb-3">
+                  <h3 className="text-lg font-semibold bg-gradient-to-r from-text-primary via-workflow-aurora to-text-secondary dark:from-text-primary dark:via-workflow-aurora dark:to-text-secondary bg-clip-text text-transparent dark:text-transparent mb-3">
                     Start Building Your Workflow
                   </h3>
-                  <p className="text-sm text-text-tertiary max-w-md">
+                  <p className="text-sm text-text-tertiary dark:text-text-tertiary max-w-md">
                     Drag components from the sidebar to create intelligent
                     automation workflows
                   </p>
 
                   {/* Animated hint */}
-                  <div className="mt-6 flex items-center justify-center space-x-2 text-workflow-nebula/60">
-                    <div className="w-1 h-1 bg-workflow-nebula rounded-full animate-pulse"></div>
+                  <div className="mt-6 flex items-center justify-center space-x-2 text-workflow-nebula/60 dark:text-workflow-nebula/60">
+                    <div className="w-1 h-1 bg-workflow-nebula dark:bg-workflow-nebula rounded-full animate-pulse"></div>
                     <span className="text-xs font-medium">
                       Try the AI Generator for quick start
                     </span>
                     <div
-                      className="w-1 h-1 bg-workflow-nebula rounded-full animate-pulse"
+                      className="w-1 h-1 bg-workflow-nebula dark:bg-workflow-nebula rounded-full animate-pulse"
                       style={{ animationDelay: "0.5s" }}
                     ></div>
                   </div>

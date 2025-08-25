@@ -129,11 +129,14 @@ export const AIWorkflowGenerator: React.FC<AIWorkflowGeneratorProps> = ({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-lg bg-workflow-midnight/40 backdrop-blur-sm border border-slate-700 text-white">
+      <DialogContent className="max-w-lg bg-workflow-midnight/40 dark:bg-workflow-midnight/40 backdrop-blur-sm border border-slate-700 dark:border-slate-700 text-white dark:text-white">
         <DialogHeader>
-          <DialogTitle className="text-white flex items-center">
-            <Wand2 size={18} className="mr-2 text-purple-400" />
-            Genie Workflow
+          <DialogTitle className="text-white dark:text-white flex items-center">
+            <Wand2
+              size={18}
+              className="mr-2 text-purple-400 dark:text-purple-400"
+            />
+            Ask SageAI
           </DialogTitle>
         </DialogHeader>
 
@@ -141,7 +144,7 @@ export const AIWorkflowGenerator: React.FC<AIWorkflowGeneratorProps> = ({
           <div>
             <Label
               htmlFor="workflow-prompt"
-              className="text-sm text-slate-300 mb-2 block"
+              className="text-sm text-slate-300 dark:text-slate-300 mb-2 block"
             >
               Describe your workflow
             </Label>
@@ -150,7 +153,7 @@ export const AIWorkflowGenerator: React.FC<AIWorkflowGeneratorProps> = ({
               value={prompt}
               onChange={(e) => setPrompt(e.target.value)}
               placeholder="e.g., Create a workflow that monitors server health, checks disk usage, and sends alerts if usage is above 80%"
-              className="w-full px-3 py-3 text-sm bg-bg-primary/20 border border-slate-600/50 rounded-md text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-purple-500/50 focus:border-transparent resize-none"
+              className="w-full px-3 py-3 text-sm bg-bg-primary/20 dark:bg-bg-primary/20 border border-slate-600/50 dark:border-slate-600/50 rounded-md text-white dark:text-white placeholder-slate-400 dark:placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-purple-500/50 dark:focus:ring-purple-500/50 focus:border-transparent resize-none"
               rows={4}
             />
           </div>
@@ -165,7 +168,7 @@ export const AIWorkflowGenerator: React.FC<AIWorkflowGeneratorProps> = ({
                 <SelectTrigger>
                   <SelectValue placeholder="Workflow Type" />
                 </SelectTrigger>
-                <SelectContent className="bg-bg-primary text-text-primary border border-borders-active">
+                <SelectContent className="backdrop-blur-sm bg-bg-primary/40 dark:bg-bg-primary/40 text-text-primary dark:text-text-primary border border-borders-active dark:border-borders-active">
                   <SelectItem
                     value="complete"
                     className="hover:text-gray-800 hover:bg-slate-300"
@@ -189,7 +192,7 @@ export const AIWorkflowGenerator: React.FC<AIWorkflowGeneratorProps> = ({
                 <SelectTrigger className="">
                   <SelectValue placeholder="Generation Type" />
                 </SelectTrigger>
-                <SelectContent className="bg-bg-primary text-text-primary border border-borders-active">
+                <SelectContent className="backdrop-blur-sm bg-bg-primary/40 dark:bg-bg-primary/40 text-text-primary dark:text-text-primary border border-borders-active dark:border-borders-active">
                   <SelectItem
                     value="complete"
                     className="hover:text-gray-800 hover:bg-slate-300"
@@ -207,18 +210,20 @@ export const AIWorkflowGenerator: React.FC<AIWorkflowGeneratorProps> = ({
             </div>
           </div>
 
-          <div className="bg-slate-700/30 rounded-lg p-3 border border-slate-600/30">
-            <p className="text-xs text-slate-400 mb-1">✨ AI Features:</p>
-            <ul className="text-xs text-slate-500 space-y-1">
+          <div className="bg-slate-700/30 dark:bg-slate-700/30 rounded-lg p-3 border border-slate-600/30 dark:border-slate-600/30">
+            <p className="text-xs text-slate-400 dark:text-slate-400 mb-1">
+              ✨ AI Features:
+            </p>
+            <ul className="text-xs text-slate-500 dark:text-slate-500 space-y-1">
               <li>• Automatically generates nodes and connections</li>
               <li>• Suggests parameters and configurations</li>
               <li>• Creates decision logic and branching</li>
             </ul>
-            <div className="mt-3 p-2 bg-slate-800/60 rounded text-xs text-blue-300 border border-blue-700/30">
+            <div className="mt-3 p-2 bg-slate-800/60 dark:bg-slate-800/60 rounded text-xs text-blue-300 dark:text-blue-300 border border-blue-700/30 dark:border-blue-700/30">
               <b>Tip:</b> You can specify the script language for each step in
               your prompt.
               <br />
-              <span className="text-slate-400">
+              <span className="text-slate-400 dark:text-slate-400">
                 Example:{" "}
                 <i>
                   "Check disk usage in Python, then archive logs using Bash, and
@@ -236,11 +241,11 @@ export const AIWorkflowGenerator: React.FC<AIWorkflowGeneratorProps> = ({
             <Button
               onClick={handleGenerate}
               disabled={!prompt.trim() || isGenerating}
-              className="flex-1 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white"
+              className="flex-1 bg-blue-600 dark:bg-blue-600 hover:bg-blue-500 dark:hover:bg-blue-500 text-white dark:text-white"
             >
               {isGenerating ? (
                 <>
-                  <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin mr-2" />
+                  <div className="w-4 h-4 border-2 border-white/30 dark:border-white/30 border-t-white dark:border-t-white rounded-full animate-spin mr-2" />
                   Generating...
                 </>
               ) : (
@@ -253,7 +258,7 @@ export const AIWorkflowGenerator: React.FC<AIWorkflowGeneratorProps> = ({
             <Button
               onClick={onClose}
               variant="outline"
-              className="border-slate-600 text-slate-800 hover:bg-slate-300"
+              className="border-slate-600 dark:border-slate-600 bg-slate-100 dark:bg-slate-100 text-slate-800 dark:text-slate-800 hover:bg-slate-50 dark:hover:bg-slate-50"
             >
               Cancel
             </Button>

@@ -11,10 +11,10 @@ const GenieButton = ({ onClick }: GenieBtnProps) => {
       <TooltipTrigger asChild>
         <button
           onClick={onClick}
-          className="fixed bottom-6 right-6 w-14 h-14 bg-gradient-to-br from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 rounded-full shadow-lg hover:shadow-xl transition-all duration-200 flex items-center justify-center group z-50"
+          className="fixed bottom-6 right-6 w-14 h-14 bg-gradient-to-br from-purple-600 to-blue-600 dark:from-purple-600 dark:to-blue-600 hover:from-purple-700 hover:to-blue-700 dark:hover:from-purple-700 dark:hover:to-blue-700 rounded-full shadow-lg hover:shadow-xl transition-all duration-200 flex items-center justify-center group z-50"
         >
           <svg
-            className="w-6 h-6 text-white group-hover:scale-110 transition-transform duration-200"
+            className="w-6 h-6 text-white dark:text-white group-hover:scale-110 transition-transform duration-200"
             fill="none"
             stroke="currentColor"
             viewBox="0 0 24 24"
