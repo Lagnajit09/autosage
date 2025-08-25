@@ -1,0 +1,343 @@
+/* globals.css or theme-variables.css */
+
+:root {
+    /* Core shadcn/ui variables for light theme */
+    --background: 249 250 251; /* gray-50 */
+    --foreground: 17 24 39; /* gray-900 */
+    --card: 255 255 255; /* white */
+    --card-foreground: 17 24 39; /* gray-900 */
+    --popover: 255 255 255; /* white */
+    --popover-foreground: 17 24 39; /* gray-900 */
+    --primary: 79 70 229; /* indigo-600 */
+    --primary-foreground: 255 255 255; /* white */
+    --secondary: 224 231 255; /* indigo-100 */
+    --secondary-foreground: 30 58 138; /* indigo-900 */
+    --muted: 243 244 246; /* gray-100 */
+    --muted-foreground: 107 114 128; /* gray-500 */
+    --accent: 224 231 255; /* indigo-100 */
+    --accent-foreground: 30 58 138; /* indigo-900 */
+    --destructive: 239 68 68; /* red-500 */
+    --destructive-foreground: 255 255 255; /* white */
+    --border: 229 231 235; /* gray-200 */
+    --input: 229 231 235; /* gray-200 */
+    --ring: 59 130 246; /* blue-500 */
+    --radius: 0.5rem;
+  
+    /* Sidebar variables for light theme */
+    --sidebar-background: 241 245 249; /* gray-50 with tint */
+    --sidebar-foreground: 17 24 39; /* gray-900 */
+    --sidebar-primary: 79 70 229; /* indigo-600 */
+    --sidebar-primary-foreground: 255 255 255; /* white */
+    --sidebar-accent: 241 245 249; /* gray-50 with tint */
+    --sidebar-accent-foreground: 75 85 99; /* gray-600 */
+    --sidebar-border: 229 231 235; /* gray-200 */
+    --sidebar-ring: 59 130 246; /* blue-500 */
+  
+    /* LIGHT THEME CUSTOM VARIABLES */
+  
+    /* Workflow colors */
+    --workflow-void: #F9FAFB; /* Light background instead of black */
+    --workflow-midnight: #FFFFFF; /* White for main backgrounds */
+    --workflow-deep: #F3F4F6; /* Light gray for elevated surfaces */
+    --workflow-royal: #4F46E5; /* Indigo-600 for primary actions */
+    --workflow-nebula: #8B5CF6; /* Purple-500 for highlights */
+    --workflow-aurora: #C4B5FD; /* Violet-300 for soft accents */
+    --workflow-whisper: #DDD6FE; /* Violet-200 for subtle elements */
+  
+    /* Background variations */
+    --bg-primary: #F9FAFB; /* Main app background */
+    --bg-secondary: #FFFFFF; /* Elevated surfaces */
+    --bg-tertiary: #F3F4F6; /* Component backgrounds */
+    --bg-card: #FFFFFF; /* Card backgrounds */
+    --bg-panel: #F1F5F9; /* Side panels */
+    --bg-modal: #FFFFFF; /* Modal backgrounds */
+    --bg-hover: #F3F4F6; /* Hover states */
+    --bg-active: #E0E7FF; /* Active states */
+    --bg-disabled: #E5E7EB; /* Disabled states */
+    --bg-success: #ECFDF5; /* Success backgrounds */
+    --bg-warning: #FFFBEB; /* Warning backgrounds */
+    --bg-error: #FEF2F2; /* Error backgrounds */
+  
+    /* Text variations */
+    --text-primary: #111827; /* Primary text */
+    --text-secondary: #4B5563; /* Secondary text */
+    --text-tertiary: #6B7280; /* Tertiary text */
+    --text-accent: #7C3AED; /* Accent text (purple) */
+    --text-muted: #9CA3AF; /* Muted text */
+    --text-disabled: #9CA3AF; /* Disabled text */
+    --text-inverse: #FFFFFF; /* Inverse text */
+    --text-success: #065F46; /* Success text */
+    --text-warning: #78350F; /* Warning text */
+    --text-error: #991B1B; /* Error text */
+    --text-link: #7C3AED; /* Link text */
+    --text-link-hover: #6366F1; /* Link hover text */
+  
+    /* Border variations */
+    --borders-primary: #E5E7EB; /* Primary borders */
+    --borders-secondary: #D1D5DB; /* Secondary borders */
+    --borders-tertiary: #9CA3AF; /* Tertiary borders */
+    --borders-subtle: #E5E7EB; /* Subtle borders */
+    --borders-muted: #D1D5DB; /* Muted borders */
+    --borders-focus: #3B82F6; /* Focus borders */
+    --borders-hover: #C4B5FD; /* Hover borders */
+    --borders-active: #8B5CF6; /* Active borders */
+    --borders-disabled: #E5E7EB; /* Disabled borders */
+    --borders-success: #10B981; /* Success borders */
+    --borders-warning: #F59E0B; /* Warning borders */
+    --borders-error: #EF4444; /* Error borders */
+    --borders-divider: #E5E7EB; /* Divider lines */
+  
+    /* Neutral colors */
+    --neutral-void: #111827; /* Dark text color */
+    --neutral-charcoal: #374151; /* Dark gray for text */
+    --neutral-slate: #6B7280; /* Medium gray for secondary text */
+    --neutral-silver: #9CA3AF; /* Light gray for disabled states */
+    --neutral-ghost: #E5E7EB; /* Light gray for borders */
+    --neutral-smoke: #F9FAFB; /* Very light gray for backgrounds */
+    --neutral-pure: #FFFFFF; /* Pure white */
+  
+    /* Node types */
+    --node-trigger: #DFF6E1; /* Light green fill */
+    --node-trigger-border: #34C759; /* Green border */
+    --node-trigger-text: #14532D; /* Dark green text */
+    --node-action: #E5EBFA; /* Light blue fill */
+    --node-action-border: #3B82F6; /* Blue border */
+    --node-action-text: #1E3A8A; /* Dark blue text */
+    --node-decision: #FFF8E1; /* Light yellow fill */
+    --node-decision-border: #FACC15; /* Yellow border */
+    --node-decision-text: #78350F; /* Dark yellow text */
+  
+    /* Connections */
+    --connection-active: #8B5CF6; /* Purple-500 for active */
+    --connection-inactive: #D1D5DB; /* Gray-300 for inactive */
+    --connection-hover: #C4B5FD; /* Violet-300 for hover */
+  
+    /* Status indicators */
+    --status-online: #10B981; /* Green-500 */
+    --status-offline: #6B7280; /* Gray-500 */
+    --status-pending: #F59E0B; /* Amber-500 */
+    --status-error: #EF4444; /* Red-500 */
+  
+    /* AI colors */
+    --ai-primary: #4F46E5; /* Indigo-600 */
+    --ai-secondary: #8B5CF6; /* Purple-500 */
+    --ai-accent: #C4B5FD; /* Violet-300 */
+    --ai-glow: #DDD6FE; /* Violet-200 */
+  
+    /* Button colors */
+    --button-primary: #4F46E5; /* Indigo-600 */
+    --button-primary-hover: #4338CA; /* Indigo-700 */
+    --button-primary-active: #3730A3; /* Indigo-800 */
+    --button-primary-text: #FFFFFF; /* White */
+    --button-secondary: #E0E7FF; /* Indigo-100 */
+    --button-secondary-hover: #C7D2FE; /* Indigo-200 */
+    --button-secondary-border: #4F46E5; /* Indigo-600 */
+    --button-secondary-text: #1E3A8A; /* Indigo-900 */
+    --button-tertiary: transparent; /* Transparent */
+    --button-tertiary-hover: #F3F4F6; /* Gray-100 */
+    --button-tertiary-text: #374151; /* Gray-700 */
+    --button-disabled: #E5E7EB; /* Gray-200 */
+    --button-disabled-text: #9CA3AF; /* Gray-400 */
+  
+    /* Brand accents */
+    --brand-primary: #8B5CF6; /* Purple-500 */
+    --brand-secondary: #6366F1; /* Indigo-500 */
+    --brand-tertiary: #7C3AED; /* Violet-600 */
+    --brand-hover: #C4B5FD; /* Violet-300 */
+    --brand-active: #DDD6FE; /* Violet-200 */
+  
+    /* Semantic states */
+    --semantic-success-bg: #ECFDF5; /* Green-50 */
+    --semantic-success-border: #10B981; /* Green-500 */
+    --semantic-success-text: #065F46; /* Green-800 */
+    --semantic-warning-bg: #FFFBEB; /* Amber-50 */
+    --semantic-warning-border: #F59E0B; /* Amber-500 */
+    --semantic-warning-text: #78350F; /* Amber-900 */
+    --semantic-error-bg: #FEF2F2; /* Red-50 */
+    --semantic-error-border: #EF4444; /* Red-500 */
+    --semantic-error-text: #991B1B; /* Red-800 */
+    --semantic-info-bg: #EFF6FF; /* Blue-50 */
+    --semantic-info-border: #3B82F6; /* Blue-500 */
+    --semantic-info-text: #1E3A8A; /* Blue-900 */
+  
+    /* Gradients */
+    --workflow-gradient: linear-gradient(135deg, #F9FAFB 0%, #F3F4F6 100%);
+    --ai-gradient: linear-gradient(135deg, #4F46E5 0%, #8B5CF6 100%);
+    --node-gradient: linear-gradient(135deg, #F3F4F6 0%, #E0E7FF 100%);
+    --connection-gradient: linear-gradient(90deg, #8B5CF6 0%, #C4B5FD 100%);
+  
+    /* Glow colors for animations */
+    --glow-color-50: rgba(139, 92, 246, 0.5);
+    --glow-color-80: rgba(139, 92, 246, 0.8);
+  }
+  
+  .dark {
+    /* Core shadcn/ui variables for dark theme */
+    --background: 21 0 80; /* Deep purple background */
+    --foreground: 236 220 249; /* Very light purple text */
+    --card: 0 0 0; /* Black card background */
+    --card-foreground: 236 220 249; /* Very light purple text */
+    --popover: 21 0 80; /* Deep purple */
+    --popover-foreground: 236 220 249; /* Very light purple */
+    --primary: 97 0 148; /* Royal purple */
+    --primary-foreground: 255 255 255; /* White */
+    --secondary: 63 0 113; /* Deep purple */
+    --secondary-foreground: 236 220 249; /* Very light purple */
+    --muted: 57 57 57; /* Dark gray */
+    --muted-foreground: 163 163 163; /* Light gray */
+    --accent: 97 0 148; /* Royal purple */
+    --accent-foreground: 236 220 249; /* Very light purple */
+    --destructive: 239 68 68; /* Red */
+    --destructive-foreground: 255 255 255; /* White */
+    --border: 97 0 148; /* Royal purple border */
+    --input: 97 0 148; /* Royal purple input border */
+    --ring: 208 168 240; /* Pale purple focus ring */
+    --radius: 0.5rem;
+  
+    /* Sidebar variables for dark theme */
+    --sidebar-background: 21 0 80;
+    --sidebar-foreground: 236 220 249;
+    --sidebar-primary: 97 0 148;
+    --sidebar-primary-foreground: 255 255 255;
+    --sidebar-accent: 63 0 113;
+    --sidebar-accent-foreground: 208 168 240;
+    --sidebar-border: 97 0 148;
+    --sidebar-ring: 208 168 240;
+  
+    /* DARK THEME CUSTOM VARIABLES */
+  
+    /* Workflow colors - your original dark palette */
+    --workflow-void: #000000; /* Pure black */
+    --workflow-midnight: #150050; /* Dark navy */
+    --workflow-deep: #3F0071; /* Deep purple */
+    --workflow-royal: #610094; /* Royal purple */
+    --workflow-nebula: #B373E7; /* Light purple */
+    --workflow-aurora: #D0A8F0; /* Pale purple */
+    --workflow-whisper: #ECDCF9; /* Very light purple */
+  
+    /* Background variations */
+    --bg-primary: #150050; /* Main app background */
+    --bg-secondary: #3F0071; /* Elevated surfaces */
+    --bg-tertiary: #610094; /* Component backgrounds */
+    --bg-card: #000000; /* Card backgrounds */
+    --bg-panel: #393939; /* Side panels */
+    --bg-modal: #150050; /* Modal backgrounds */
+    --bg-hover: #B373E7; /* Hover states */
+    --bg-active: #D0A8F0; /* Active states */
+    --bg-disabled: #393939; /* Disabled states */
+    --bg-success: #22c55e; /* Success backgrounds */
+    --bg-warning: #f59e0b; /* Warning backgrounds */
+    --bg-error: #ef4444; /* Error backgrounds */
+  
+    /* Text variations */
+    --text-primary: #ECDCF9; /* Primary text */
+    --text-secondary: #D0A8F0; /* Secondary text */
+    --text-tertiary: #B373E7; /* Tertiary text */
+    --text-accent: #610094; /* Accent text */
+    --text-muted: #A3A3A3; /* Muted text */
+    --text-disabled: #818181; /* Disabled text */
+    --text-inverse: #000000; /* Inverse text */
+    --text-success: #22c55e; /* Success text */
+    --text-warning: #f59e0b; /* Warning text */
+    --text-error: #ef4444; /* Error text */
+    --text-link: #B373E7; /* Link text */
+    --text-link-hover: #D0A8F0; /* Link hover text */
+  
+    /* Border variations */
+    --borders-primary: #610094; /* Primary borders */
+    --borders-secondary: #3F0071; /* Secondary borders */
+    --borders-tertiary: #B373E7; /* Tertiary borders */
+    --borders-subtle: #393939; /* Subtle borders */
+    --borders-muted: #818181; /* Muted borders */
+    --borders-focus: #D0A8F0; /* Focus borders */
+    --borders-hover: #B373E7; /* Hover borders */
+    --borders-active: #ECDCF9; /* Active borders */
+    --borders-disabled: #393939; /* Disabled borders */
+    --borders-success: #22c55e; /* Success borders */
+    --borders-warning: #f59e0b; /* Warning borders */
+    --borders-error: #ef4444; /* Error borders */
+    --borders-divider: #393939; /* Divider lines */
+  
+    /* Neutral colors */
+    --neutral-void: #000000; /* Pure black */
+    --neutral-charcoal: #393939; /* Dark gray */
+    --neutral-slate: #818181; /* Medium gray */
+    --neutral-silver: #A3A3A3; /* Light gray */
+    --neutral-ghost: #E6E6E6; /* Very light gray */
+    --neutral-smoke: #F5F5F5; /* Off-white */
+    --neutral-pure: #ffffff; /* Pure white */
+  
+    /* Node types - keeping dark theme versions */
+    --node-trigger: #2C6935; /* Dark green fill */
+    --node-trigger-border: #008314; /* Green border */
+    --node-trigger-text: #ECDCF9; /* Light text */
+    --node-action: #0F1F70; /* Dark blue fill */
+    --node-action-border: #25399A; /* Blue border */
+    --node-action-text: #ECDCF9; /* Light text */
+    --node-decision: #998715; /* Dark yellow fill */
+    --node-decision-border: #CDB200; /* Yellow border */
+    --node-decision-text: #ECDCF9; /* Light text */
+  
+    /* Connections */
+    --connection-active: #B373E7; /* Nebula for active */
+    --connection-inactive: #393939; /* Charcoal for inactive */
+    --connection-hover: #D0A8F0; /* Aurora for hover */
+  
+    /* Status indicators */
+    --status-online: #22c55e; /* Green */
+    --status-offline: #6b7280; /* Gray */
+    --status-pending: #f59e0b; /* Amber */
+    --status-error: #ef4444; /* Red */
+  
+    /* AI colors */
+    --ai-primary: #610094; /* Royal purple */
+    --ai-secondary: #B373E7; /* Nebula */
+    --ai-accent: #D0A8F0; /* Aurora */
+    --ai-glow: #ECDCF9; /* Whisper */
+  
+    /* Button colors - dark theme equivalents */
+    --button-primary: #610094; /* Royal purple */
+    --button-primary-hover: #7c3aed; /* Lighter purple */
+    --button-primary-active: #8b5cf6; /* Even lighter */
+    --button-primary-text: #FFFFFF; /* White */
+    --button-secondary: #3F0071; /* Deep purple */
+    --button-secondary-hover: #610094; /* Royal purple */
+    --button-secondary-border: #B373E7; /* Nebula */
+    --button-secondary-text: #ECDCF9; /* Very light purple */
+    --button-tertiary: transparent; /* Transparent */
+    --button-tertiary-hover: #3F0071; /* Deep purple */
+    --button-tertiary-text: #D0A8F0; /* Aurora */
+    --button-disabled: #393939; /* Dark gray */
+    --button-disabled-text: #818181; /* Medium gray */
+  
+    /* Brand accents - dark theme */
+    --brand-primary: #610094; /* Royal purple */
+    --brand-secondary: #B373E7; /* Nebula */
+    --brand-tertiary: #D0A8F0; /* Aurora */
+    --brand-hover: #ECDCF9; /* Whisper */
+    --brand-active: #B373E7; /* Nebula */
+  
+    /* Semantic states - dark theme */
+    --semantic-success-bg: #1a3d1f; /* Dark green */
+    --semantic-success-border: #22c55e; /* Green */
+    --semantic-success-text: #86efac; /* Light green */
+    --semantic-warning-bg: #3d2914; /* Dark amber */
+    --semantic-warning-border: #f59e0b; /* Amber */
+    --semantic-warning-text: #fbbf24; /* Light amber */
+    --semantic-error-bg: #3d1a1a; /* Dark red */
+    --semantic-error-border: #ef4444; /* Red */
+    --semantic-error-text: #fca5a5; /* Light red */
+    --semantic-info-bg: #1e293b; /* Dark blue */
+    --semantic-info-border: #3b82f6; /* Blue */
+    --semantic-info-text: #93c5fd; /* Light blue */
+  
+    /* Gradients - dark theme */
+    --workflow-gradient: linear-gradient(135deg, #150050 0%, #3F0071 100%);
+    --ai-gradient: linear-gradient(135deg, #610094 0%, #B373E7 100%);
+    --node-gradient: linear-gradient(135deg, #3F0071 0%, #610094 100%);
+    --connection-gradient: linear-gradient(90deg, #B373E7 0%, #D0A8F0 100%);
+  
+    /* Glow colors for animations - dark theme */
+    --glow-color-50: rgba(179, 115, 231, 0.5);
+    --glow-color-80: rgba(179, 115, 231, 0.8);
+  }

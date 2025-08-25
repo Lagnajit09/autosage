@@ -354,7 +354,7 @@ const WorkflowBuilderContent = () => {
                   <TooltipTrigger onClick={() => setShowImportDialog(true)}>
                     <FileInput className="text-gray-900 dark:text-gray-900 bg-gray-300 dark:bg-gray-300 w-8 h-8 p-2 transition-transform duration-200 ease-in-out hover:scale-125 rounded-full" />
                   </TooltipTrigger>
-                  <TooltipContent className="bg-bg-card dark:bg-bg-card text-text-primary dark:text-text-primary text-sm">
+                  <TooltipContent className="bg-bg-card dark:bg-bg-card text-text-primary dark:text-text-primary text-xs">
                     <p>Import Workflow</p>
                   </TooltipContent>
                 </Tooltip>
@@ -365,7 +365,7 @@ const WorkflowBuilderContent = () => {
                   >
                     <Key className="text-gray-900 dark:text-gray-900 bg-gray-300 dark:bg-gray-300 w-8 h-8 p-2 transition-transform duration-200 ease-in-out hover:scale-125 rounded-full" />
                   </TooltipTrigger>
-                  <TooltipContent className="bg-bg-card dark:bg-bg-card text-text-primary dark:text-text-primary text-sm">
+                  <TooltipContent className="bg-bg-card dark:bg-bg-card text-text-primary dark:text-text-primary text-xs">
                     <p>Credentials</p>
                   </TooltipContent>
                 </Tooltip>
@@ -374,7 +374,7 @@ const WorkflowBuilderContent = () => {
                   <TooltipTrigger>
                     <CircleUserRound className="text-gray-900 dark:text-gray-900 bg-gray-300 dark:bg-gray-300 w-8 h-8 p-2 transition-transform duration-200 ease-in-out hover:scale-125 rounded-full" />
                   </TooltipTrigger>
-                  <TooltipContent className="bg-bg-card dark:bg-bg-card text-text-primary dark:text-text-primary text-sm">
+                  <TooltipContent className="bg-bg-card dark:bg-bg-card text-text-primary dark:text-text-primary text-xs">
                     <p>Profile</p>
                   </TooltipContent>
                 </Tooltip>
@@ -387,7 +387,7 @@ const WorkflowBuilderContent = () => {
                       <Moon className="text-gray-900 dark:text-gray-900 bg-gray-300 dark:bg-gray-300 w-8 h-8 p-2 transition-transform duration-200 ease-in-out hover:scale-125 rounded-full" />
                     )}
                   </TooltipTrigger>
-                  <TooltipContent className="bg-bg-card dark:bg-bg-card text-text-primary dark:text-text-primary text-sm">
+                  <TooltipContent className="bg-bg-card dark:bg-bg-card text-text-primary dark:text-text-primary text-xs">
                     <p>{isDark ? "Light Mode" : "Dark Mode"}</p>
                   </TooltipContent>
                 </Tooltip>
@@ -435,7 +435,7 @@ const WorkflowBuilderContent = () => {
                 type: "smoothstep",
               }}
             >
-              <Controls className="bg-gradient-to-br from-workflow-deep/90 via-workflow-royal/80 to-workflow-nebula/70 dark:from-workflow-deep/90 dark:via-workflow-royal/80 dark:to-workflow-nebula/70 backdrop-blur-xl border border-borders-primary/30 dark:border-borders-primary/30 rounded-2xl shadow-2xl shadow-workflow-royal/20 dark:shadow-workflow-royal/20" />
+              <Controls className="bg-light-tertiary dark:bg-bg-primary backdrop-blur-xl border border-borders-primary/30 dark:border-borders-primary/30 rounded-full shadow-2xl shadow-workflow-royal/20 dark:shadow-workflow-royal/20" />
               <Background
                 color="#ffffff"
                 gap={20}

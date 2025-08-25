@@ -178,6 +178,86 @@ export default {
           accent: "#D0A8F0", // Aurora for AI accents
           glow: "#ECDCF9", // Whisper for AI glow effects
         },
+
+        // Light theme specific colors
+        light: {
+          // Backgrounds
+          primary: "#F9FAFB", // App background (gray-50)
+          secondary: "#FFFFFF", // Card/Panel background
+          tertiary: "#F3F4F6", // Hover background (gray-100)
+          sidebar: "#F1F5F9", // Sidebar background
+          active: "#E0E7FF", // Active background (indigo-100)
+          disabled: "#E5E7EB", // Disabled background (gray-200)
+        },
+
+        // Light theme text colors
+        "text-light": {
+          primary: "#111827", // Primary text (gray-900)
+          secondary: "#4B5563", // Secondary text (gray-600)
+          muted: "#9CA3AF", // Muted/placeholder (gray-400)
+          inverse: "#FFFFFF", // Inverted text
+          accent: "#7C3AED", // Purple accent (violet-600)
+          "accent-blue": "#2563EB", // Blue accent
+          disabled: "#9CA3AF", // Disabled text (gray-400)
+        },
+
+        // Light theme borders
+        "border-light": {
+          default: "#E5E7EB", // Default border (gray-200)
+          strong: "#D1D5DB", // Strong border (gray-300)
+          focus: "#3B82F6", // Focus ring (blue-500)
+        },
+
+        // Light theme node colors
+        "node-light": {
+          trigger: "#DFF6E1",
+          "trigger-border": "#34C759",
+          "trigger-text": "#14532D",
+          action: "#E5EBFA",
+          "action-border": "#3B82F6",
+          "action-text": "#1E3A8A",
+          decision: "#FFF8E1",
+          "decision-border": "#FACC15",
+          "decision-text": "#78350F",
+        },
+
+        // Light theme semantic colors
+        "semantic-light": {
+          "success-bg": "#ECFDF5",
+          "success-border": "#10B981",
+          "success-text": "#065F46",
+          "warning-bg": "#FFFBEB",
+          "warning-border": "#F59E0B",
+          "warning-text": "#78350F",
+          "error-bg": "#FEF2F2",
+          "error-border": "#EF4444",
+          "error-text": "#991B1B",
+        },
+
+        // Light theme buttons
+        "button-light": {
+          "primary-bg": "#4F46E5",
+          "primary-hover": "#4338CA",
+          "primary-active": "#3730A3",
+          "primary-text": "#FFFFFF",
+          "secondary-bg": "#E0E7FF",
+          "secondary-hover": "#C7D2FE",
+          "secondary-border": "#4F46E5",
+          "secondary-text": "#1E3A8A",
+          "tertiary-hover": "#F3F4F6",
+          "tertiary-text": "#374151",
+          "disabled-bg": "#E5E7EB",
+          "disabled-text": "#9CA3AF",
+        },
+
+        // Light theme accents
+        "accent-light": {
+          primary: "#8B5CF6", // Purple-500
+          secondary: "#6366F1", // Indigo-500
+          tertiary: "#7C3AED", // Violet-600
+          hover: "#C4B5FD", // Violet-300
+          active: "#DDD6FE", // Violet-200
+        },
       },
 
       borderRadius: {
