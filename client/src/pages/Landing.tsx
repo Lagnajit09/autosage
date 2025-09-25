@@ -6,7 +6,7 @@ import { Moon, Sun } from "lucide-react";
 const Landing = () => {
   const { isDark, toggleTheme } = useTheme();
   return (
-    <div className="">
+    <div className="mb-20">
       <div className="w-full h-10 px-8 flex justify-end items-center">
         <Button
           variant="outline"
