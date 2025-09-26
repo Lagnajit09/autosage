@@ -1,4 +1,4 @@
-import React, { useMemo } from "react";
+import React, { useMemo, useState } from "react";
 import {
   ReactFlow,
   Background,
@@ -7,9 +7,20 @@ import {
   useNodesState,
   Handle,
   Position,
+  ReactFlowInstance,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { useTheme } from "@/provider/theme-provider";
+import { Editor } from "@monaco-editor/react";
+import {
+  Copy,
+  RotateCcw,
+  Save,
+  FolderOpen,
+  Menu,
+  Code2,
+  Square,
+} from "lucide-react";
 
 // Custom node component with dual handles
 const CustomNode = ({ data }) => {
@@ -46,13 +57,33 @@ const nodeTypes = {
 };
 
 const ServerMonitoringWorkflow = () => {
+  const [reactFlowInstance, setReactFlowInstance] =
+    useState<ReactFlowInstance | null>(null);
   const { isDark } = useTheme();
+  const [code, setCode] = useState(
+    `const workflow = {
+      "nodes": [{
+          "id": "trigger-001",
+          "type": "trigger",
+          "data": { "label": "Start" }
+        },
+        {
+          "id": "action-001",
+          "type": "action",
+          "data": { "label": "Send Email" }
+        }],
+        "edges": [{
+          "source": "trigger-001",
+          "target": "action-001"
+        }]
+      };`
+  );
   const initialNodes = useMemo(
     () => [
       // Start trigger
       {
         id: "scheduler",
-        position: { x: 400, y: 50 },
+        position: { x: -50, y: 50 },
         data: {
           label: "Health Check Scheduler",
           className: "bg-blue-100 border-blue-300 text-blue-800",
@@ -63,7 +94,7 @@ const ServerMonitoringWorkflow = () => {
       // Resource monitoring (combined)
       {
         id: "resource-monitor",
-        position: { x: 400, y: 200 },
+        position: { x: 50, y: 200 },
         data: {
           label: "Monitor CPU & Memory",
           className: "bg-purple-100 border-purple-300 text-purple-800",
@@ -74,7 +105,7 @@ const ServerMonitoringWorkflow = () => {
       // Combined threshold check
       {
         id: "resource-threshold",
-        position: { x: 400, y: 350 },
+        position: { x: 50, y: 350 },
         data: {
           label: "Usage > Threshold?",
           className: "bg-orange-100 border-orange-300 text-orange-800",
@@ -86,7 +117,7 @@ const ServerMonitoringWorkflow = () => {
       // OK email
       {
         id: "ok-email",
-        position: { x: 700, y: 350 },
+        position: { x: 350, y: 350 },
         data: {
           label: "Send OK Email",
           className: "bg-yellow-100 border-yellow-300 text-yellow-800",
@@ -97,7 +128,7 @@ const ServerMonitoringWorkflow = () => {
       // Alert email
       {
         id: "alert-email",
-        position: { x: 400, y: 500 },
+        position: { x: 50, y: 500 },
         data: {
           label: "Send Alert Email",
           className: "bg-yellow-100 border-yellow-300 text-yellow-800",
@@ -108,7 +139,7 @@ const ServerMonitoringWorkflow = () => {
       // Cleanup script execution
       {
         id: "cleanup-script",
-        position: { x: 380, y: 650 },
+        position: { x: 30, y: 650 },
         data: {
           label: "Execute Cleanup Scripts",
           className: "bg-indigo-100 border-indigo-300 text-indigo-800",
@@ -119,7 +150,7 @@ const ServerMonitoringWorkflow = () => {
       // Final status check
       {
         id: "final-check",
-        position: { x: 400, y: 800 },
+        position: { x: 50, y: 800 },
         data: {
           label: "Verify Resolution",
           className: "bg-teal-100 border-teal-300 text-teal-800",
@@ -131,7 +162,7 @@ const ServerMonitoringWorkflow = () => {
       // Success outcome
       {
         id: "success",
-        position: { x: 700, y: 800 },
+        position: { x: 350, y: 800 },
         data: {
           label: "System Healthy",
           className: "bg-green-100 border-green-300 text-green-800",
@@ -142,7 +173,7 @@ const ServerMonitoringWorkflow = () => {
       // Escalation outcome
       {
         id: "escalate",
-        position: { x: 100, y: 800 },
+        position: { x: -250, y: 800 },
         data: {
           label: "Escalate to Admin",
           className: "bg-red-100 border-red-300 text-red-800",
@@ -263,7 +294,6 @@ const ServerMonitoringWorkflow = () => {
           nodes={nodes}
           edges={edges}
           nodeTypes={nodeTypes}
-          fitView
           className="bg-transparent"
           proOptions={{ hideAttribution: true }}
           nodesDraggable={true}
@@ -276,11 +306,15 @@ const ServerMonitoringWorkflow = () => {
           onNodesChange={onNodesChange}
           minZoom={0.5}
           maxZoom={1.5}
-          defaultViewport={{ x: 0, y: 0, zoom: 1.0 }}
+          defaultViewport={{ x: 350, y: 0, zoom: 0.7 }}
+          onInit={(instance) => setReactFlowInstance(instance)}
         >
           <Controls
             className="bg-white/80 dark:bg-slate-800/80 backdrop-blur-xl border border-gray-200/50 dark:border-gray-800 rounded-lg shadow-lg"
             showInteractive={true}
+            onFitView={() => {
+              reactFlowInstance?.setViewport({ x: 350, y: 0, zoom: 0.7 });
+            }}
           />
           <Background
             color={`${isDark ? "#ffffff" : "#000000"}`}
@@ -335,6 +369,45 @@ const ServerMonitoringWorkflow = () => {
             </span>
           </div>
         </div>
+      </div>
+
+      <div className="w-[30%] h-[40%] rounded-lg absolute top-4 right-4 bg-gray-100 dark:bg-black overflow-hidden border border-gray-700 shadow-md">
+        {/* Top Bar */}
+        <div className="flex items-center justify-between bg-gray-100 dark:bg-gray-950 px-4 py-2 border-b border-gray-700">
+          <div className="flex items-center space-x-3">
+            {/* Traffic Light Buttons */}
+            <div className="flex space-x-2">
+              <div className="w-3 h-3 bg-red-500 rounded-full"></div>
+              <div className="w-3 h-3 bg-yellow-500 rounded-full"></div>
+              <div className="w-3 h-3 bg-green-500 rounded-full"></div>
+            </div>
+
+            {/* File Name */}
+            <span className="text-black dark:text-white font-medium">
+              Workflow.json
+            </span>
+          </div>
+
+          {/* More Options */}
+          <Menu className="w-5 h-5 text-gray-900 dark:text-gray-400 cursor-pointer hover:text-black dark:hover:text-white" />
+        </div>
+
+        {/* Secondary Navigation */}
+        <div className="flex items-center bg-gray-200 dark:bg-gray-900 px-4 py-2 space-x-4 border-b border-gray-700">
+          <Copy className="w-4 h-4 text-gray-900 dark:text-gray-400 cursor-pointer hover:text-black dark:hover:text-white" />
+          <FolderOpen className="w-4 h-4 text-gray-900 dark:text-gray-400 cursor-pointer hover:text-black dark:hover:text-white" />
+          <Save className="w-4 h-4 text-gray-900 dark:text-gray-400 cursor-pointer hover:text-black dark:hover:text-white" />
+          <RotateCcw className="w-4 h-4 text-gray-900 dark:text-gray-400 cursor-pointer hover:text-black dark:hover:text-white" />
+          <Code2 className="w-4 h-4 text-gray-900 dark:text-gray-400 cursor-pointer hover:text-black dark:hover:text-white" />
+          <Square className="w-4 h-4 text-gray-900 dark:text-gray-400 cursor-pointer hover:text-black dark:hover:text-white" />
+        </div>
+        <Editor
+          height="100%"
+          language="javascript"
+          value={code}
+          onChange={setCode}
+          theme={`${isDark ? "hc-black" : "vs-light"}`}
+        />
       </div>
     </div>
   );
