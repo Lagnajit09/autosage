@@ -6,14 +6,18 @@ import { Moon, Sun } from "lucide-react";
 const Landing = () => {
   const { isDark, toggleTheme } = useTheme();
   return (
-    <div className="mb-20">
+    <div className="pb-10 dark:bg-bg-card">
       <div className="w-full h-10 px-8 flex justify-end items-center">
         <Button
           variant="outline"
-          className="w-fit p-1 h-fit border-2 border-black"
+          className="w-fit p-1 h-fit border-2 outline-none border-black dark:bg-transparent dark:border-light-primary"
           onClick={() => toggleTheme()}
         >
-          {isDark ? <Sun className="w-8 h-8" /> : <Moon className="w-8 h-8" />}
+          {isDark ? (
+            <Sun className="w-8 h-8 text-light-primary" />
+          ) : (
+            <Moon className="w-8 h-8" />
+          )}
         </Button>
       </div>
       <Hero />

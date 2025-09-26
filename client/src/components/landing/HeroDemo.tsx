@@ -9,6 +9,7 @@ import {
   Position,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
+import { useTheme } from "@/provider/theme-provider";
 
 // Custom node component with dual handles
 const CustomNode = ({ data }) => {
@@ -45,6 +46,7 @@ const nodeTypes = {
 };
 
 const ServerMonitoringWorkflow = () => {
+  const { isDark } = useTheme();
   const initialNodes = useMemo(
     () => [
       // Start trigger
@@ -277,15 +279,15 @@ const ServerMonitoringWorkflow = () => {
           defaultViewport={{ x: 0, y: 0, zoom: 1.0 }}
         >
           <Controls
-            className="bg-white/80 dark:bg-slate-800/80 backdrop-blur-xl border border-gray-200/50 dark:border-gray-700/50 rounded-lg shadow-lg"
+            className="bg-white/80 dark:bg-slate-800/80 backdrop-blur-xl border border-gray-200/50 dark:border-gray-800 rounded-lg shadow-lg"
             showInteractive={true}
           />
           <Background
-            color="#e2e8f0"
+            color={`${isDark ? "#ffffff" : "#000000"}`}
             gap={16}
             size={1}
-            className="opacity-30 dark:opacity-20"
-            style={{ backgroundColor: "transparent" }}
+            className="opacity-80 dark:opacity-70"
+            style={{ backgroundColor: "#transparent" }}
           />
         </ReactFlow>
       </div>
