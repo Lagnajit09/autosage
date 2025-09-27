@@ -3,11 +3,25 @@
 import { motion } from "motion/react";
 import HeroDemo from "./HeroDemo";
 import { HoverBorderGradient } from "../ui/hover-border-gradient";
+import { cn } from "@/lib/utils";
+import CircularText from "../CircularText";
 
 export default function HeroSectionOne() {
   return (
     <div className="relative mx-auto flex max-w-7xl flex-col items-center justify-center">
-      <Navbar />
+      <div className="w-full absolute z-20 top-0">
+        <Navbar />
+      </div>
+      <div
+        className={cn(
+          "absolute inset-0",
+          "[background-size:20px_20px]",
+          "[background-image:linear-gradient(to_right,#e4e4e7_1px,transparent_1px),linear-gradient(to_bottom,#e4e4e7_1px,transparent_1px)]",
+          "dark:[background-image:linear-gradient(to_right,#262626_1px,transparent_1px),linear-gradient(to_bottom,#262626_1px,transparent_1px)]"
+        )}
+      />
+      <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-white [mask-image:radial-gradient(ellipse_at_center,transparent_20%,black)] dark:bg-black"></div>
+
       <div className="absolute inset-y-0 left-0 h-full w-px bg-neutral-200/80 dark:bg-neutral-800/80">
         <div className="absolute top-0 h-40 w-px bg-gradient-to-b from-transparent via-blue-500 to-transparent" />
       </div>
@@ -17,7 +31,7 @@ export default function HeroSectionOne() {
       <div className="absolute inset-x-0 bottom-0 h-px w-full bg-neutral-200/80 dark:bg-neutral-800/80">
         <div className="absolute mx-auto h-px w-40 bg-gradient-to-r from-transparent via-blue-500 to-transparent" />
       </div>
-      <div className="px-4 py-10 md:py-20">
+      <div className="px-4 py-10 md:py-20 mt-20">
         <h1 className="relative z-10 mx-auto max-w-4xl text-center text-2xl font-bold text-slate-700 md:text-4xl lg:text-7xl dark:text-slate-300">
           {"Visualize. Automate. Execute.".split(" ").map((word, index) => (
             <motion.span
@@ -71,6 +85,14 @@ export default function HeroSectionOne() {
             Contact Support
           </button>
         </motion.div>
+        <div className="absolute right-4 top-80">
+          <CircularText
+            text="CODE•CONNECT•CONTROL•"
+            onHover="speedUp"
+            spinDuration={10}
+            className="w-full"
+          />
+        </div>
         <HoverBorderGradient
           containerClassName="mt-20 rounded-3xl w-fit h-fit border-none bg-transparent p-0"
           duration={1}
