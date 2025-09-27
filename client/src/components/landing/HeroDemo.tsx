@@ -60,24 +60,42 @@ const ServerMonitoringWorkflow = () => {
   const [reactFlowInstance, setReactFlowInstance] =
     useState<ReactFlowInstance | null>(null);
   const { isDark } = useTheme();
-  const [code, setCode] = useState(
-    `const workflow = {
-      "nodes": [{
-          "id": "trigger-001",
-          "type": "trigger",
-          "data": { "label": "Start" }
-        },
-        {
-          "id": "action-001",
-          "type": "action",
-          "data": { "label": "Send Email" }
-        }],
-        "edges": [{
-          "source": "trigger-001",
-          "target": "action-001"
-        }]
-      };`
-  );
+  const [code, setCode] = useState(` 
+    import os
+    import gc
+    import psutil
+    import time
+    
+    def cleanup_memory():
+        print("Cleaning up memory...")
+        gc.collect()
+        if os.name == "posix":
+            try:
+                os.system("sync; echo 3 > /proc/sys/vm/drop_caches")
+                print("Dropped system caches.")
+            except Exception as e:
+                print(f"Could not drop caches: {e}")
+    
+    def cleanup_cpu():
+        print("Simulating CPU cool down...")
+        time.sleep(2)  # simulate wait to reduce load
+    
+    def monitor_usage():
+        cpu = psutil.cpu_percent(interval=1)
+        memory = psutil.virtual_memory().percent
+        print(f"CPU Usage: {cpu}%")
+        print(f"Memory Usage: {memory}%")
+        return cpu, memory
+    
+    if __name__ == "__main__":
+        cpu, memory = monitor_usage()
+        if cpu > 80 or memory > 80:
+            print("High usage detected! Running cleanup...")
+            cleanup_memory()
+            cleanup_cpu()
+        else:
+            print("System resources are within normal limits.")
+    `);
   const initialNodes = useMemo(
     () => [
       // Start trigger
@@ -313,7 +331,20 @@ const ServerMonitoringWorkflow = () => {
             className="bg-white/80 dark:bg-slate-800/80 backdrop-blur-xl border border-gray-200/50 dark:border-gray-800 rounded-lg shadow-lg"
             showInteractive={true}
             onFitView={() => {
-              reactFlowInstance?.setViewport({ x: 350, y: 0, zoom: 0.7 });
+              // First fit the view to see all nodes
+              reactFlowInstance?.fitView({ padding: 0.1 });
+
+              // Then adjust to your preferred position after a brief delay
+              setTimeout(() => {
+                const currentViewport = reactFlowInstance?.getViewport();
+                if (currentViewport) {
+                  reactFlowInstance?.setViewport({
+                    x: 350,
+                    y: currentViewport.y,
+                    zoom: currentViewport.zoom,
+                  });
+                }
+              }, 10);
             }}
           />
           <Background
@@ -384,7 +415,7 @@ const ServerMonitoringWorkflow = () => {
 
             {/* File Name */}
             <span className="text-black dark:text-white font-medium">
-              Workflow.json
+              script.py
             </span>
           </div>
 
@@ -403,7 +434,7 @@ const ServerMonitoringWorkflow = () => {
         </div>
         <Editor
           height="100%"
-          language="javascript"
+          language="python"
           value={code}
           onChange={setCode}
           theme={`${isDark ? "hc-black" : "vs-light"}`}
