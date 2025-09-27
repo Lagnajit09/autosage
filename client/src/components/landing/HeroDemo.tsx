@@ -306,7 +306,7 @@ const ServerMonitoringWorkflow = () => {
   );
 
   return (
-    <div className="w-full overflow-hidden rounded-xl border border-gray-300 dark:border-gray-700 relative">
+    <div className="w-full overflow-hidden rounded-xl border border-gray-300 dark:border-gray-700 relative group">
       <div className="w-[90vw] h-[90vh] bg-gradient-to-br from-slate-50 via-blue-50/30 to-indigo-50/40 dark:from-slate-900 dark:via-blue-900/30 dark:to-indigo-900/40">
         <ReactFlow
           nodes={nodes}
@@ -440,6 +440,20 @@ const ServerMonitoringWorkflow = () => {
           theme={`${isDark ? "hc-black" : "vs-light"}`}
         />
       </div>
+
+      <div className="w-16 h-16 absolute bottom-4 right-4 rounded-full bg-gray-900 hover:bg-black border-2 dark:border-blue-500 shadow-lg">
+        <img
+          src="/public/ai.png"
+          alt="ai.png"
+          className="w-[80%] h-[80%] m-auto object-contain text-white"
+        />
+      </div>
+
+      {/* Tooltip positioned relative to main container */}
+      <span className="absolute bottom-20 right-4 px-3 py-2 bg-gray-200 dark:bg-gray-900 text-black dark:text-white text-sm rounded-lg shadow-lg opacity-0 group-hover:opacity-100 transition-opacity duration-300 z-50 w-[30%] text-left pointer-events-none">
+        Hey! This is Autobot. I can help you generate workflows and scripts as
+        per the request. Create a new project to get started.
+      </span>
     </div>
   );
 };
