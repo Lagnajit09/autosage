@@ -307,7 +307,7 @@ const ServerMonitoringWorkflow = () => {
 
   return (
     <div className="w-full overflow-hidden rounded-xl border border-gray-300 dark:border-gray-700 relative group">
-      <div className="w-[90vw] h-[90vh] bg-gradient-to-br from-slate-50 via-blue-50/30 to-indigo-50/40 dark:from-slate-900 dark:via-blue-900/30 dark:to-indigo-900/40">
+      <div className="w-[90vw] h-[90vh] bg-gradient-to-br from-slate-50 via-blue-50/30 to-indigo-50/40 dark:from-gray-950 dark:via-blue-900/20 dark:to-indigo-900/30">
         <ReactFlow
           nodes={nodes}
           edges={edges}
@@ -352,7 +352,7 @@ const ServerMonitoringWorkflow = () => {
             gap={16}
             size={1}
             className="opacity-80 dark:opacity-70"
-            style={{ backgroundColor: "#transparent" }}
+            style={{ backgroundColor: "transparent" }}
           />
         </ReactFlow>
       </div>

@@ -4,7 +4,7 @@ import { motion } from "motion/react";
 import HeroDemo from "./HeroDemo";
 import { HoverBorderGradient } from "../ui/hover-border-gradient";
 import { cn } from "@/lib/utils";
-import CircularText from "../CircularText";
+import CircularText from "./CircularText";
 
 export default function HeroSectionOne() {
   return (
@@ -85,7 +85,7 @@ export default function HeroSectionOne() {
             Contact Support
           </button>
         </motion.div>
-        <div className="absolute right-4 top-80">
+        <div className="absolute right-4 top-auto">
           <CircularText
             text="CODE•CONNECT•CONTROL•"
             onHover="speedUp"

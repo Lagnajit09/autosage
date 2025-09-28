@@ -1,3 +1,4 @@
+import Feature from "@/components/landing/feature-section";
 import Hero from "@/components/landing/hero-section";
 import { Button } from "@/components/ui/button";
 import { useTheme } from "@/provider/theme-provider";
@@ -21,6 +22,7 @@ const Landing = () => {
         </Button>
       </div>
       <Hero />
+      <Feature />
     </div>
   );
 };
