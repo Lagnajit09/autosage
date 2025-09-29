@@ -11,8 +11,7 @@ const Feature = () => {
       Icon: Workflow,
       name: "Autobot",
       description: "Generate workflows and scripts in a prompt.",
-      href: "/",
-      cta: "Learn more",
+
       background: (
         <img
           src={`${isDark ? "/public/ai-dark.png" : "/public/ai-light.png"}`}
@@ -25,8 +24,7 @@ const Feature = () => {
       Icon: Code2Icon,
       name: "Built-in Code-Editor",
       description: "Create the Scripts you want to execute.",
-      href: "/",
-      cta: "Learn more",
+
       background: (
         <img
           src={`${
@@ -41,8 +39,7 @@ const Feature = () => {
       Icon: Workflow,
       name: "Build your workflow",
       description: "Build your workflow in the Workflow-Editor.",
-      href: "/",
-      cta: "Learn more",
+
       background: (
         <img
           src={`${
@@ -57,8 +54,7 @@ const Feature = () => {
       Icon: Workflow,
       name: "Templates",
       description: "Build your workflow in the Workflow-Editor.",
-      href: "/",
-      cta: "Learn more",
+
       background: (
         <img
           src={`${
@@ -74,7 +70,7 @@ const Feature = () => {
   ];
   return (
     <div className="w-[90%] mx-auto my-20 flex flex-col items-center justify-center">
-      <LampContainer>
+      <LampContainer className="hidden dark:flex">
         <motion.h1
           initial={{ opacity: 0.5, y: 100 }}
           whileInView={{ opacity: 1, y: -20 }}
@@ -88,6 +84,18 @@ const Feature = () => {
           AI-crafted Scripts, <br /> Remote-ready Workflows
         </motion.h1>
       </LampContainer>
+      <motion.h1
+        initial={{ opacity: 0.5, y: 100 }}
+        whileInView={{ opacity: 1, y: -20 }}
+        transition={{
+          delay: 0.3,
+          duration: 0.8,
+          ease: "easeInOut",
+        }}
+        className="dark:hidden my-10 bg-gradient-to-br from-slate-500 to-slate-700 py-4 bg-clip-text text-center text-4xl font-medium tracking-tight text-transparent md:text-7xl"
+      >
+        AI-crafted Scripts, <br /> Remote-ready Workflows
+      </motion.h1>
       <BentoGrid className="lg:grid-rows-0">
         {features.map((feature) => (
           <BentoCard key={feature.name} {...feature} />

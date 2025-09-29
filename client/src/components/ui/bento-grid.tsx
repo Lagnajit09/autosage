@@ -1,5 +1,4 @@
 import { ComponentPropsWithoutRef, ReactNode } from "react";
-import { ArrowRightIcon } from "@radix-ui/react-icons";
 
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -15,8 +14,6 @@ interface BentoCardProps extends ComponentPropsWithoutRef<"div"> {
   background: ReactNode;
   Icon: React.ElementType;
   description: string;
-  href: string;
-  cta: string;
 }
 
 const BentoGrid = ({ children, className, ...props }: BentoGridProps) => {
@@ -39,8 +36,6 @@ const BentoCard = ({
   background,
   Icon,
   description,
-  href,
-  cta,
   ...props
 }: BentoCardProps) => (
   <div
@@ -76,10 +71,10 @@ const BentoCard = ({
           size="sm"
           className="pointer-events-auto p-0"
         >
-          <a href={href}>
+          {/* <a href={href}>
             {cta}
             <ArrowRightIcon className="ms-2 h-4 w-4 rtl:rotate-180" />
-          </a>
+          </a> */}
         </Button>
       </div>
     </div>
@@ -95,10 +90,10 @@ const BentoCard = ({
         size="sm"
         className="pointer-events-auto p-0"
       >
-        <a href={href}>
+        {/* <a href={href}>
           {cta}
           <ArrowRightIcon className="ms-2 h-4 w-4 rtl:rotate-180" />
-        </a>
+        </a> */}
       </Button>
     </div>
 
