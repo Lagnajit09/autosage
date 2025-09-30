@@ -98,7 +98,9 @@ const Feature = () => {
       </motion.h1>
       <BentoGrid className="lg:grid-rows-0">
         {features.map((feature) => (
-          <BentoCard key={feature.name} {...feature} />
+          <>
+            <BentoCard key={feature.name} {...feature} />
+          </>
         ))}
       </BentoGrid>
     </div>
