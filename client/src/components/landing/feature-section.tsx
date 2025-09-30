@@ -15,7 +15,7 @@ const Feature = () => {
       background: (
         <img
           src={`${isDark ? "/public/ai-dark.png" : "/public/ai-light.png"}`}
-          className="absolute -top-10 -right-10 opacity-60"
+          className="absolute inset-0 h-full w-full object-cover opacity-60"
         />
       ),
       className: "col-span-3 lg:col-span-1",
@@ -27,10 +27,8 @@ const Feature = () => {
 
       background: (
         <img
-          src={`${
-            isDark ? "/public/editor-dark.png" : "/public/editor-light.png"
-          }`}
-          className="absolute bottom-10 -right-10 opacity-60"
+          src={`${isDark ? "/public/code-dark.jpg" : "/public/code-light.png"}`}
+          className="absolute inset-0 h-full w-full object-cover opacity-60"
         />
       ),
       className: "col-span-3 lg:col-span-2",
@@ -43,9 +41,9 @@ const Feature = () => {
       background: (
         <img
           src={`${
-            isDark ? "/public/workflow-dark.png" : "/public/workflow-light.png"
+            isDark ? "/public/workflow-dark.jpg" : "/public/workflow-light.png"
           }`}
-          className="absolute bottom-10 -right-10 opacity-60"
+          className="absolute inset-0 h-full w-full object-cover opacity-60"
         />
       ),
       className: "col-span-3 lg:col-span-2",
@@ -59,10 +57,10 @@ const Feature = () => {
         <img
           src={`${
             isDark
-              ? "/public/templates-dark.png"
+              ? "/public/templates-dark.jpg"
               : "/public/templates-light.png"
           }`}
-          className="absolute -top-0 -right-10 opacity-60"
+          className="absolute inset-0 h-full w-full object-cover opacity-60"
         />
       ),
       className: "col-span-3 lg:col-span-1",
