@@ -14,7 +14,7 @@ const Feature = () => {
 
       background: (
         <img
-          src={`${isDark ? "/public/ai-dark.png" : "/public/ai-light.png"}`}
+          src={`${isDark ? "/ai-dark.png" : "/ai-light.png"}`}
           className="absolute inset-0 h-full w-full object-cover opacity-60"
         />
       ),
@@ -27,7 +27,7 @@ const Feature = () => {
 
       background: (
         <img
-          src={`${isDark ? "/public/code-dark.jpg" : "/public/code-light.png"}`}
+          src={`${isDark ? "/code-dark.jpg" : "/code-light.png"}`}
           className="absolute inset-0 h-full w-full object-cover opacity-60"
         />
       ),
@@ -40,9 +40,7 @@ const Feature = () => {
 
       background: (
         <img
-          src={`${
-            isDark ? "/public/workflow-dark.jpg" : "/public/workflow-light.png"
-          }`}
+          src={`${isDark ? "/workflow-dark.jpg" : "/workflow-light.png"}`}
           className="absolute inset-0 h-full w-full object-cover opacity-60"
         />
       ),
@@ -55,11 +53,7 @@ const Feature = () => {
 
       background: (
         <img
-          src={`${
-            isDark
-              ? "/public/templates-dark.jpg"
-              : "/public/templates-light.png"
-          }`}
+          src={`${isDark ? "/templates-dark.jpg" : "/templates-light.png"}`}
           className="absolute inset-0 h-full w-full object-cover opacity-60"
         />
       ),

@@ -443,7 +443,7 @@ const ServerMonitoringWorkflow = () => {
 
       <div className="w-16 h-16 absolute bottom-4 right-4 rounded-full bg-gray-900 hover:bg-black border-2 dark:border-blue-500 shadow-lg">
         <img
-          src="/public/ai.png"
+          src="/ai.png"
           alt="ai.png"
           className="w-[80%] h-[80%] m-auto object-contain text-white"
         />
