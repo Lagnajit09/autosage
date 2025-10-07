@@ -7,7 +7,7 @@ const Logo = () => {
         <span className="bg-gradient-to-r from-blue-500 via-purple-500 to-pink-500 bg-clip-text text-transparent font-semibold">
           🇦🇺🇹🇴
         </span>
-        <span className="dark:text-white text-white">🇸🇦🇬🇪</span>
+        <span className="text-gray-800 dark:text-white">🇸🇦🇬🇪</span>
       </span>
     </div>
   );

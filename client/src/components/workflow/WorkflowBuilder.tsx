@@ -442,7 +442,7 @@ const WorkflowBuilderContent = () => {
                 size={1}
                 style={{
                   backgroundColor: "#080013",
-                  opacity: 0.5,
+                  opacity: 0.8,
                 }}
               />
             </ReactFlow>
