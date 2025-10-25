@@ -15,6 +15,7 @@ import Dashboard from "./pages/Dashboard";
 import ProtectedRoute from "./components/auth/ProtectedRoute";
 import "./App.css";
 import { ThemeProvider } from "./provider/theme-provider";
+import AutobotChat from "./pages/AutobotChat";
 
 const queryClient = new QueryClient();
 
@@ -35,6 +36,8 @@ const App = () => (
                 <Route path="/dashboard" element={<Dashboard />} />
                 <Route path="/code-editor" element={<CodeEditor />} />
                 <Route path="/raw/:id" element={<ScriptViewer />} />
+                <Route path="/ai/autobot" element={<AutobotChat />} />
+                <Route path="/ai/autobot/:id" element={<AutobotChat />} />
               </Route>
 
               {/* Public Routes */}
