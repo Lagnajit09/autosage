@@ -6,7 +6,6 @@ import {
 import {
   Home,
   ListPlus,
-  MessageCircle,
   Moon,
   Settings,
   Sun,
@@ -22,25 +21,45 @@ const LeftNav = () => {
   const { isDark, toggleTheme } = useTheme();
   const navigate = useNavigate();
   return (
-    <div className="flex flex-col w-[4%] h-screen bg-light-primary px-4 py-4 space-y-4 justify-between">
+    <div className="flex flex-col w-[4%] h-screen bg-light-primary dark:bg-bg-card px-4 py-4 space-y-4 justify-between">
       <div className="w-full flex-col space-y-4">
         <ToolTipIcon
-          icon={<Home className="w-10 h-10 text-text-light-primary" />}
+          icon={
+            <Home className="w-10 h-10 text-text-light-primary dark:text-light-secondary" />
+          }
           tooltip="Home"
           onClick={() => navigate("/")}
         />
         <ToolTipIcon
-          icon={<Workflow className="w-10 h-10 text-text-light-primary" />}
+          icon={
+            <Workflow className="w-10 h-10 text-text-light-primary dark:text-light-secondary" />
+          }
           tooltip="Workflow"
           onClick={() => navigate("/workflow")}
         />
         <ToolTipIcon
-          icon={<ListPlus className="w-10 h-10 text-text-light-primary" />}
+          icon={
+            <ListPlus className="w-10 h-10 text-text-light-primary dark:text-light-secondary" />
+          }
           tooltip="Templates"
           onClick={() => navigate("/templates")}
         />
         <ToolTipIcon
-          icon={<MessageCircle className="w-10 h-10 text-text-light-primary" />}
+          icon={
+            isDark ? (
+              <img
+                src="/autobot-dark.svg"
+                alt="autobot"
+                className="w-10 h-10 mx-2"
+              />
+            ) : (
+              <img
+                src="/autobot-light.svg"
+                alt="autobot"
+                className="w-10 h-10 mx-2"
+              />
+            )
+          }
           tooltip="AutoBot"
           onClick={() => navigate("/ai/autobot")}
         />
@@ -58,12 +77,16 @@ const LeftNav = () => {
           onClick={toggleTheme}
         />
         <ToolTipIcon
-          icon={<Settings className="w-10 h-10 text-text-light-primary" />}
+          icon={
+            <Settings className="w-10 h-10 text-text-light-primary dark:text-light-secondary" />
+          }
           tooltip="Settings"
           onClick={() => navigate("/settings")}
         />
         <ToolTipIcon
-          icon={<User className="w-10 h-10 text-text-light-primary" />}
+          icon={
+            <User className="w-10 h-10 text-text-light-primary dark:text-light-secondary" />
+          }
           tooltip="Account"
           onClick={() => navigate("/account")}
         />
@@ -88,7 +111,7 @@ const ToolTipIcon = ({
       <TooltipTrigger asChild>
         <Button
           variant="outline"
-          className="bg-gray-400/20 rounded-lg p-2"
+          className="bg-gray-400/20 dark:bg-bg-tertiary/50 rounded-lg p-2 dark:border-none dark:outline-none"
           onClick={onClick}
         >
           {icon}
