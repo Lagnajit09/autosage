@@ -27,14 +27,14 @@ const LeftNav = () => {
           icon={
             <Home className="w-10 h-10 text-text-light-primary dark:text-light-secondary" />
           }
-          tooltip="Home"
-          onClick={() => navigate("/")}
+          tooltip="Dashboard"
+          onClick={() => navigate("/dashboard")}
         />
         <ToolTipIcon
           icon={
             <Workflow className="w-10 h-10 text-text-light-primary dark:text-light-secondary" />
           }
-          tooltip="Workflow"
+          tooltip="New Workflow"
           onClick={() => navigate("/workflow")}
         />
         <ToolTipIcon
@@ -111,7 +111,7 @@ const ToolTipIcon = ({
       <TooltipTrigger asChild>
         <Button
           variant="outline"
-          className="bg-gray-400/20 dark:bg-bg-tertiary/50 rounded-lg p-2 dark:border-none dark:outline-none"
+          className="bg-gray-400/20 dark:bg-bg-tertiary/50 dark:hover:bg-bg-tertiary/70 rounded-lg p-2 dark:border-none dark:outline-none"
           onClick={onClick}
         >
           {icon}
