@@ -117,7 +117,7 @@ const ToolTipIcon = ({
           {icon}
         </Button>
       </TooltipTrigger>
-      <TooltipContent>
+      <TooltipContent side="right">
         <p>{tooltip}</p>
       </TooltipContent>
     </Tooltip>
