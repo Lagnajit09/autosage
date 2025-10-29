@@ -34,7 +34,7 @@ const InputTypeGroup: React.FC = () => {
   ];
 
   return (
-    <div className="flex items-center bg-[#efe9f3] rounded-lg shadow-sm border border-[#d9cde0] w-fit">
+    <div className="flex items-center bg-[#efe9f3] dark:bg-[#170f2085] rounded-lg shadow-sm border border-[#d9cde0] dark:border-[#27073a52] w-fit">
       {buttons.map(({ id, label, short, description, icon: Icon }) => (
         <Tooltip key={id}>
           <TooltipTrigger asChild>
@@ -44,7 +44,7 @@ const InputTypeGroup: React.FC = () => {
               className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-all
                   ${
                     active === id
-                      ? "bg-white text-[#1b267a] shadow-md"
+                      ? "bg-white dark:bg-[#5e3e732b] text-[#1b267a] shadow-md"
                       : "text-[#8d70b4] hover:text-[#83269d]"
                   }`}
             >
