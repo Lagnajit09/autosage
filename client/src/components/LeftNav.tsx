@@ -21,7 +21,7 @@ const LeftNav = () => {
   const { isDark, toggleTheme } = useTheme();
   const navigate = useNavigate();
   return (
-    <div className="flex flex-col w-[4%] h-screen bg-light-primary dark:bg-bg-card/90 px-4 py-4 space-y-4 justify-between">
+    <div className="flex flex-col w-[4%] h-screen bg-light-tertiary dark:bg-bg-card/90 px-4 py-4 space-y-4 justify-between">
       <div className="w-full flex-col space-y-4 items-center">
         <ToolTipIcon
           icon={

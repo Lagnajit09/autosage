@@ -60,8 +60,10 @@ const History: React.FC<HistoryProps> = ({
   return (
     <Sidebar
       className={`${className} ${
-        state === "collapsed" ? "h-fit border-none" : "h-full"
-      }`}
+        state === "collapsed"
+          ? "h-fit border-none [&_[data-sidebar=sidebar]]:bg-transparent"
+          : "h-full [&_[data-sidebar=sidebar]]:bg-light-tertiary"
+      } ml-16 `}
       collapsible="icon"
     >
       {state === "collapsed" ? (
