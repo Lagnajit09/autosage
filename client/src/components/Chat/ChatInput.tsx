@@ -320,7 +320,7 @@ const ChatInput = ({ handleSubmit, onSendMessage }: Props) => {
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <Button
-                      className="p-2 mr-2 rounded-full bg-transparent text-black dark:text-white hover:bg-gray-200 dark:hover:bg-slate-700"
+                      className="p-2 mr-2 rounded-full bg-transparent text-black dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-slate-700"
                       onClick={() => {}}
                     >
                       <Lightbulb size={18} />
@@ -334,7 +334,7 @@ const ChatInput = ({ handleSubmit, onSendMessage }: Props) => {
 
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <Button className="p-2 mr-2 rounded-full bg-transparent text-black dark:text-white hover:bg-gray-200 dark:hover:bg-slate-700">
+                    <Button className="p-2 mr-2 rounded-full bg-transparent text-black dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-slate-700">
                       <Paperclip size={18} />
                     </Button>
                   </TooltipTrigger>

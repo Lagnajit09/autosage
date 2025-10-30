@@ -1,5 +1,5 @@
 import Interface from "@/components/Chat/Interface";
-import LeftSidebar from "@/components/Chat/LeftSidebar";
+import LeftSidebar from "@/components/Chat/History";
 import LeftNav from "@/components/LeftNav";
 
 const AutobotChat = () => {
