@@ -23,6 +23,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { Plus, PlusCircle } from "lucide-react";
 
 type ChatItem = {
   id: string;
@@ -57,6 +58,22 @@ const History: React.FC<HistoryProps> = ({
   className,
 }) => {
   const { state } = useSidebar();
+  const [searchQuery, setSearchQuery] = React.useState("");
+
+  const normalizedQuery = searchQuery.trim().toLowerCase();
+  const filteredItems = React.useMemo(
+    () =>
+      normalizedQuery
+        ? items.filter((item) => {
+            const title = item.title.toLowerCase();
+            const last = (item.lastMessage || "").toLowerCase();
+            return (
+              title.includes(normalizedQuery) || last.includes(normalizedQuery)
+            );
+          })
+        : items,
+    [items, normalizedQuery]
+  );
   return (
     <Sidebar
       className={`${className} ${
@@ -67,7 +84,7 @@ const History: React.FC<HistoryProps> = ({
       collapsible="icon"
     >
       {state === "collapsed" ? (
-        <div className="flex items-center justify-center mt-4">
+        <div className="flex flex-col items-center justify-center mt-4 gap-2">
           <Tooltip>
             <TooltipTrigger asChild>
               <span>
@@ -78,21 +95,48 @@ const History: React.FC<HistoryProps> = ({
               Open sidebar
             </TooltipContent>
           </Tooltip>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span className="p-1 rounded-md hover:bg-gray-100 dark:hover:bg-gray-200 dark:hover:text-gray-700 cursor-pointer">
+                <PlusCircle className="w-4 h-5" />
+              </span>
+            </TooltipTrigger>
+            <TooltipContent side="right" align="center">
+              New Chat
+            </TooltipContent>
+          </Tooltip>
         </div>
       ) : (
         <>
           <SidebarHeader className="mt-2 flex items-start gap-2 w-full">
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <span>
-                  <SidebarTrigger />
-                </span>
-              </TooltipTrigger>
-              <TooltipContent side="right" align="center">
-                Close sidebar
-              </TooltipContent>
-            </Tooltip>
-            <SidebarInput placeholder="Search chats..." />
+            <div className="flex items-center justify-between w-full">
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span>
+                    <SidebarTrigger />
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent side="right" align="center">
+                  Close sidebar
+                </TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span className="p-1 rounded-md hover:bg-gray-100 dark:hover:bg-gray-200 dark:hover:text-gray-700 cursor-pointer">
+                    <PlusCircle className="w-4 h-5" />
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent side="right" align="center">
+                  New Chat
+                </TooltipContent>
+              </Tooltip>
+            </div>
+            <SidebarInput
+              placeholder="Search chats..."
+              className="dark:bg-gray-800 text-gray-900 dark:text-gray-200 outline-none border border-gray-500 dark:border-transparent"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+            />
           </SidebarHeader>
 
           <SidebarContent>
@@ -100,7 +144,7 @@ const History: React.FC<HistoryProps> = ({
               <SidebarGroupLabel>Chat History</SidebarGroupLabel>
               <SidebarGroupContent>
                 <SidebarMenu>
-                  {items.map((item) => (
+                  {filteredItems.map((item) => (
                     <SidebarMenuItem key={item.id}>
                       <SidebarMenuButton
                         onClick={() => onSelect?.(item.id)}

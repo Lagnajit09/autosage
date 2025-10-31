@@ -25,21 +25,21 @@ const LeftNav = () => {
       <div className="w-full flex-col space-y-4 items-center">
         <ToolTipIcon
           icon={
-            <Home className="w-10 h-10 text-text-light-primary dark:text-light-secondary" />
+            <Home className="w-10 h-10 text-text-light-primary/70 dark:text-light-secondary" />
           }
           tooltip="Dashboard"
           onClick={() => navigate("/dashboard")}
         />
         <ToolTipIcon
           icon={
-            <Workflow className="w-10 h-10 text-text-light-primary dark:text-light-secondary" />
+            <Workflow className="w-10 h-10 text-text-light-primary/70 dark:text-light-secondary" />
           }
           tooltip="New Workflow"
           onClick={() => navigate("/workflow")}
         />
         <ToolTipIcon
           icon={
-            <ListPlus className="w-10 h-10 text-text-light-primary dark:text-light-secondary" />
+            <ListPlus className="w-10 h-10 text-text-light-primary/70 dark:text-light-secondary" />
           }
           tooltip="Templates"
           onClick={() => navigate("/templates")}
@@ -70,7 +70,7 @@ const LeftNav = () => {
             isDark ? (
               <Sun className="w-10 h-10 text-light-primary" />
             ) : (
-              <Moon className="w-10 h-10" />
+              <Moon className="w-10 h-10 text-text-light-primary/70" />
             )
           }
           tooltip={isDark ? "Light Mode" : "Dark Mode"}
@@ -78,14 +78,14 @@ const LeftNav = () => {
         />
         <ToolTipIcon
           icon={
-            <Settings className="w-10 h-10 text-text-light-primary dark:text-light-secondary" />
+            <Settings className="w-10 h-10 text-text-light-primary/70 dark:text-light-secondary" />
           }
           tooltip="Settings"
           onClick={() => navigate("/settings")}
         />
         <ToolTipIcon
           icon={
-            <User className="w-10 h-10 text-text-light-primary dark:text-light-secondary" />
+            <User className="w-10 h-10 text-text-light-primary/70 dark:text-light-secondary" />
           }
           tooltip="Account"
           onClick={() => navigate("/account")}
@@ -111,7 +111,7 @@ const ToolTipIcon = ({
       <TooltipTrigger asChild>
         <Button
           variant="outline"
-          className="bg-gray-400/20 dark:bg-bg-tertiary/50 dark:hover:bg-bg-tertiary/70 rounded-lg p-2 dark:border-none dark:outline-none"
+          className="bg-[#a768d0]/30 hover:bg-[#a768d0]/20 dark:bg-bg-tertiary/50 dark:hover:bg-bg-tertiary/70 rounded-lg p-2 dark:border-none dark:outline-none"
           onClick={onClick}
         >
           {icon}

@@ -296,7 +296,7 @@ const ChatInput = ({ handleSubmit, onSendMessage }: Props) => {
           <div className="w-full flex flex-col justify-between bg-gray-100 dark:bg-gray-500/15 rounded-2xl border border-gray-300 dark:border-transparent px-2 py-2 shadow-md">
             <Textarea
               placeholder="Ask anything..."
-              className="resize-none border-0 focus-visible:ring-0 focus-visible:ring-offset-0 px-2 py-2 bg-transparent my-auto shadow-none thin-scrollbar text-gray-900 dark:text-gray-100 placeholder:text-gray-500 dark:placeholder:text-gray-400 tracking-wide"
+              className="resize-none border-0 focus-visible:ring-0 focus-visible:ring-offset-0 px-2 py-2 bg-transparent my-auto shadow-none thin-scrollbar text-gray-900 dark:text-gray-100 placeholder:text-gray-500 dark:placeholder:text-gray-400"
               rows={2}
               ref={textareaRef}
               value={inputValue}
@@ -305,8 +305,12 @@ const ChatInput = ({ handleSubmit, onSendMessage }: Props) => {
               onKeyDown={handleKeyDown}
               style={{
                 minHeight: "auto",
+                fontSize: "16px",
+                lineHeight: "1.6",
                 maxHeight: maxHeightPx,
                 overflowY: "hidden",
+                fontFamily:
+                  '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
               }}
             />
 
@@ -418,156 +422,3 @@ const QuickActionMenu = ({
     </DropdownMenu>
   );
 };
-
-// const DynamicQuickActions = ({
-//   onSendMessage,
-//   setSelectedCategory,
-// }: {
-//   onSendMessage?: (message: string, category?: string) => void;
-//   selectedCategory?: string;
-//   setSelectedCategory?: (category: string) => void;
-// }) => {
-//   const { isLoading } = useLoading();
-//   const handleQuickAction = (action: string, categoryName: string) => {
-//     if (isLoading) return;
-//     if (onSendMessage) {
-//       onSendMessage(action, categoryName);
-//     }
-//     if (setSelectedCategory) {
-//       setSelectedCategory(categoryName);
-//     }
-//   };
-
-//   return (
-//     <>
-//       {categories.map((category) => {
-//         const CategoryIcon = category.icon as React.ComponentType<{
-//           size?: number;
-//           className?: string;
-//         }>;
-
-//         const categoryActions = quickActions.filter(
-//           (action) => action.category === category.id
-//         );
-
-//         const hasSubCategories = subCategories.some((sub) =>
-//           categoryActions.some((action) => action.subCategory === sub.id)
-//         );
-
-//         if (hasSubCategories) {
-//           const subCategoryGroups = subCategories
-//             .filter((sub) =>
-//               categoryActions.some((action) => action.subCategory === sub.id)
-//             )
-//             .map((sub) => ({
-//               ...sub,
-//               actions: categoryActions.filter(
-//                 (action) => action.subCategory === sub.id
-//               ),
-//             }));
-
-//           return (
-//             <DropdownMenuSub key={category.id}>
-//               <DropdownMenuSubTrigger
-//                 className={`flex items-center gap-2 ${
-//                   isLoading ? "opacity-60 pointer-events-none" : ""
-//                 }`}
-//               >
-//                 <CategoryIcon size={16} className={category.color} />
-//                 {category.name}
-//               </DropdownMenuSubTrigger>
-//               <DropdownMenuPortal>
-//                 <DropdownMenuSubContent>
-//                   {subCategoryGroups.map((subGroup) => {
-//                     const SubIcon = subGroup.icon as React.ComponentType<{
-//                       size?: number;
-//                       className?: string;
-//                     }>;
-//                     return (
-//                       <DropdownMenuSub key={subGroup.id}>
-//                         <DropdownMenuSubTrigger
-//                           className={`flex items-center gap-2 ${
-//                             isLoading ? "opacity-60 pointer-events-none" : ""
-//                           }`}
-//                         >
-//                           <SubIcon size={16} className={subGroup.color} />
-//                           {subGroup.name}
-//                         </DropdownMenuSubTrigger>
-//                         <DropdownMenuPortal>
-//                           <DropdownMenuSubContent>
-//                             {subGroup.actions.map((action) => (
-//                               <DropdownMenuItem
-//                                 key={action.id}
-//                                 className={`flex flex-col items-start gap-1 p-3 ${
-//                                   isLoading
-//                                     ? "opacity-60 pointer-events-none"
-//                                     : ""
-//                                 }`}
-//                                 onClick={() =>
-//                                   handleQuickAction(
-//                                     action.action,
-//                                     category.name
-//                                   )
-//                                 }
-//                               >
-//                                 <div className="flex items-center gap-2">
-//                                   <span className="font-medium text-sm">
-//                                     {action.title}
-//                                   </span>
-//                                 </div>
-//                                 <span className="text-xs text-muted-foreground">
-//                                   {action.description}
-//                                 </span>
-//                               </DropdownMenuItem>
-//                             ))}
-//                           </DropdownMenuSubContent>
-//                         </DropdownMenuPortal>
-//                       </DropdownMenuSub>
-//                     );
-//                   })}
-//                 </DropdownMenuSubContent>
-//               </DropdownMenuPortal>
-//             </DropdownMenuSub>
-//           );
-//         }
-
-//         return (
-//           <DropdownMenuSub key={category.id}>
-//             <DropdownMenuSubTrigger
-//               className={`flex items-center gap-2 ${
-//                 isLoading ? "opacity-60 pointer-events-none" : ""
-//               }`}
-//             >
-//               <CategoryIcon size={16} className={category.color} />
-//               {category.name}
-//             </DropdownMenuSubTrigger>
-//             <DropdownMenuPortal>
-//               <DropdownMenuSubContent>
-//                 {categoryActions.map((action) => (
-//                   <DropdownMenuItem
-//                     key={action.id}
-//                     className={`flex flex-col items-start gap-1 p-3 ${
-//                       isLoading ? "opacity-60 pointer-events-none" : ""
-//                     }`}
-//                     onClick={() =>
-//                       handleQuickAction(action.action, category.name)
-//                     }
-//                   >
-//                     <div className="flex items-center gap-2">
-//                       <span className="font-medium text-sm">
-//                         {action.title}
-//                       </span>
-//                     </div>
-//                     <span className="text-xs text-muted-foreground">
-//                       {action.description}
-//                     </span>
-//                   </DropdownMenuItem>
-//                 ))}
-//               </DropdownMenuSubContent>
-//             </DropdownMenuPortal>
-//           </DropdownMenuSub>
-//         );
-//       })}
-//     </>
-//   );
-// };
