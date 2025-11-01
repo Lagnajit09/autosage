@@ -1,4 +1,4 @@
-@import url("https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Montserrat:ital,wght@0,100..900;1,100..900&display=swap");
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -125,7 +125,7 @@
 
   body {
     @apply bg-background text-foreground;
-    font-family: "Inter", system-ui, -apple-system, sans-serif;
+    font-family: "Montserrat", system-ui, -apple-system, sans-serif;
     font-feature-settings: "cv11", "ss01";
     font-variation-settings: "opsz" 32;
   }
@@ -137,24 +137,41 @@
 }
 
 ::-webkit-scrollbar-track {
-  background: #150050; /* workflow-midnight */
+  background: transparent; /* workflow-midnight */
 }
 
 ::-webkit-scrollbar-thumb {
-  background: linear-gradient(
-    to bottom,
-    #610094,
-    #b373e7
-  ); /* workflow-royal to workflow-nebula */
+  background: #28202f; /* workflow-royal to workflow-nebula */
   border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: linear-gradient(
-    to bottom,
-    #b373e7,
-    #d0a8f0
-  ); /* workflow-nebula to workflow-aurora */
+  background: #3c3046; /* workflow-nebula to workflow-aurora */
+}
+
+/* Thin scrollbar utility class */
+.thin-scrollbar::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+
+.thin-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.thin-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(179, 115, 231, 0.5); /* workflow-nebula with opacity */
+  border-radius: 2px;
+}
+
+.thin-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(179, 115, 231, 0.7); /* workflow-nebula with more opacity */
+}
+
+/* Firefox scrollbar support for thin-scrollbar */
+.thin-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(179, 115, 231, 0.5) transparent;
 }
 
 /* ReactFlow customizations with your color palette */

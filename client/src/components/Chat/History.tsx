@@ -110,16 +110,20 @@ const History: React.FC<HistoryProps> = ({
         <>
           <SidebarHeader className="mt-2 flex items-start gap-2 w-full">
             <div className="flex items-center justify-between w-full">
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <span>
-                    <SidebarTrigger />
-                  </span>
-                </TooltipTrigger>
-                <TooltipContent side="right" align="center">
-                  Close sidebar
-                </TooltipContent>
-              </Tooltip>
+              <div className="flex items-center gap-2">
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span>
+                      <SidebarTrigger />
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent side="right" align="center">
+                    Close sidebar
+                  </TooltipContent>
+                </Tooltip>
+                <p className="tracking-wider">AutoSage</p>
+              </div>
+
               <Tooltip>
                 <TooltipTrigger asChild>
                   <span className="p-1 rounded-md hover:bg-gray-100 dark:hover:bg-gray-200 dark:hover:text-gray-700 cursor-pointer">

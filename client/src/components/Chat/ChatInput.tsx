@@ -233,7 +233,7 @@ const ChatInput = ({ handleSubmit, onSendMessage }: Props) => {
   }, [showAtMenu]);
 
   return (
-    <div className={`thin-scrollbar ${id ? "w-full" : "w-[85%] mx-auto"}`}>
+    <div className={`thin-scrollbar ${id ? "w-full" : "w-[95%] mx-auto"}`}>
       {/*<div className="w-[75%] mx-auto">
         {showSuggestedQuestions && (
           <SuggestedQuestions
