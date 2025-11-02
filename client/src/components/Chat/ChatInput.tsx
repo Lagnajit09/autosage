@@ -293,7 +293,7 @@ const ChatInput = ({ handleSubmit, onSendMessage }: Props) => {
           onSubmit={(e) => handleSubmit(e, inputValue, selectedCategory)}
           className="flex px-2"
         >
-          <div className="w-full flex flex-col justify-between bg-gray-100 dark:bg-gray-500/15 rounded-2xl border border-gray-300 dark:border-transparent px-2 py-2 shadow-md">
+          <div className="w-full flex flex-col justify-between bg-gray-100 dark:bg-[#272727] rounded-2xl border border-gray-300 dark:border-transparent px-2 py-2 shadow-md">
             <Textarea
               placeholder="Ask anything..."
               className="resize-none border-0 focus-visible:ring-0 focus-visible:ring-offset-0 px-2 py-2 bg-transparent my-auto shadow-none thin-scrollbar text-gray-900 dark:text-gray-100 placeholder:text-gray-500 dark:placeholder:text-gray-400"

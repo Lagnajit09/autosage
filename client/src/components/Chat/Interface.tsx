@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect, useRef } from "react";
 import ReactMarkdown from "react-markdown";
 import ChatInput from "./ChatInput";
 import { CodeBlock } from "./CodeBlock";
@@ -107,7 +107,7 @@ That will run it every hour. Do you want me to include a configuration file to s
     timestamp: "2025-11-01T09:16:10Z",
     contentType: "text/plain",
     status: "read",
-    content: "Yes, that’d be great. Let’s make it configurable.",
+    content: "Yes, that'd be great. Let's make it configurable.",
     metadata: { action: "request_configurable" },
   },
   {
@@ -169,7 +169,7 @@ Now, you can tweak the thresholds or change the webhook without modifying the co
     contentType: "text/plain",
     status: "read",
     content:
-      "That’s awesome! Can you also generate a summary report in HTML format?",
+      "That's awesome! Can you also generate a summary report in HTML format?",
     metadata: { request_type: "report_generation" },
   },
   {
@@ -215,6 +215,24 @@ You could even have the bot email this report automatically every morning. Want 
 const Interface = () => {
   const randomMessage =
     welcomeMessages[Math.floor(Math.random() * welcomeMessages.length)];
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
+
+  // Scroll to bottom on mount and when messages change
+  useEffect(() => {
+    const scrollToBottom = () => {
+      if (messagesContainerRef.current) {
+        messagesContainerRef.current.scrollTo({
+          top: messagesContainerRef.current.scrollHeight,
+          behavior: "smooth",
+        });
+      }
+    };
+
+    // Use setTimeout to ensure DOM has updated
+    const timeoutId = setTimeout(scrollToBottom, 0);
+    return () => clearTimeout(timeoutId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [messages.length]); // Will trigger when messages array changes (when messages become stateful)
 
   return (
     <div className="w-full flex flex-col items-center justify-center">
@@ -229,19 +247,25 @@ const Interface = () => {
         </>
       ) : (
         <>
-          <div className="h-full w-full flex flex-col justify-between items-start py-6">
-            <div className="w-[68%] mx-auto flex flex-col justify-start items-start overflow-y-scroll px-2">
+          <div
+            ref={messagesContainerRef}
+            className="h-full w-full flex flex-col items-start my-6 overflow-y-scroll"
+          >
+            <div className="w-[68%] mx-auto flex flex-col justify-start items-start px-2 pt-10">
               {messages.map((message) => (
                 <>
                   {message.role === "user" && (
-                    <div className="w-full rounded-xl mb-0 text-gray-200">
-                      <p className="w-fit bg-gray-950/50 py-4 px-4 rounded-xl">
+                    <div className="w-full flex items-start gap-2 rounded-xl mb-0">
+                      <div className="p-2 w-10 h-10 bg-purple-300/50 dark:bg-purple-500/30 text-gray-950 dark:text-gray-50 rounded-full flex items-center justify-center font-semibold ">
+                        L
+                      </div>
+                      <p className="w-fit bg-gray-300 dark:bg-gray-950/50 text-gray-900 dark:text-gray-200 font-medium py-4 px-4 rounded-xl">
                         {message.content}
                       </p>
                     </div>
                   )}
                   {message.role === "assistant" && (
-                    <div className="w-full text-gray-200 rounded-lg p-2 mb-10 prose prose-invert prose-pre:bg-gray-900 prose-pre:border prose-pre:border-gray-700 max-w-none prose-p:my-2 prose-p:leading-relaxed">
+                    <div className="w-full text-gray-900 dark:text-gray-200 rounded-lg p-2 mb-10 prose prose-invert prose-pre:bg-gray-300 dark:prose-pre:bg-gray-900 prose-pre:border prose-pre:border-gray-700 max-w-none prose-p:my-0 prose-p:leading-relaxed">
                       <ReactMarkdown
                         components={{
                           code(props: React.ComponentPropsWithoutRef<"code">) {
@@ -254,7 +278,7 @@ const Interface = () => {
 
                             return isInline ? (
                               <code
-                                className="w-full px-1 py-1 bg-gray-800 rounded text-sm font-mono thin-scrollbar"
+                                className="px-1.5 py-0.5 text-purple-700 dark:text-purple-300/80 bg-gray-300/50 dark:bg-gray-500/30 rounded text-sm font-mono border border-gray-400/50 dark:border-gray-500/40"
                                 {...rest}
                               >
                                 {children}
@@ -266,6 +290,18 @@ const Interface = () => {
                               />
                             );
                           },
+                          strong(
+                            props: React.ComponentPropsWithoutRef<"strong">
+                          ) {
+                            return (
+                              <strong
+                                className="font-bold text-gray-900 dark:text-gray-100"
+                                {...props}
+                              >
+                                {props.children}
+                              </strong>
+                            );
+                          },
                         }}
                       >
                         {message.content}
@@ -275,7 +311,9 @@ const Interface = () => {
                 </>
               ))}
             </div>
-            <ChatInput handleSubmit={() => {}} />
+            <div className="sticky bottom-0 w-full">
+              <ChatInput handleSubmit={() => {}} />
+            </div>
           </div>
         </>
       )}

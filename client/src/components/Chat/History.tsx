@@ -121,7 +121,9 @@ const History: React.FC<HistoryProps> = ({
                     Close sidebar
                   </TooltipContent>
                 </Tooltip>
-                <p className="tracking-wider">AutoSage</p>
+                <p className="tracking-wider text-gray-950 dark:text-gray-100 font-semibold">
+                  AutoSage
+                </p>
               </div>
 
               <Tooltip>
@@ -154,6 +156,7 @@ const History: React.FC<HistoryProps> = ({
                         onClick={() => onSelect?.(item.id)}
                         isActive={item.id === activeId}
                         tooltip={item.title}
+                        className="text-gray-900 dark:text-gray-200 font-medium"
                       >
                         <span>{item.title}</span>
                         {item.unreadCount ? (
