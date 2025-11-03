@@ -311,7 +311,7 @@ const Interface = () => {
                 </>
               ))}
             </div>
-            <div className="sticky bottom-0 w-full">
+            <div className="sticky bottom-0 w-full z-20">
               <ChatInput handleSubmit={() => {}} />
             </div>
           </div>

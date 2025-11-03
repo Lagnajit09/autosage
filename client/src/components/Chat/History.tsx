@@ -23,7 +23,21 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { Plus, PlusCircle } from "lucide-react";
+import {
+  MoreHorizontal,
+  Plus,
+  PlusCircle,
+  Share,
+  Pencil,
+  Trash2,
+} from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Button } from "../ui/button";
 
 type ChatItem = {
   id: string;
@@ -151,20 +165,51 @@ const History: React.FC<HistoryProps> = ({
               <SidebarGroupContent>
                 <SidebarMenu>
                   {filteredItems.map((item) => (
-                    <SidebarMenuItem key={item.id}>
-                      <SidebarMenuButton
-                        onClick={() => onSelect?.(item.id)}
-                        isActive={item.id === activeId}
-                        tooltip={item.title}
-                        className="text-gray-900 dark:text-gray-200 font-medium"
-                      >
-                        <span>{item.title}</span>
-                        {item.unreadCount ? (
-                          <SidebarMenuBadge>
-                            {item.unreadCount}
-                          </SidebarMenuBadge>
-                        ) : null}
-                      </SidebarMenuButton>
+                    <SidebarMenuItem key={item.id} className="relative">
+                      <div className="flex items-center w-full group/item  hover:bg-purple-200/30 dark:hover:bg-purple-800/30 rounded-lg">
+                        <SidebarMenuButton
+                          onClick={() => onSelect?.(item.id)}
+                          isActive={item.id === activeId}
+                          tooltip={item.title}
+                          className="text-gray-900 dark:text-gray-200 font-medium flex-1 hover:bg-transparent"
+                        >
+                          <span>{item.title}</span>
+                        </SidebarMenuButton>
+
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <button
+                              type="button"
+                              className="inline-flex h-7 w-7 items-center justify-center rounded p-0.5 ml-1 text-gray-700 dark:text-gray-300 opacity-0 pointer-events-none group-hover/item:opacity-100 group-hover/item:pointer-events-auto data-[state=open]:opacity-100 data-[state=open]:pointer-events-auto hover:bg-gray-100 dark:hover:bg-gray-800"
+                              aria-label="Open chat actions"
+                            >
+                              <MoreHorizontal className="h-4 w-4" />
+                            </button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent
+                            align="end"
+                            side="right"
+                            sideOffset={8}
+                            className="w-44"
+                          >
+                            <DropdownMenuItem className="text-gray-800 dark:text-gray-200">
+                              <Share />
+                              <span>Share</span>
+                            </DropdownMenuItem>
+                            <DropdownMenuItem className="text-gray-800 dark:text-gray-200">
+                              <Pencil />
+                              <span>Rename</span>
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onClick={() => onDelete?.(item.id)}
+                              className="text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/40 focus:bg-red-100 dark:focus:bg-red-900/40"
+                            >
+                              <Trash2 />
+                              <span>Delete</span>
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </div>
                       {onDelete ? (
                         <SidebarMenuAction
                           aria-label="Delete chat"
