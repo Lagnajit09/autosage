@@ -2,6 +2,7 @@ import React, { useEffect, useRef } from "react";
 import ReactMarkdown from "react-markdown";
 import ChatInput from "./ChatInput";
 import { CodeBlock } from "./CodeBlock";
+import { ShareIcon } from "lucide-react";
 
 const welcomeMessages = [
   "Hello! How can I help you today?",
@@ -236,6 +237,7 @@ const Interface = () => {
 
   return (
     <div className="w-full flex flex-col items-center justify-center">
+      {/* TODO: Change condition to check if ID is present in the URL */}
       {messages.length === 0 ? (
         <>
           <div className="text-center mb-8">
@@ -251,6 +253,14 @@ const Interface = () => {
             ref={messagesContainerRef}
             className="h-full w-full flex flex-col items-start my-6 overflow-y-scroll"
           >
+            <div className="absolute top-2 right-2">
+              <button className="flex items-center gap-2 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800 py-2 px-3 rounded-full">
+                <ShareIcon className="w-4 h-4 text-gray-800 dark:text-gray-200" />
+                <p className="text-sm font-semibold text-gray-800 dark:text-gray-200">
+                  Share
+                </p>
+              </button>
+            </div>
             <div className="w-[68%] mx-auto flex flex-col justify-start items-start px-2 pt-10">
               {messages.map((message) => (
                 <>

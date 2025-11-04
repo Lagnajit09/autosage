@@ -180,7 +180,7 @@ const History: React.FC<HistoryProps> = ({
                           <DropdownMenuTrigger asChild>
                             <button
                               type="button"
-                              className="inline-flex h-7 w-7 items-center justify-center rounded p-0.5 ml-1 text-gray-700 dark:text-gray-300 opacity-0 pointer-events-none group-hover/item:opacity-100 group-hover/item:pointer-events-auto data-[state=open]:opacity-100 data-[state=open]:pointer-events-auto hover:bg-gray-100 dark:hover:bg-gray-800"
+                              className="inline-flex h-7 w-7 items-center justify-center rounded p-0.5 ml-1 text-gray-700 dark:text-gray-300 opacity-0 pointer-events-none group-hover/item:opacity-100 group-hover/item:pointer-events-auto data-[state=open]:opacity-100 data-[state=open]:pointer-events-auto hover:bg-transparent cursor-pointer"
                               aria-label="Open chat actions"
                             >
                               <MoreHorizontal className="h-4 w-4" />
@@ -188,21 +188,21 @@ const History: React.FC<HistoryProps> = ({
                           </DropdownMenuTrigger>
                           <DropdownMenuContent
                             align="end"
-                            side="right"
-                            sideOffset={8}
-                            className="w-44"
+                            side="bottom"
+                            sideOffset={2}
+                            className="w-44 dark:bg-[#262626] border-none shadow-lg"
                           >
-                            <DropdownMenuItem className="text-gray-800 dark:text-gray-200">
+                            <DropdownMenuItem className="text-gray-800 dark:text-gray-200 dark:hover:bg-[#383838] cursor-pointer">
                               <Share />
                               <span>Share</span>
                             </DropdownMenuItem>
-                            <DropdownMenuItem className="text-gray-800 dark:text-gray-200">
+                            <DropdownMenuItem className="text-gray-800 dark:text-gray-200 dark:hover:bg-[#383838] cursor-pointer">
                               <Pencil />
                               <span>Rename</span>
                             </DropdownMenuItem>
                             <DropdownMenuItem
                               onClick={() => onDelete?.(item.id)}
-                              className="text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/40 focus:bg-red-100 dark:focus:bg-red-900/40"
+                              className="text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/40 focus:bg-red-100 dark:focus:bg-red-900/40 cursor-pointer"
                             >
                               <Trash2 />
                               <span>Delete</span>
