@@ -1,8 +1,9 @@
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import ChatInput from "./ChatInput";
 import { CodeBlock } from "./CodeBlock";
 import { ShareIcon } from "lucide-react";
+import ShareModal from "./ShareModal";
 
 const welcomeMessages = [
   "Hello! How can I help you today?",
@@ -217,6 +218,7 @@ const Interface = () => {
   const randomMessage =
     welcomeMessages[Math.floor(Math.random() * welcomeMessages.length)];
   const messagesContainerRef = useRef<HTMLDivElement>(null);
+  const [shareModalOpen, setShareModalOpen] = useState(false);
 
   // Scroll to bottom on mount and when messages change
   useEffect(() => {
@@ -254,13 +256,20 @@ const Interface = () => {
             className="h-full w-full flex flex-col items-start my-6 overflow-y-scroll"
           >
             <div className="absolute top-2 right-2">
-              <button className="flex items-center gap-2 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800 py-2 px-3 rounded-full">
+              <button
+                onClick={() => setShareModalOpen(true)}
+                className="flex items-center gap-2 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800 py-2 px-3 rounded-full"
+              >
                 <ShareIcon className="w-4 h-4 text-gray-800 dark:text-gray-200" />
                 <p className="text-sm font-semibold text-gray-800 dark:text-gray-200">
                   Share
                 </p>
               </button>
             </div>
+            <ShareModal
+              open={shareModalOpen}
+              onOpenChange={setShareModalOpen}
+            />
             <div className="w-[68%] mx-auto flex flex-col justify-start items-start px-2 pt-10">
               {messages.map((message) => (
                 <>
