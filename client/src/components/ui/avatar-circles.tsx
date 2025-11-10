@@ -8,12 +8,14 @@ interface AvatarCirclesProps {
   className?: string;
   avatarUrls: Avatar[];
   username?: string;
+  onClick?: () => void;
 }
 
 export const AvatarCircles = ({
   className,
   avatarUrls,
   username,
+  onClick,
 }: AvatarCirclesProps) => {
   return (
     <div
@@ -21,6 +23,7 @@ export const AvatarCircles = ({
         "z-10 flex -space-x-4 rtl:space-x-reverse cursor-pointer",
         className
       )}
+      onClick={onClick}
     >
       {avatarUrls.map((url, index) => (
         <a
@@ -31,7 +34,7 @@ export const AvatarCircles = ({
         >
           <img
             key={index}
-            className="h-10 w-10 rounded-full border-2 border-white dark:border-gray-800"
+            className="h-10 w-10 rounded-lg border-2 border-white dark:border-gray-800"
             src={url.imageUrl}
             width={40}
             height={40}
@@ -40,7 +43,7 @@ export const AvatarCircles = ({
         </a>
       ))}
       {avatarUrls.length === 0 && username && (
-        <div className="h-10 w-10 flex items-center justify-center rounded-full border-2 border-white dark:border-gray-800 text-gray-50 dark:text-gray-950 font-bold bg-gray-700 dark:bg-gray-300">
+        <div className="h-10 w-10 flex items-center justify-center rounded-lg border-2 border-white dark:border-gray-800 text-gray-50 dark:text-gray-950 font-bold bg-gray-700 dark:bg-gray-300">
           <span>{username[0].toUpperCase()}</span>
         </div>
       )}

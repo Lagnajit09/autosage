@@ -34,8 +34,8 @@ const LeftNav = () => {
           icon={
             <Workflow className="w-10 h-10 text-text-light-primary/70 dark:text-light-secondary" />
           }
-          tooltip="New Workflow"
-          onClick={() => navigate("/workflow")}
+          tooltip="All Workflows"
+          onClick={() => navigate("/workflows")}
         />
         <ToolTipIcon
           icon={
