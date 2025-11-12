@@ -5,10 +5,25 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { Button } from "@/components/ui/button";
-import { Moon, Search, Sun } from "lucide-react";
+import {
+  CreditCard,
+  LogOut,
+  Moon,
+  Search,
+  SubscriptIcon,
+  Sun,
+} from "lucide-react";
 import { useTheme } from "@/provider/theme-provider";
 import { useNavigate } from "react-router-dom";
 import { Input } from "@/components/ui/input";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 const TopNav = () => {
   const { isDark, toggleTheme } = useTheme();
@@ -38,13 +53,7 @@ const TopNav = () => {
           tooltip={isDark ? "Light Mode" : "Dark Mode"}
           onClick={toggleTheme}
         />
-        <AvatarCircles
-          avatarUrls={[]}
-          username="Lagnajit"
-          onClick={() => {
-            navigate("/profile");
-          }}
-        />
+        <UserMenu />
       </div>
     </div>
   );
@@ -72,9 +81,36 @@ const ToolTipIcon = ({
           {icon}
         </Button>
       </TooltipTrigger>
-      <TooltipContent side="right">
+      <TooltipContent side="bottom">
         <p>{tooltip}</p>
       </TooltipContent>
     </Tooltip>
+  );
+};
+
+const UserMenu = () => {
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger>
+        <AvatarCircles avatarUrls={[]} username="Lagnajit" onClick={() => {}} />
+      </DropdownMenuTrigger>
+      <DropdownMenuContent className="dark:bg-gray-800 dark:border-gray-900">
+        <DropdownMenuLabel>
+          <p className="dark:text-gray-200">Lagnajit Moharana</p>
+          <span className="font-normal text-gray-600 dark:text-gray-400 text-xs">
+            moharanalagnajit@gmail.com
+          </span>
+        </DropdownMenuLabel>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem className="cursor-pointer dark:text-gray-300 dark:hover:bg-gray-700">
+          <CreditCard />
+          Subscription
+        </DropdownMenuItem>
+        <DropdownMenuItem className="cursor-pointer dark:text-gray-300 dark:hover:bg-gray-700">
+          <LogOut />
+          LogOut
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 };

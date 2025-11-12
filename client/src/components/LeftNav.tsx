@@ -16,6 +16,7 @@ import React from "react";
 import { Button } from "@/components/ui/button";
 import { useTheme } from "@/provider/theme-provider";
 import { useNavigate } from "react-router-dom";
+import { AutobotIcon } from "./AutobotIcon";
 
 const LeftNav = () => {
   const { isDark, toggleTheme } = useTheme();
@@ -46,19 +47,10 @@ const LeftNav = () => {
         />
         <ToolTipIcon
           icon={
-            isDark ? (
-              <img
-                src="/autobot-dark.svg"
-                alt="autobot"
-                className="w-10 h-10 mx-2"
-              />
-            ) : (
-              <img
-                src="/autobot-light.svg"
-                alt="autobot"
-                className="w-10 h-10 mx-2"
-              />
-            )
+            <AutobotIcon
+              size={18}
+              className="w-10 h-10 text-text-light-primary/70 dark:text-light-secondary"
+            />
           }
           tooltip="AutoBot"
           onClick={() => navigate("/ai/autobot")}

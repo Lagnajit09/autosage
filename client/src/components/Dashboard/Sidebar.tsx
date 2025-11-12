@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useNavigate } from "react-router-dom";
+import { AutobotIcon } from "../AutobotIcon";
 
 interface NavItem {
   icon: React.ElementType;
@@ -22,7 +23,7 @@ const navItems: NavItem[] = [
   { icon: LayoutGrid, label: "Dashboard", active: true, route: "/dashboard" },
   { icon: Workflow, label: "All Workflows", route: "/workflows" },
   { icon: Code2, label: "Editor", route: "/editor" },
-  { icon: Bot, label: "Autobot (AI)", route: "/ai/autobot" },
+  { icon: AutobotIcon, label: "Autobot", route: "/ai/autobot" },
   { icon: FileStack, label: "Templates", route: "/templates" },
 ];
 
