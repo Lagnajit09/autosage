@@ -16,6 +16,7 @@ import ProtectedRoute from "./components/auth/ProtectedRoute";
 import "./App.css";
 import { ThemeProvider } from "./provider/theme-provider";
 import AutobotChat from "./pages/AutobotChat";
+import Workflows from "./pages/Workflows";
 
 const queryClient = new QueryClient();
 
@@ -33,6 +34,7 @@ const App = () => (
               {/* Protected Routes */}
               <Route element={<ProtectedRoute />}>
                 <Route path="/workflow" element={<Workflow />} />
+                <Route path="/workflows" element={<Workflows />} />
                 <Route path="/dashboard" element={<Dashboard />} />
                 <Route path="/code-editor" element={<CodeEditor />} />
                 <Route path="/raw/:id" element={<ScriptViewer />} />

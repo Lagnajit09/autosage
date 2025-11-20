@@ -2,38 +2,46 @@ import {
   LayoutGrid,
   Workflow,
   Code2,
-  Bot,
-  FileStack,
   Settings,
   User,
   Plus,
+  ListPlus,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import { AutobotIcon } from "../AutobotIcon";
+import {
+  Sidebar,
+  SidebarContent,
+  SidebarFooter,
+  SidebarHeader,
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
+} from "@/components/ui/sidebar";
 
 interface NavItem {
   icon: React.ElementType;
   label: string;
-  active?: boolean;
   route: string;
 }
 
 const navItems: NavItem[] = [
-  { icon: LayoutGrid, label: "Dashboard", active: true, route: "/dashboard" },
+  { icon: LayoutGrid, label: "Dashboard", route: "/dashboard" },
   { icon: Workflow, label: "All Workflows", route: "/workflows" },
   { icon: Code2, label: "Editor", route: "/editor" },
   { icon: AutobotIcon, label: "Autobot", route: "/ai/autobot" },
-  { icon: FileStack, label: "Templates", route: "/templates" },
+  { icon: ListPlus, label: "Templates", route: "/templates" },
 ];
 
 export const DashboardSidebar = () => {
   const navigate = useNavigate();
+  const location = useLocation();
+
   return (
-    <aside className="w-64 h-full bg-gray-100 dark:bg-gray-950 border-r border-gray-300 dark:border-gray-800 flex flex-col">
-      {/* Logo Section */}
-      <div className="p-6 border-b border-sidebar-border">
-        <div className="flex items-center gap-3">
+    <Sidebar className="dark:border-gray-700">
+      <SidebarHeader className="border-b border-sidebar-border p-4">
+        <div className="flex items-center gap-3 px-2">
           <div>
             <h1 className="text-gray-950 dark:text-gray-100 font-semibold text-lg">
               Autosage
@@ -41,54 +49,59 @@ export const DashboardSidebar = () => {
             <p className="text-sidebar-foreground text-sm">Automation Hub</p>
           </div>
         </div>
-      </div>
+      </SidebarHeader>
 
-      {/* Navigation */}
-      <nav className="flex-1 p-4 space-y-1">
-        {navItems.map((item) => {
-          const Icon = item.icon;
-          return (
-            <button
-              key={item.label}
-              onClick={() => navigate(item.route)}
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
-                item.active
-                  ? "bg-[#a768d0]/30 dark:bg-bg-tertiary/60 text-[#7429a7] dark:text-[#d4b0eb]"
-                  : "text-gray-700 dark:text-gray-200 hover:bg-[#a768d0]/20 dark:hover:bg-bg-tertiary/50"
-              }`}
-            >
-              <Icon className="w-5 h-5" />
-              <span className="text-sm font-medium">{item.label}</span>
-            </button>
-          );
-        })}
-      </nav>
+      <SidebarContent className="p-4">
+        <SidebarMenu>
+          {navItems.map((item) => {
+            const isActive = location.pathname === item.route;
+            return (
+              <SidebarMenuItem key={item.label}>
+                <SidebarMenuButton
+                  onClick={() => navigate(item.route)}
+                  isActive={isActive}
+                  className={`w-full justify-start gap-3 px-4 py-5 ${isActive
+                    ? "bg-[#a768d0]/30 dark:bg-bg-tertiary/60 text-[#7429a7] dark:text-[#d4b0eb] hover:bg-[#a768d0]/40 dark:hover:bg-bg-tertiary/70"
+                    : "text-gray-700 dark:text-gray-200 hover:bg-[#a768d0]/20 dark:hover:bg-bg-tertiary/50"
+                    }`}
+                >
+                  <item.icon className="w-5 h-5" />
+                  <span className="text-sm font-medium">{item.label}</span>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            );
+          })}
+        </SidebarMenu>
+      </SidebarContent>
 
-      {/* New Workflow Button */}
-      <div className="p-4">
+      <div className="mt-4 mb-2 px-2">
         <Button className="w-full bg-gray-800 hover:bg-gray-800/90 text-primary-foreground">
           <Plus className="w-4 h-4 mr-2" />
           New Workflow
         </Button>
       </div>
-
-      {/* Bottom Navigation */}
-      <div className="p-4 border-t border-sidebar-border space-y-1">
-        <button
-          onClick={() => navigate("/settings")}
-          className="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-gray-700 dark:text-gray-200 hover:bg-[#a768d0]/20 dark:hover:bg-bg-tertiary/50 hover:text-sidebar-accent-foreground transition-colors"
-        >
-          <Settings className="w-5 h-5" />
-          <span className="text-sm font-medium">Settings</span>
-        </button>
-        <button
-          onClick={() => navigate("/profile")}
-          className="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-gray-700 dark:text-gray-200 hover:bg-[#a768d0]/20 dark:hover:bg-bg-tertiary/50 hover:text-sidebar-accent-foreground transition-colors"
-        >
-          <User className="w-5 h-5" />
-          <span className="text-sm font-medium">Profile</span>
-        </button>
-      </div>
-    </aside>
+      <SidebarFooter className="border-t border-sidebar-border p-4">
+        <SidebarMenu>
+          <SidebarMenuItem>
+            <SidebarMenuButton
+              onClick={() => navigate("/settings")}
+              className="w-full justify-start gap-3 px-4 py-5 text-gray-700 dark:text-gray-200 hover:bg-[#a768d0]/20 dark:hover:bg-bg-tertiary/50"
+            >
+              <Settings className="w-5 h-5" />
+              <span className="text-sm font-medium">Settings</span>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+          <SidebarMenuItem>
+            <SidebarMenuButton
+              onClick={() => navigate("/profile")}
+              className="w-full justify-start gap-3 px-4 py-5 text-gray-700 dark:text-gray-200 hover:bg-[#a768d0]/20 dark:hover:bg-bg-tertiary/50"
+            >
+              <User className="w-5 h-5" />
+              <span className="text-sm font-medium">Profile</span>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+        </SidebarMenu>
+      </SidebarFooter>
+    </Sidebar>
   );
 };

@@ -1,5 +1,6 @@
 import * as React from "react";
 import { cn } from "@/lib/utils"; // optional: Tailwind class merge helper
+import { useTheme } from "@/provider/theme-provider";
 
 interface AutobotIconProps extends React.SVGProps<SVGSVGElement> {
   dark?: boolean;
@@ -8,7 +9,8 @@ interface AutobotIconProps extends React.SVGProps<SVGSVGElement> {
 
 const AutobotIcon = React.forwardRef<SVGSVGElement, AutobotIconProps>(
   ({ dark = false, size = 20, className, ...props }, ref) => {
-    const src = dark ? "/autobot-dark.svg" : "/autobot-light.svg";
+    const { isDark } = useTheme();
+    const src = isDark ? "/autobot-dark.svg" : "/autobot-light.svg";
 
     return (
       <svg
