@@ -51,7 +51,7 @@ export const DashboardSidebar = () => {
         </div>
       </SidebarHeader>
 
-      <SidebarContent className="p-4">
+      <SidebarContent className="p-4 dark:border-gray-700">
         <SidebarMenu>
           {navItems.map((item) => {
             const isActive = location.pathname === item.route;
@@ -60,10 +60,11 @@ export const DashboardSidebar = () => {
                 <SidebarMenuButton
                   onClick={() => navigate(item.route)}
                   isActive={isActive}
-                  className={`w-full justify-start gap-3 px-4 py-5 ${isActive
-                    ? "bg-[#a768d0]/30 dark:bg-bg-tertiary/60 text-[#7429a7] dark:text-[#d4b0eb] hover:bg-[#a768d0]/40 dark:hover:bg-bg-tertiary/70"
-                    : "text-gray-700 dark:text-gray-200 hover:bg-[#a768d0]/20 dark:hover:bg-bg-tertiary/50"
-                    }`}
+                  className={`w-full justify-start gap-3 px-4 py-5 ${
+                    isActive
+                      ? "bg-[#a768d0]/30 dark:bg-bg-tertiary/60 text-[#7429a7] dark:text-[#d4b0eb] hover:bg-[#a768d0]/40 dark:hover:bg-bg-tertiary/70"
+                      : "text-gray-700 dark:text-gray-200 hover:bg-[#a768d0]/20 dark:hover:bg-bg-tertiary/50"
+                  }`}
                 >
                   <item.icon className="w-5 h-5" />
                   <span className="text-sm font-medium">{item.label}</span>

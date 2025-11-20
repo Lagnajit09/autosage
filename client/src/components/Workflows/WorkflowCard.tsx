@@ -22,7 +22,7 @@ const statusColors = {
 export const WorkflowCard = ({ workflow }: { workflow: Workflow }) => {
   return (
     <div className="group flex flex-col bg-white dark:bg-gray-800/40 border border-gray-200 dark:border-gray-700/50 rounded-xl overflow-hidden hover:shadow-lg hover:border-purple-500/30 dark:hover:border-purple-500/30 transition-all duration-300">
-      <div className="p-6 flex-1">
+      <div className="p-4 md:p-6 flex-1">
         <div className="flex items-start justify-between mb-4">
           <div className="p-3 rounded-xl bg-purple-50 dark:bg-purple-500/10 text-purple-600 dark:text-purple-400 group-hover:scale-110 transition-transform duration-300 shadow-sm">
             <Activity className="w-6 h-6" />
@@ -54,7 +54,7 @@ export const WorkflowCard = ({ workflow }: { workflow: Workflow }) => {
           </DropdownMenu>
         </div>
 
-        <h3 className="font-semibold text-gray-900 dark:text-white text-xl mb-2 group-hover:text-purple-600 dark:group-hover:text-purple-400 transition-colors">
+        <h3 className="font-semibold text-gray-900 dark:text-white text-lg md:text-xl mb-2 group-hover:text-purple-600 dark:group-hover:text-purple-400 transition-colors">
           {workflow.title}
         </h3>
         <p className="text-sm text-gray-500 dark:text-gray-400 line-clamp-2 mb-4 h-10">
