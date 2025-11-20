@@ -1,11 +1,12 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import LeftNav from "@/components/LeftNav";
 import { Button } from "@/components/ui/button";
-import { LayoutGrid, List, Plus } from "lucide-react";
+import { LayoutGrid, List, Plus, Search } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Workflow } from "@/components/Workflows/types";
 import { WorkflowCard } from "@/components/Workflows/WorkflowCard";
 import { WorkflowListItem } from "@/components/Workflows/WorkflowListItem";
+import { Input } from "@/components/ui/input";
 
 // Mock Data
 const workflows: Workflow[] = [
@@ -79,6 +80,30 @@ const workflows: Workflow[] = [
 
 const Workflows = () => {
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState("");
+
+  // Debounce search query
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearchQuery(searchQuery);
+    }, 500);
+
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
+
+  const filteredWorkflows = workflows.filter(
+    (workflow) =>
+      workflow.title
+        .toLowerCase()
+        .includes(debouncedSearchQuery.toLowerCase()) ||
+      workflow.description
+        .toLowerCase()
+        .includes(debouncedSearchQuery.toLowerCase()) ||
+      workflow.tags.some((tag) =>
+        tag.toLowerCase().includes(debouncedSearchQuery.toLowerCase())
+      )
+  );
 
   return (
     <div className="flex w-full h-screen bg-gray-50 dark:bg-workflow-void/95 overflow-hidden">
@@ -100,6 +125,16 @@ const Workflows = () => {
               </div>
 
               <div className="flex items-center gap-3">
+                <div className="relative w-full md:w-64">
+                  <Search className="absolute left-2 top-2.5 h-4 w-4 text-gray-500 dark:text-gray-400" />
+                  <Input
+                    placeholder="Search workflows..."
+                    className="pl-8 bg-white dark:bg-gray-800/50 border-gray-200 dark:border-gray-700/50 dark:text-gray-200"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                  />
+                </div>
+
                 <div className="flex items-center bg-white dark:bg-gray-800/50 rounded-lg p-1 border border-gray-200 dark:border-gray-700/50 shadow-sm">
                   <Button
                     variant="ghost"
@@ -145,12 +180,27 @@ const Workflows = () => {
                   : "flex flex-col space-y-4"
               )}
             >
-              {workflows.map((workflow) =>
-                viewMode === "grid" ? (
-                  <WorkflowCard key={workflow.id} workflow={workflow} />
-                ) : (
-                  <WorkflowListItem key={workflow.id} workflow={workflow} />
+              {filteredWorkflows.length > 0 ? (
+                filteredWorkflows.map((workflow) =>
+                  viewMode === "grid" ? (
+                    <WorkflowCard key={workflow.id} workflow={workflow} />
+                  ) : (
+                    <WorkflowListItem key={workflow.id} workflow={workflow} />
+                  )
                 )
+              ) : (
+                <div className="col-span-full flex flex-col items-center justify-center py-12 text-center">
+                  <div className="bg-gray-100 dark:bg-gray-800/50 p-4 rounded-full mb-4">
+                    <Search className="w-8 h-8 text-gray-400" />
+                  </div>
+                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                    No workflows found
+                  </h3>
+                  <p className="text-gray-500 dark:text-gray-400 mt-1 max-w-sm">
+                    We couldn't find any workflows matching "{searchQuery}". Try
+                    adjusting your search terms.
+                  </p>
+                </div>
               )}
             </div>
           </div>
