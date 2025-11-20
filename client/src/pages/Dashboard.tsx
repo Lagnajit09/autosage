@@ -4,12 +4,12 @@ import TopNav from "@/components/Dashboard/TopNav";
 import LeftNav from "@/components/LeftNav";
 import { SidebarProvider } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
-import { 
-  ProBanner, 
-  AutobotBanner 
-} from "@/components/Dashboard/Banners";
+import { ProBanner, AutobotBanner } from "@/components/Dashboard/Banners";
 import { StatsOverview } from "@/components/Dashboard/StatsOverview";
-import { ExecutionRow, RecentItemCard } from "@/components/Dashboard/RecentActions";
+import {
+  ExecutionRow,
+  RecentItemCard,
+} from "@/components/Dashboard/RecentActions";
 
 const Dashboard = () => {
   // Dynamic Welcome Message
@@ -36,9 +36,24 @@ const Dashboard = () => {
   };
 
   const recentWorkflows = [
-    { title: "Data Scraper Pro", type: "workflow" as const, date: "2 hours ago", status: "active" as const },
-    { title: "Email Automator", type: "workflow" as const, date: "1 day ago", status: "active" as const },
-    { title: "Report Generator", type: "workflow" as const, date: "3 days ago", status: "draft" as const },
+    {
+      title: "Data Scraper Pro",
+      type: "workflow" as const,
+      date: "2 hours ago",
+      status: "active" as const,
+    },
+    {
+      title: "Email Automator",
+      type: "workflow" as const,
+      date: "1 day ago",
+      status: "active" as const,
+    },
+    {
+      title: "Report Generator",
+      type: "workflow" as const,
+      date: "3 days ago",
+      status: "draft" as const,
+    },
   ];
 
   const recentScripts = [
@@ -48,32 +63,55 @@ const Dashboard = () => {
   ];
 
   const recentExecutions = [
-    { name: "Data Scraper Pro", status: "success" as const, time: "10 mins ago", duration: "45s" },
-    { name: "Email Automator", status: "failed" as const, time: "1 hour ago", duration: "12s" },
-    { name: "Image Resizer", status: "success" as const, time: "3 hours ago", duration: "1.2m" },
-    { name: "Backup DB", status: "running" as const, time: "Just now", duration: "5s" },
+    {
+      name: "Data Scraper Pro",
+      status: "success" as const,
+      time: "10 mins ago",
+      duration: "45s",
+    },
+    {
+      name: "Email Automator",
+      status: "failed" as const,
+      time: "1 hour ago",
+      duration: "12s",
+    },
+    {
+      name: "Image Resizer",
+      status: "success" as const,
+      time: "3 hours ago",
+      duration: "1.2m",
+    },
+    {
+      name: "Backup DB",
+      status: "running" as const,
+      time: "Just now",
+      duration: "5s",
+    },
   ];
 
   return (
     <SidebarProvider>
-      <div className="flex w-full h-screen bg-gray-100 dark:bg-workflow-void/95 overflow-hidden">
+      <div className="flex w-full h-screen bg-gray-100 dark:bg-workflow-void/90 overflow-hidden">
         <DashboardSidebar />
-        
+
         <div className="flex-1 flex flex-col h-full overflow-hidden">
           <TopNav />
-          
+
           <main className="flex-1 overflow-y-auto p-6">
             <div className="max-w-7xl mx-auto">
               {/* Header */}
               <div className="mb-8">
-                <h1 className="text-3xl font-bold text-gray-900 dark:text-white">{welcomeMessage}</h1>
-                <p className="text-gray-500 dark:text-gray-400 mt-1">Here's what's happening with your automations today.</p>
+                <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
+                  {welcomeMessage}
+                </h1>
+                <p className="text-gray-500 dark:text-gray-400 mt-1">
+                  Here's what's happening with your automations today.
+                </p>
               </div>
 
               <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
                 {/* Main Content Area */}
                 <div className="lg:col-span-3 space-y-8">
-                  
                   {/* Stats Overview */}
                   <StatsOverview stats={stats} />
 
@@ -82,8 +120,15 @@ const Dashboard = () => {
                     {/* Recent Workflows */}
                     <div className="space-y-4">
                       <div className="flex items-center justify-between">
-                        <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Recent Workflows</h2>
-                        <Button variant="link" className="text-blue-600 dark:text-blue-400 p-0 h-auto">View All</Button>
+                        <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
+                          Recent Workflows
+                        </h2>
+                        <Button
+                          variant="link"
+                          className="text-blue-600 dark:text-blue-400 p-0 h-auto"
+                        >
+                          View All
+                        </Button>
                       </div>
                       <div className="space-y-3">
                         {recentWorkflows.map((item, i) => (
@@ -95,8 +140,15 @@ const Dashboard = () => {
                     {/* Recent Scripts */}
                     <div className="space-y-4">
                       <div className="flex items-center justify-between">
-                        <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Recent Scripts</h2>
-                        <Button variant="link" className="text-blue-600 dark:text-blue-400 p-0 h-auto">View All</Button>
+                        <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
+                          Recent Scripts
+                        </h2>
+                        <Button
+                          variant="link"
+                          className="text-blue-600 dark:text-blue-400 p-0 h-auto"
+                        >
+                          View All
+                        </Button>
                       </div>
                       <div className="space-y-3">
                         {recentScripts.map((item, i) => (
@@ -109,8 +161,12 @@ const Dashboard = () => {
                   {/* Recent Executions */}
                   <div className="bg-white dark:bg-gray-800/40 rounded-xl border border-gray-200 dark:border-gray-700/50 p-6">
                     <div className="flex items-center justify-between mb-4">
-                      <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Recent Executions</h2>
-                      <Button variant="outline" size="sm">View Logs</Button>
+                      <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
+                        Recent Executions
+                      </h2>
+                      <Button variant="outline" size="sm">
+                        View Logs
+                      </Button>
                     </div>
                     <div className="space-y-1">
                       {recentExecutions.map((exec, i) => (
@@ -118,7 +174,6 @@ const Dashboard = () => {
                       ))}
                     </div>
                   </div>
-
                 </div>
 
                 {/* Right Sidebar / Banners */}

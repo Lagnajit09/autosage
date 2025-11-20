@@ -145,7 +145,7 @@ export const NavItems = ({ mobile = false }: { mobile?: boolean }) => {
 
 const LeftNav = () => {
   return (
-    <div className="hidden md:flex flex-col w-[4%] h-screen bg-light-tertiary dark:bg-bg-card/90 px-4 py-4 space-y-4 justify-between">
+    <div className="hidden md:flex flex-col w-[4%] h-screen bg-gray-50 dark:bg-bg-card/90 px-4 py-4 space-y-4 justify-between">
       <NavItems />
     </div>
   );
@@ -167,7 +167,7 @@ const ToolTipIcon = ({
       <TooltipTrigger asChild>
         <Button
           variant="outline"
-          className="bg-[#a768d0]/30 hover:bg-[#a768d0]/20 dark:bg-bg-tertiary/50 dark:hover:bg-bg-tertiary/70 rounded-lg p-2 dark:border-none dark:outline-none w-full"
+          className="bg-[#a768d0]/30 hover:bg-[#a768d0]/20 dark:bg-bg-tertiary/50 dark:hover:bg-bg-tertiary/70 dark:hover:text-gray-100 rounded-lg p-2 dark:border-none dark:outline-none w-full"
           onClick={onClick}
         >
           {icon}

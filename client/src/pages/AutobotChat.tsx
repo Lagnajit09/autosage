@@ -6,7 +6,7 @@ import { SidebarProvider } from "@/components/ui/sidebar";
 const AutobotChat = () => {
   return (
     <SidebarProvider>
-      <div className="flex w-full h-screen bg-gray-300/60 dark:bg-workflow-void/90">
+      <div className="flex w-full h-screen bg-gray-200 dark:bg-workflow-void/90">
         <LeftNav />
         <History />
         <Interface />
