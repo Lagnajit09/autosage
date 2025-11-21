@@ -17,6 +17,7 @@ import "./App.css";
 import { ThemeProvider } from "./provider/theme-provider";
 import AutobotChat from "./pages/AutobotChat";
 import Workflows from "./pages/Workflows";
+import Templates from "./pages/Templates";
 
 const queryClient = new QueryClient();
 
@@ -35,6 +36,7 @@ const App = () => (
               <Route element={<ProtectedRoute />}>
                 <Route path="/workflow" element={<Workflow />} />
                 <Route path="/workflows" element={<Workflows />} />
+                <Route path="/templates" element={<Templates />} />
                 <Route path="/dashboard" element={<Dashboard />} />
                 <Route path="/code-editor" element={<CodeEditor />} />
                 <Route path="/raw/:id" element={<ScriptViewer />} />
