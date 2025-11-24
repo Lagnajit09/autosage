@@ -10,7 +10,7 @@ interface AutobotIconProps extends React.SVGProps<SVGSVGElement> {
 const AutobotIcon = React.forwardRef<SVGSVGElement, AutobotIconProps>(
   ({ dark = false, size = 20, className, ...props }, ref) => {
     const { isDark } = useTheme();
-    const src = isDark ? "/autobot-dark.svg" : "/autobot-light.svg";
+    const src = dark || isDark ? "/autobot-dark.svg" : "/autobot-light.svg";
 
     return (
       <svg

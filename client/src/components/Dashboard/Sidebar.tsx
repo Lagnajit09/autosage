@@ -29,9 +29,9 @@ interface NavItem {
 const navItems: NavItem[] = [
   { icon: LayoutGrid, label: "Dashboard", route: "/dashboard" },
   { icon: Workflow, label: "All Workflows", route: "/workflows" },
-  { icon: Code2, label: "Editor", route: "/editor" },
-  { icon: AutobotIcon, label: "Autobot", route: "/ai/autobot" },
   { icon: ListPlus, label: "Templates", route: "/templates" },
+  { icon: Code2, label: "Editor", route: "/code-editor" },
+  { icon: AutobotIcon, label: "Autobot", route: "/ai/autobot" },
 ];
 
 export const DashboardSidebar = () => {
@@ -66,7 +66,7 @@ export const DashboardSidebar = () => {
                       : "text-gray-700 dark:text-gray-200 hover:bg-[#a768d0]/20 dark:hover:bg-bg-tertiary/50"
                   }`}
                 >
-                  <item.icon className="w-5 h-5" />
+                  <item.icon className="w-5 h-5" size={18} />
                   <span className="text-sm font-medium">{item.label}</span>
                 </SidebarMenuButton>
               </SidebarMenuItem>

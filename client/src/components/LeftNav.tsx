@@ -4,6 +4,9 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import {
+  Code2Icon,
+  CodeSquare,
+  CodeXml,
   Home,
   ListPlus,
   Moon,
@@ -42,6 +45,13 @@ export const NavItems = ({ mobile = false }: { mobile?: boolean }) => {
       ),
       label: "Templates",
       onClick: () => navigate("/templates"),
+    },
+    {
+      icon: (
+        <CodeXml className={cn("w-10 h-10", mobile ? "w-5 h-5 mr-2" : "")} />
+      ),
+      label: "Editor",
+      onClick: () => navigate("/code-editor"),
     },
     {
       icon: (

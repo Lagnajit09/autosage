@@ -1,46 +1,37 @@
 import { useState, useEffect } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
-import {
-  ArrowLeft,
-  Save,
-  Play,
-  File,
-  Folder,
-  Trash2,
-  Pencil,
-  FilePlus,
-} from "lucide-react";
+import { useSearchParams } from "react-router-dom";
+import { Save, File, X, Menu, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import {
-  ContextMenu,
-  ContextMenuContent,
-  ContextMenuItem,
-  ContextMenuSeparator,
-  ContextMenuTrigger,
-} from "@/components/ui/context-menu";
 import { ScriptFile, ScriptLanguage } from "@/utils/types";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
-import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import Editor, { OnMount } from "@monaco-editor/react";
-import AIScriptGenerator from "@/components/AIScriptGenerator";
 import GenieButton from "@/components/GenieButton";
+import LeftNav from "@/components/LeftNav";
+import { useTheme } from "@/provider/theme-provider";
+import { cn } from "@/lib/utils";
+import {
+  SidebarProvider,
+  SidebarInset,
+  SidebarTrigger,
+} from "@/components/ui/sidebar";
+import { FileExplorerSidebar } from "@/components/CodeEditor/FileExplorerSidebar";
+import { AIScriptGeneratorSidebar } from "@/components/CodeEditor/AIScriptGeneratorSidebar";
+import { useToast } from "@/hooks/use-toast";
 
 const CodeEditor = () => {
-  const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const scriptType = searchParams.get("type") || "python";
-  //   const nodeId = searchParams.get("nodeId");
+  const { isDark } = useTheme();
+  const { toast } = useToast();
 
   const [currentFile, setCurrentFile] = useState<ScriptFile | null>(null);
   const [files, setFiles] = useState<ScriptFile[]>([]);
+  const [openTabs, setOpenTabs] = useState<ScriptFile[]>([]);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
-  const [renamingFileId, setRenamingFileId] = useState<string | null>(null);
-  const [newFileName, setNewFileName] = useState("");
   const [isAISidebarOpen, setIsAISidebarOpen] = useState(false);
+
+  // Inline File Operation State
+  const [isCreatingFile, setIsCreatingFile] = useState(false);
+  const [renamingFileId, setRenamingFileId] = useState<string | null>(null);
 
   const getLanguageInfo = (
     type: string
@@ -74,11 +65,29 @@ const CodeEditor = () => {
     }
   };
 
+  const getFileIcon = (filename: string) => {
+    const ext = filename.split(".").pop()?.toLowerCase() || "";
+    const iconClass = "w-4 h-4";
+    switch (ext) {
+      case "py":
+        return <File className={cn(iconClass, "text-blue-500")} />;
+      case "js":
+        return <File className={cn(iconClass, "text-yellow-500")} />;
+      case "sh":
+        return <File className={cn(iconClass, "text-green-500")} />;
+      case "ps1":
+        return <File className={cn(iconClass, "text-cyan-500")} />;
+      default:
+        return <File className={cn(iconClass, "text-gray-500")} />;
+    }
+  };
+
   useEffect(() => {
     // Load saved files from localStorage
     const savedFiles = localStorage.getItem("scriptFiles");
+    let loadedFiles: ScriptFile[] = [];
     if (savedFiles) {
-      const parsedFiles = JSON.parse(savedFiles).map(
+      loadedFiles = JSON.parse(savedFiles).map(
         (
           file: Omit<ScriptFile, "lastModified"> & { lastModified: string }
         ) => ({
@@ -86,28 +95,26 @@ const CodeEditor = () => {
           lastModified: new Date(file.lastModified),
         })
       );
-      setFiles(parsedFiles);
+      setFiles(loadedFiles);
     }
 
-    // Create or load current file
-    const langInfo = getLanguageInfo(scriptType);
-    const defaultFileName = `script.${langInfo.extension}`;
+    // Load open tabs and current file
+    const savedOpenTabs = localStorage.getItem("openTabs");
+    const savedCurrentFileId = localStorage.getItem("currentFileId");
 
-    const existingFile = files.find((f) => f.language === langInfo.language);
-    if (existingFile) {
-      setCurrentFile(existingFile);
-    } else {
-      const newFile: ScriptFile = {
-        id: `${Date.now()}-${Math.random()}`,
-        name: defaultFileName,
-        content: langInfo.template,
-        language: langInfo.language,
-        lastModified: new Date(),
-        source: "editor",
-      };
-      setCurrentFile(newFile);
+    if (savedOpenTabs) {
+      const tabIds = JSON.parse(savedOpenTabs);
+      const tabs = loadedFiles.filter((f) => tabIds.includes(f.id));
+      setOpenTabs(tabs);
+
+      if (savedCurrentFileId) {
+        const activeFile = tabs.find((f) => f.id === savedCurrentFileId);
+        if (activeFile) {
+          setCurrentFile(activeFile);
+        }
+      }
     }
-  }, [scriptType]);
+  }, []);
 
   const handleGeneratedScript = (script: string, filename: string) => {
     const newFile: ScriptFile = {
@@ -122,7 +129,21 @@ const CodeEditor = () => {
     const updatedFiles = [...files, newFile];
     setFiles(updatedFiles);
     setCurrentFile(newFile);
+
+    // Add to open tabs if not already open
+    let updatedTabs = openTabs;
+    if (!openTabs.find((tab) => tab.id === newFile.id)) {
+      updatedTabs = [...openTabs, newFile];
+      setOpenTabs(updatedTabs);
+    }
+
     localStorage.setItem("scriptFiles", JSON.stringify(updatedFiles));
+    localStorage.setItem(
+      "openTabs",
+      JSON.stringify(updatedTabs.map((t) => t.id))
+    );
+    localStorage.setItem("currentFileId", newFile.id);
+
     setHasUnsavedChanges(false);
     setIsAISidebarOpen(false);
   };
@@ -135,7 +156,6 @@ const CodeEditor = () => {
         provideCompletionItems: () => {
           const suggestions = [];
 
-          // Common suggestions based on language
           if (currentFile?.language === "python") {
             suggestions.push(
               {
@@ -224,7 +244,7 @@ const CodeEditor = () => {
       }
     );
 
-    // Configure editor settings for better code completion
+    // Configure editor settings
     editor.updateOptions({
       suggestOnTriggerCharacters: true,
       acceptSuggestionOnEnter: "on",
@@ -251,12 +271,15 @@ const CodeEditor = () => {
       ? files.map((f) => (f.id === currentFile.id ? updatedFile : f))
       : [...files, updatedFile];
 
+    const updatedTabs = openTabs.map((tab) =>
+      tab.id === currentFile.id ? updatedFile : tab
+    );
+
     setFiles(updatedFiles);
     setCurrentFile(updatedFile);
+    setOpenTabs(updatedTabs);
     localStorage.setItem("scriptFiles", JSON.stringify(updatedFiles));
     setHasUnsavedChanges(false);
-
-    console.log("File saved:", updatedFile);
   };
 
   const deleteScript = (fileId: string) => {
@@ -264,43 +287,23 @@ const CodeEditor = () => {
     setFiles(updatedFiles);
     localStorage.setItem("scriptFiles", JSON.stringify(updatedFiles));
 
+    // Remove from tabs if open
+    const updatedTabs = openTabs.filter((tab) => tab.id !== fileId);
+    setOpenTabs(updatedTabs);
+    localStorage.setItem(
+      "openTabs",
+      JSON.stringify(updatedTabs.map((t) => t.id))
+    );
+
     if (currentFile?.id === fileId) {
-      setCurrentFile(null);
+      const newActiveTab = updatedTabs.length > 0 ? updatedTabs[0] : null;
+      setCurrentFile(newActiveTab);
+      localStorage.setItem(
+        "currentFileId",
+        newActiveTab ? newActiveTab.id : ""
+      );
       setHasUnsavedChanges(false);
     }
-  };
-
-  const runScript = (file: ScriptFile) => {
-    console.log(`Running script: ${file.name}`);
-    console.log("Script content:", file.content);
-    // Here you could implement actual script execution logic
-  };
-
-  const startRename = (file: ScriptFile) => {
-    setRenamingFileId(file.id);
-    setNewFileName(file.name);
-  };
-
-  const confirmRename = (fileId: string) => {
-    if (!newFileName.trim()) return;
-
-    const updatedFiles = files.map((f) =>
-      f.id === fileId ? { ...f, name: newFileName.trim() } : f
-    );
-    setFiles(updatedFiles);
-    localStorage.setItem("scriptFiles", JSON.stringify(updatedFiles));
-
-    if (currentFile?.id === fileId) {
-      setCurrentFile({ ...currentFile, name: newFileName.trim() });
-    }
-
-    setRenamingFileId(null);
-    setNewFileName("");
-  };
-
-  const cancelRename = () => {
-    setRenamingFileId(null);
-    setNewFileName("");
   };
 
   const handleEditorChange = (value: string | undefined) => {
@@ -310,18 +313,129 @@ const CodeEditor = () => {
     }
   };
 
-  const createNewFile = () => {
-    const langInfo = getLanguageInfo(scriptType);
+  const startCreateFile = () => {
+    setIsCreatingFile(true);
+  };
+
+  const handleCreateSubmit = (name: string) => {
+    const trimmedName = name.trim();
+
+    if (!trimmedName) {
+      toast({
+        variant: "destructive",
+        title: "Invalid Filename",
+        description: "Filename cannot be empty.",
+      });
+      return;
+    }
+
+    const ext = trimmedName.split(".").pop()?.toLowerCase();
+    const validExtensions = ["py", "js", "sh", "ps1"];
+
+    if (!ext || !validExtensions.includes(ext)) {
+      toast({
+        variant: "destructive",
+        title: "Invalid Extension",
+        description: "Supported extensions: .py, .js, .sh, .ps1",
+      });
+      return;
+    }
+
+    if (files.some((f) => f.name.toLowerCase() === trimmedName.toLowerCase())) {
+      toast({
+        variant: "destructive",
+        title: "Duplicate Filename",
+        description: "A file with this name already exists.",
+      });
+      return;
+    }
+
+    // Validation passed, create file
+    const langInfo = getLanguageInfo(getLanguageFromExtension(trimmedName));
     const newFile: ScriptFile = {
       id: `${Date.now()}-${Math.random()}`,
-      name: `new-script.${langInfo.extension}`,
+      name: trimmedName,
       content: langInfo.template,
       language: langInfo.language,
       lastModified: new Date(),
       source: "editor",
     };
+
+    const updatedFiles = [...files, newFile];
+    setFiles(updatedFiles);
     setCurrentFile(newFile);
+
+    // Add to tabs
+    let updatedTabs = openTabs;
+    if (!openTabs.find((tab) => tab.id === newFile.id)) {
+      updatedTabs = [...openTabs, newFile];
+      setOpenTabs(updatedTabs);
+    }
+
+    localStorage.setItem("scriptFiles", JSON.stringify(updatedFiles));
+    localStorage.setItem(
+      "openTabs",
+      JSON.stringify(updatedTabs.map((t) => t.id))
+    );
+    localStorage.setItem("currentFileId", newFile.id);
+
     setHasUnsavedChanges(true);
+    setIsCreatingFile(false);
+  };
+
+  const handleRenameSubmit = (id: string, name: string) => {
+    const trimmedName = name.trim();
+
+    if (!trimmedName) {
+      toast({
+        variant: "destructive",
+        title: "Invalid Filename",
+        description: "Filename cannot be empty.",
+      });
+      return;
+    }
+
+    const ext = trimmedName.split(".").pop()?.toLowerCase();
+    const validExtensions = ["py", "js", "sh", "ps1"];
+
+    if (!ext || !validExtensions.includes(ext)) {
+      toast({
+        variant: "destructive",
+        title: "Invalid Extension",
+        description: "Supported extensions: .py, .js, .sh, .ps1",
+      });
+      return;
+    }
+
+    if (
+      files.some(
+        (f) => f.id !== id && f.name.toLowerCase() === trimmedName.toLowerCase()
+      )
+    ) {
+      toast({
+        variant: "destructive",
+        title: "Duplicate Filename",
+        description: "A file with this name already exists.",
+      });
+      return;
+    }
+
+    const updatedFiles = files.map((f) =>
+      f.id === id ? { ...f, name: trimmedName } : f
+    );
+    setFiles(updatedFiles);
+    localStorage.setItem("scriptFiles", JSON.stringify(updatedFiles));
+
+    const updatedTabs = openTabs.map((tab) =>
+      tab.id === id ? { ...tab, name: trimmedName } : tab
+    );
+    setOpenTabs(updatedTabs);
+
+    if (currentFile?.id === id) {
+      setCurrentFile({ ...currentFile, name: trimmedName });
+    }
+
+    setRenamingFileId(null);
   };
 
   const getLanguageFromExtension = (filename: string): ScriptLanguage => {
@@ -342,218 +456,222 @@ const CodeEditor = () => {
 
   const selectFile = (file: ScriptFile) => {
     const language = getLanguageFromExtension(file.name);
-    setCurrentFile({ ...file, language });
+    const fileWithLanguage = { ...file, language };
+    setCurrentFile(fileWithLanguage);
+
+    // Add to tabs if not already open
+    let updatedTabs = openTabs;
+    if (!openTabs.find((tab) => tab.id === file.id)) {
+      updatedTabs = [...openTabs, fileWithLanguage];
+      setOpenTabs(updatedTabs);
+    }
+
+    localStorage.setItem(
+      "openTabs",
+      JSON.stringify(updatedTabs.map((t) => t.id))
+    );
+    localStorage.setItem("currentFileId", file.id);
+
     setHasUnsavedChanges(false);
   };
 
+  const closeTab = (fileId: string, event?: React.MouseEvent) => {
+    event?.stopPropagation();
+
+    const updatedTabs = openTabs.filter((tab) => tab.id !== fileId);
+    setOpenTabs(updatedTabs);
+    localStorage.setItem(
+      "openTabs",
+      JSON.stringify(updatedTabs.map((t) => t.id))
+    );
+
+    if (currentFile?.id === fileId) {
+      const currentIndex = openTabs.findIndex((tab) => tab.id === fileId);
+      const newActiveTab =
+        updatedTabs.length > 0
+          ? updatedTabs[Math.max(0, currentIndex - 1)]
+          : null;
+      setCurrentFile(newActiveTab);
+      localStorage.setItem(
+        "currentFileId",
+        newActiveTab ? newActiveTab.id : ""
+      );
+      setHasUnsavedChanges(false);
+    }
+  };
+
+  const duplicateFile = (file: ScriptFile) => {
+    const newFile: ScriptFile = {
+      ...file,
+      id: `${Date.now()}-${Math.random()}`,
+      name: `${file.name.replace(/\.[^/.]+$/, "")}_copy.${file.name
+        .split(".")
+        .pop()}`,
+      lastModified: new Date(),
+    };
+    const updatedFiles = [...files, newFile];
+    setFiles(updatedFiles);
+    localStorage.setItem("scriptFiles", JSON.stringify(updatedFiles));
+  };
+
+  const downloadFile = (file: ScriptFile) => {
+    const blob = new Blob([file.content], { type: "text/plain" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = file.name;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-white">
-      {/* Header */}
-      <div className="h-12 bg-slate-800/80 backdrop-blur-sm border-b border-slate-700/50 flex items-center justify-between px-4">
-        <div className="flex items-center space-x-3">
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => navigate("/workflow")}
-            className="text-slate-400 hover:text-gray-800"
-          >
-            <ArrowLeft size={16} className="mr-1" />
-            Back to Workflow
-          </Button>
-          <div className="w-px h-5 bg-slate-600"></div>
-          <div className="flex items-center space-x-2">
-            <File size={16} className="text-blue-400" />
-            <span className="text-sm font-medium">
-              {currentFile?.name || "Untitled"}
-            </span>
-            {hasUnsavedChanges && (
-              <div className="w-1.5 h-1.5 bg-orange-500 rounded-full"></div>
-            )}
-          </div>
-        </div>
+    <SidebarProvider>
+      <div className="flex w-full h-screen bg-gray-200 dark:bg-workflow-void/90 overflow-hidden">
+        <LeftNav />
 
-        <div className="flex items-center space-x-2">
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={saveFile}
-            className={`flex items-center ${
-              hasUnsavedChanges
-                ? "text-blue-400 hover:text-blue-800"
-                : "text-slate-400 hover:text-gray-800"
-            }`}
-          >
-            <Save size={14} />
-            <span className="text-sm font-medium">Save</span>
-          </Button>
-        </div>
-      </div>
+        <FileExplorerSidebar
+          files={files}
+          currentFile={currentFile}
+          onSelectFile={selectFile}
+          onCreateFile={startCreateFile}
+          onDeleteFile={deleteScript}
+          onRenameFile={(file) => setRenamingFileId(file.id)}
+          onDuplicateFile={duplicateFile}
+          onDownloadFile={downloadFile}
+          getFileIcon={getFileIcon}
+          isCreatingFile={isCreatingFile}
+          renamingFileId={renamingFileId}
+          onCreateSubmit={handleCreateSubmit}
+          onRenameSubmit={handleRenameSubmit}
+          onCancelCreate={() => setIsCreatingFile(false)}
+          onCancelRename={() => setRenamingFileId(null)}
+        />
 
-      <div className="h-[calc(100vh-3rem)] flex">
-        {/* File Explorer */}
-        <div className="w-56 bg-slate-800/60 backdrop-blur-xl border-r border-slate-700/50 p-3">
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="text-xs font-semibold text-slate-300 flex items-center">
-              <Folder size={12} className="mr-1" />
-              Scripts
-            </h3>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={createNewFile}
-                  className="text-slate-400 hover:text-gray-800"
-                >
-                  <FilePlus
-                    size={14}
-                    className="text-blue-400 hover:text-blue-800"
+        <SidebarInset className="flex flex-row overflow-hidden">
+          <div className="flex-1 flex flex-col min-w-0 bg-white dark:bg-black/90">
+            {/* Page Header */}
+            <div className="bg-gray-50 dark:bg-black/10 border-b border-gray-200 dark:border-gray-800 px-4 py-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <SidebarTrigger className="md:hidden" />
+                  <div>
+                    <h1 className="text-lg font-semibold text-gray-900 dark:text-white tracking-tight">
+                      Code Editor
+                    </h1>
+                  </div>
+                </div>
+
+                <div className="flex items-center space-x-2">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={saveFile}
+                    disabled={!hasUnsavedChanges}
+                    className={cn(
+                      "flex items-center space-x-1",
+                      hasUnsavedChanges
+                        ? "text-purple-600 dark:text-purple-400 hover:text-purple-700 dark:hover:text-purple-300 hover:bg-gray-700/10 dark:hover:bg-gray-500/20"
+                        : "text-gray-700 dark:text-gray-300"
+                    )}
+                  >
+                    <Save size={16} />
+                    <span className="hidden sm:inline">Save</span>
+                  </Button>
+                  <GenieButton
+                    onClick={() => setIsAISidebarOpen(!isAISidebarOpen)}
                   />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>Create new script</TooltipContent>
-            </Tooltip>
-          </div>
-
-          <div className="space-y-1">
-            {files.map((file) => (
-              <ContextMenu key={file.id}>
-                <ContextMenuTrigger asChild>
-                  {renamingFileId === file.id ? (
-                    <div className="px-2 py-1.5 text-xs rounded-md bg-slate-700/50">
-                      <input
-                        type="text"
-                        value={newFileName}
-                        onChange={(e) => setNewFileName(e.target.value)}
-                        onBlur={() => confirmRename(file.id)}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter") confirmRename(file.id);
-                          if (e.key === "Escape") cancelRename();
-                        }}
-                        className="w-full bg-transparent border-none outline-none text-white"
-                        autoFocus
-                        onFocus={(e) => e.target.select()}
-                      />
-                    </div>
-                  ) : (
-                    <button
-                      onClick={() => selectFile(file)}
-                      className={`w-full text-left px-2 py-1.5 text-xs rounded-md transition-colors duration-200 flex items-center space-x-2 ${
-                        currentFile?.id === file.id
-                          ? "bg-blue-600/30 text-blue-300 border border-blue-500/30"
-                          : "text-slate-400 hover:text-white hover:bg-slate-700/50"
-                      }`}
-                    >
-                      <File size={12} />
-                      <span className="truncate">{file.name}</span>
-                      {/* <span className="text-xs text-slate-500">
-                        {file.source === "upload" ? "↑" : "✏️"}
-                      </span> */}
-                    </button>
-                  )}
-                </ContextMenuTrigger>
-                <ContextMenuContent className="w-48">
-                  <ContextMenuItem
-                    onClick={() => runScript(file)}
-                    className="flex items-center space-x-2"
-                  >
-                    <Play size={14} />
-                    <span>Run Script</span>
-                  </ContextMenuItem>
-                  <ContextMenuItem
-                    onClick={() => startRename(file)}
-                    className="flex items-center space-x-2"
-                  >
-                    <Pencil size={14} />
-                    <span>Rename</span>
-                  </ContextMenuItem>
-                  <ContextMenuSeparator />
-                  <ContextMenuItem
-                    onClick={() => deleteScript(file.id)}
-                    className="flex items-center space-x-2 text-red-400 focus:text-red-300"
-                  >
-                    <Trash2 size={14} />
-                    <span>Delete Script</span>
-                  </ContextMenuItem>
-                </ContextMenuContent>
-              </ContextMenu>
-            ))}
-
-            {files.length === 0 && (
-              <div className="text-xs text-slate-500 text-center py-4">
-                No scripts yet
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* AI Script Generator */}
-        <Sheet open={isAISidebarOpen} onOpenChange={setIsAISidebarOpen}>
-          <SheetTrigger asChild>
-            <GenieButton onClick={() => setIsAISidebarOpen(true)} />
-          </SheetTrigger>
-          <SheetContent
-            side="right"
-            className="w-96 bg-slate-900/95 border-slate-700/50 p-0"
-          >
-            <AIScriptGenerator
-              scriptType={scriptType}
-              onGeneratedScript={handleGeneratedScript}
-            />
-          </SheetContent>
-        </Sheet>
-
-        {/* Editor */}
-        <div className="flex-1 relative">
-          {currentFile ? (
-            <Editor
-              height="100%"
-              language={currentFile.language}
-              value={currentFile.content}
-              onChange={handleEditorChange}
-              theme="vs-dark"
-              onMount={configureMonacoEditor}
-              options={{
-                minimap: { enabled: true },
-                fontSize: 13,
-                lineNumbers: "on",
-                roundedSelection: false,
-                scrollBeyondLastLine: false,
-                automaticLayout: true,
-                tabSize: 2,
-                insertSpaces: true,
-                wordWrap: "on",
-                formatOnPaste: true,
-                formatOnType: true,
-                suggestOnTriggerCharacters: true,
-                acceptSuggestionOnEnter: "on",
-                tabCompletion: "on",
-                wordBasedSuggestions: "matchingDocuments",
-                parameterHints: { enabled: true },
-                autoClosingBrackets: "always",
-                autoClosingQuotes: "always",
-                autoIndent: "advanced",
-              }}
-            />
-          ) : (
-            <div className="flex items-center justify-center h-full">
-              <div className="text-center">
-                <File size={48} className="text-slate-600 mx-auto mb-3" />
-                <p className="text-slate-400 text-sm mb-2">No file selected</p>
-                <Button
-                  onClick={createNewFile}
-                  variant="outline"
-                  size="sm"
-                  className="text-slate-700 hover:text-slate-900"
-                >
-                  Create New Script
-                </Button>
+                </div>
               </div>
             </div>
-          )}
-        </div>
+
+            {/* Tabs */}
+            {openTabs.length > 0 && (
+              <div className="flex items-center bg-gray-50 dark:bg-black/10 border-b border-gray-200 dark:border-gray-800 overflow-x-auto no-scrollbar">
+                {openTabs.map((tab) => (
+                  <button
+                    key={tab.id}
+                    onClick={() => selectFile(tab)}
+                    className={cn(
+                      "flex items-center space-x-2 px-4 py-2.5 border-r border-gray-200 dark:border-gray-800 transition-colors min-w-[120px] max-w-[200px] group relative",
+                      currentFile?.id === tab.id
+                        ? "bg-white dark:bg-gray-900 text-gray-900 dark:text-white border-t-2 border-t-purple-500"
+                        : "bg-gray-50 dark:bg-gray-900/50 text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"
+                    )}
+                  >
+                    {getFileIcon(tab.name)}
+                    <span className="text-xs font-medium truncate flex-1 text-left">
+                      {tab.name}
+                    </span>
+                    <div
+                      onClick={(e) => closeTab(tab.id, e)}
+                      className="opacity-0 group-hover:opacity-100 hover:bg-gray-200 dark:hover:bg-gray-700 rounded p-0.5 transition-opacity"
+                    >
+                      <X size={14} />
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {/* Monaco Editor */}
+            <div className="flex-1 relative">
+              {currentFile ? (
+                <Editor
+                  height="100%"
+                  language={currentFile.language}
+                  value={currentFile.content}
+                  onChange={handleEditorChange}
+                  theme={isDark ? "vs-dark" : "vs-light"}
+                  onMount={configureMonacoEditor}
+                  options={{
+                    minimap: { enabled: true },
+                    fontSize: 14,
+                    lineHeight: 1.6,
+                    fontFamily: "'Monaco', 'Menlo', 'Consolas', 'monospace'",
+                    lineNumbers: "on",
+                    roundedSelection: false,
+                    scrollBeyondLastLine: false,
+                    automaticLayout: true,
+                    tabSize: 2,
+                    insertSpaces: true,
+                    wordWrap: "on",
+                    formatOnPaste: true,
+                    formatOnType: true,
+                    padding: { top: 16, bottom: 16 },
+                  }}
+                />
+              ) : (
+                <div className="flex items-center justify-center h-full bg-gray-100 dark:bg-gray-900/50">
+                  <div className="text-center">
+                    <File
+                      size={48}
+                      className="text-gray-300 dark:text-gray-700 mx-auto mb-3"
+                    />
+                    <p className="text-gray-500 dark:text-gray-500 text-sm mb-4">
+                      No file selected
+                    </p>
+                    <Button
+                      onClick={startCreateFile}
+                      variant="outline"
+                      className="text-gray-700 dark:text-gray-300 dark:bg-gray-950 dark:border-gray-950 dark:hover:bg-gray-950/50"
+                    >
+                      Create New Script
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
+          <AIScriptGeneratorSidebar
+            scriptType={scriptType}
+            onGeneratedScript={handleGeneratedScript}
+            isOpen={isAISidebarOpen}
+            onToggle={() => setIsAISidebarOpen(!isAISidebarOpen)}
+          />
+        </SidebarInset>
       </div>
-    </div>
+    </SidebarProvider>
   );
 };
 

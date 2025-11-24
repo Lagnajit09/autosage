@@ -188,24 +188,26 @@ console.log("Script for: ${prompt}");
   };
 
   return (
-    <ScrollArea className="h-full flex flex-col space-y-4 p-4">
+    <ScrollArea className="h-full flex flex-col space-y-4 px-4">
       <div className="flex items-center space-x-2 mb-4">
-        <Wand2 size={20} className="text-purple-400" />
-        <h3 className="text-lg font-semibold text-white">
+        <Wand2 size={20} className="text-purple-500 dark:text-purple-400" />
+        <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
           AI Script Generator
         </h3>
       </div>
 
       {error && (
-        <Alert className="bg-red-900/20 border-red-800/50">
-          <AlertCircle className="h-4 w-4" />
-          <AlertDescription className="text-red-300">{error}</AlertDescription>
+        <Alert className="bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800/50">
+          <AlertCircle className="h-4 w-4 text-red-600 dark:text-red-400" />
+          <AlertDescription className="text-red-700 dark:text-red-300">
+            {error}
+          </AlertDescription>
         </Alert>
       )}
 
-      <Card className="bg-slate-800/60 border-slate-700/50">
+      <Card className="bg-gray-50 dark:bg-gray-800/50 border-gray-200 dark:border-gray-700/50">
         <CardHeader className="pb-3">
-          <CardTitle className="text-sm text-slate-300">
+          <CardTitle className="text-sm text-gray-700 dark:text-gray-300">
             Configure your script
           </CardTitle>
         </CardHeader>
@@ -214,7 +216,7 @@ console.log("Script for: ${prompt}");
             <div>
               <Label
                 htmlFor="language"
-                className="text-xs text-slate-400 mb-2 block"
+                className="text-xs text-gray-600 dark:text-gray-400 mb-2 block"
               >
                 Language
               </Label>
@@ -223,15 +225,15 @@ console.log("Script for: ${prompt}");
                 onValueChange={setSelectedLanguage}
                 disabled={isGenerating}
               >
-                <SelectTrigger className="bg-slate-700/50 border-slate-600/50 text-white">
+                <SelectTrigger className="bg-white dark:bg-gray-700/50 border-gray-200 dark:border-gray-600/50 text-gray-900 dark:text-white">
                   <SelectValue />
                 </SelectTrigger>
-                <SelectContent className="bg-slate-800 border-slate-700">
+                <SelectContent className="bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700">
                   {languages.map((lang) => (
                     <SelectItem
                       key={lang.value}
                       value={lang.value}
-                      className="text-white hover:bg-slate-700"
+                      className="text-gray-900 dark:text-white hover:bg-gray-100 dark:hover:bg-gray-700"
                     >
                       {lang.label}
                     </SelectItem>
@@ -243,7 +245,7 @@ console.log("Script for: ${prompt}");
             <div>
               <Label
                 htmlFor="scriptType"
-                className="text-xs text-slate-400 mb-2 block"
+                className="text-xs text-gray-600 dark:text-gray-400 mb-2 block"
               >
                 Script Type
               </Label>
@@ -252,15 +254,15 @@ console.log("Script for: ${prompt}");
                 onValueChange={setSelectedScriptType}
                 disabled={isGenerating}
               >
-                <SelectTrigger className="bg-slate-700/50 border-slate-600/50 text-white">
+                <SelectTrigger className="bg-white dark:bg-gray-700/50 border-gray-200 dark:border-gray-600/50 text-gray-900 dark:text-white">
                   <SelectValue />
                 </SelectTrigger>
-                <SelectContent className="bg-slate-800 border-slate-700">
+                <SelectContent className="bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700">
                   {scriptTypes.map((type) => (
                     <SelectItem
                       key={type.value}
                       value={type.value}
-                      className="text-white hover:bg-slate-700"
+                      className="text-gray-900 dark:text-white hover:bg-gray-100 dark:hover:bg-gray-700"
                     >
                       {type.label}
                     </SelectItem>
@@ -273,7 +275,7 @@ console.log("Script for: ${prompt}");
           <div>
             <Label
               htmlFor="prompt"
-              className="text-xs text-slate-400 mb-2 block"
+              className="text-xs text-gray-600 dark:text-gray-400 mb-2 block"
             >
               Describe what you want your script to do
             </Label>
@@ -282,11 +284,11 @@ console.log("Script for: ${prompt}");
               placeholder={`e.g., "Create a script that backs up files from one directory to another and logs the operation"`}
               value={prompt}
               onChange={(e) => setPrompt(e.target.value)}
-              className="bg-slate-700/50 border-slate-600/50 text-white placeholder:text-slate-500 min-h-[120px] resize-none"
+              className="bg-white dark:bg-gray-700/50 border-gray-200 dark:border-gray-600/50 text-gray-900 dark:text-white placeholder:text-gray-500 dark:placeholder:text-gray-500 min-h-[120px] resize-none"
               disabled={isGenerating}
               maxLength={1000}
             />
-            <div className="text-xs text-slate-500 mt-1">
+            <div className="text-xs text-gray-500 dark:text-gray-500 mt-1">
               {prompt.length}/1000 characters
             </div>
           </div>
@@ -294,7 +296,7 @@ console.log("Script for: ${prompt}");
           <Button
             onClick={handleGenerate}
             disabled={!prompt.trim() || isGenerating}
-            className="w-full bg-purple-600 hover:bg-purple-700 text-white"
+            className="w-full bg-[#a768d0] hover:bg-[#9556bf] text-white shadow-md shadow-purple-500/20 transition-all hover:shadow-purple-500/40"
           >
             {isGenerating ? (
               <>
@@ -312,13 +314,13 @@ console.log("Script for: ${prompt}");
       </Card>
 
       {generatedScript && (
-        <Card className="bg-slate-800/60 border-slate-700/50 flex-1">
+        <Card className="bg-gray-50 dark:bg-gray-800/50 border-gray-200 dark:border-gray-700/50 flex-1">
           <CardHeader className="pb-3">
             <div className="flex items-center justify-between">
-              <CardTitle className="text-sm text-slate-300">
+              <CardTitle className="text-sm text-gray-700 dark:text-gray-300">
                 Generated Script
                 {isFallback && (
-                  <span className="ml-2 text-xs text-yellow-400">
+                  <span className="ml-2 text-xs text-yellow-600 dark:text-yellow-400">
                     (Fallback)
                   </span>
                 )}
@@ -328,7 +330,7 @@ console.log("Script for: ${prompt}");
                   variant="ghost"
                   size="sm"
                   onClick={handleCopyScript}
-                  className="text-slate-400 hover:text-white h-8 w-8 p-0"
+                  className="text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white h-8 w-8 p-0"
                   title="Copy to clipboard"
                 >
                   <Copy size={14} />
@@ -337,7 +339,7 @@ console.log("Script for: ${prompt}");
                   variant="ghost"
                   size="sm"
                   onClick={handleAddToEditor}
-                  className="text-green-400 hover:text-green-300 h-8 w-8 p-0"
+                  className="text-green-600 dark:text-green-400 hover:text-green-700 dark:hover:text-green-300 h-8 w-8 p-0"
                   title="Add to editor"
                 >
                   <Plus size={14} />
@@ -346,27 +348,29 @@ console.log("Script for: ${prompt}");
             </div>
           </CardHeader>
           <CardContent>
-            <div className="bg-slate-900/50 rounded-md p-3 max-h-[300px] overflow-y-auto">
-              <pre className="text-xs text-slate-300 whitespace-pre-wrap font-mono">
+            <div className="bg-white dark:bg-gray-900/50 rounded-md p-3 max-h-[300px] overflow-y-auto border border-gray-200 dark:border-gray-700/50">
+              <pre className="text-xs text-gray-800 dark:text-gray-300 whitespace-pre-wrap font-mono">
                 {generatedScript}
               </pre>
             </div>
             <div className="mt-3 flex justify-between items-center">
-              <p className="text-xs text-slate-500">
+              <p className="text-xs text-gray-500 dark:text-gray-500">
                 Filename:{" "}
-                <span className="text-slate-400">{generatedFilename}</span>
+                <span className="text-gray-700 dark:text-gray-400">
+                  {generatedFilename}
+                </span>
               </p>
-              <p className="text-xs text-slate-500">
+              <p className="text-xs text-gray-500 dark:text-gray-500">
                 Language:{" "}
-                <span className="text-slate-400 capitalize">
+                <span className="text-gray-700 dark:text-gray-400 capitalize">
                   {selectedLanguage}
                 </span>
               </p>
             </div>
             {isFallback && (
-              <Alert className="mt-3 bg-yellow-900/20 border-yellow-800/50">
-                <AlertCircle className="h-4 w-4" />
-                <AlertDescription className="text-yellow-300 text-xs">
+              <Alert className="mt-3 bg-yellow-50 dark:bg-yellow-900/20 border-yellow-200 dark:border-yellow-800/50">
+                <AlertCircle className="h-4 w-4 text-yellow-600 dark:text-yellow-400" />
+                <AlertDescription className="text-yellow-700 dark:text-yellow-300 text-xs">
                   This is a basic template. AI generation was unavailable.
                 </AlertDescription>
               </Alert>
@@ -375,7 +379,7 @@ console.log("Script for: ${prompt}");
         </Card>
       )}
 
-      <div className="text-xs text-slate-500 mt-auto">
+      <div className="text-xs text-gray-500 dark:text-gray-500 mt-4">
         <p>
           💡 Tip: Be specific about inputs, outputs, and edge cases for better
           AI-generated scripts.
