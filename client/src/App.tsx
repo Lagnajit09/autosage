@@ -18,6 +18,7 @@ import { ThemeProvider } from "./provider/theme-provider";
 import AutobotChat from "./pages/AutobotChat";
 import Workflows from "./pages/Workflows";
 import Templates from "./pages/Templates";
+import Settings from "./pages/Settings";
 
 const queryClient = new QueryClient();
 
@@ -42,6 +43,7 @@ const App = () => (
                 <Route path="/raw/:id" element={<ScriptViewer />} />
                 <Route path="/ai/autobot" element={<AutobotChat />} />
                 <Route path="/ai/autobot/:id" element={<AutobotChat />} />
+                <Route path="/settings" element={<Settings />} />
               </Route>
 
               {/* Public Routes */}

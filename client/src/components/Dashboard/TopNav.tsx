@@ -6,15 +6,8 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { Button } from "@/components/ui/button";
-import {
-  CreditCard,
-  LogOut,
-  Moon,
-  Search,
-  Sun,
-} from "lucide-react";
+import { CreditCard, LogOut, Moon, Search, Sun } from "lucide-react";
 import { useTheme } from "@/provider/theme-provider";
-import { useNavigate } from "react-router-dom";
 import { Input } from "@/components/ui/input";
 import {
   DropdownMenu,
