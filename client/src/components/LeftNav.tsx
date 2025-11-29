@@ -90,7 +90,7 @@ export const NavItems = ({ mobile = false }: { mobile?: boolean }) => {
     {
       icon: <User className={cn("w-10 h-10", mobile ? "w-5 h-5 mr-2" : "")} />,
       label: "Account",
-      onClick: () => navigate("/account"),
+      onClick: () => navigate("/profile"),
     },
   ];
 

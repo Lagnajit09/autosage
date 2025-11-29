@@ -19,6 +19,7 @@ import AutobotChat from "./pages/AutobotChat";
 import Workflows from "./pages/Workflows";
 import Templates from "./pages/Templates";
 import Settings from "./pages/Settings";
+import Profile from "./pages/Profile";
 
 const queryClient = new QueryClient();
 
@@ -44,6 +45,7 @@ const App = () => (
                 <Route path="/ai/autobot" element={<AutobotChat />} />
                 <Route path="/ai/autobot/:id" element={<AutobotChat />} />
                 <Route path="/settings" element={<Settings />} />
+                <Route path="/profile" element={<Profile />} />
               </Route>
 
               {/* Public Routes */}
