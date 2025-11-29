@@ -1,6 +1,8 @@
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { User, Mail, Calendar, Edit } from "lucide-react";
+import { EditProfileModal } from "./EditProfileModal";
 
 interface UserInfoProps {
   user: {
@@ -11,7 +13,15 @@ interface UserInfoProps {
   };
 }
 
-export const UserInfo = ({ user }: UserInfoProps) => {
+export const UserInfo = ({ user: initialUser }: UserInfoProps) => {
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [user, setUser] = useState(initialUser);
+
+  const handleSave = (updatedData: { name: string; email: string }) => {
+    setUser({ ...user, ...updatedData });
+    // In a real app, you would also trigger an API call here
+  };
+
   return (
     <section className="space-y-4">
       <div className="flex items-center gap-2 mb-4">
@@ -43,6 +53,7 @@ export const UserInfo = ({ user }: UserInfoProps) => {
             </div>
             <Button
               variant="outline"
+              onClick={() => setIsModalOpen(true)}
               className="shrink-0 dark:bg-gray-950 dark:border-gray-800 dark:hover:bg-gray-900 dark:text-gray-200"
             >
               <Edit className="w-4 h-4 mr-2" />
@@ -51,6 +62,13 @@ export const UserInfo = ({ user }: UserInfoProps) => {
           </div>
         </CardContent>
       </Card>
+
+      <EditProfileModal
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        user={user}
+        onSave={handleSave}
+      />
     </section>
   );
 };

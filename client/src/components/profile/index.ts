@@ -4,3 +4,4 @@ export { RecentActivity } from "./RecentActivity";
 export { MostUsedWorkflows } from "./MostUsedWorkflows";
 export { PlanSubscription } from "./PlanSubscription";
 export { QuickLinks } from "./QuickLinks";
+export { EditProfileModal } from "./EditProfileModal";
