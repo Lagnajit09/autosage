@@ -4,6 +4,11 @@ import ChatInput from "./ChatInput";
 import { CodeBlock } from "./CodeBlock";
 import { ShareIcon } from "lucide-react";
 import ShareModal from "./ShareModal";
+import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
+import { NavItems } from "../LeftNav";
+import { SidebarTrigger } from "../ui/sidebar";
+import { Menu } from "lucide-react";
+import { AutobotIcon } from "../AutobotIcon";
 
 const welcomeMessages = [
   "Hello! How can I help you today?",
@@ -238,7 +243,38 @@ const Interface = () => {
   }, [messages.length]); // Will trigger when messages array changes (when messages become stateful)
 
   return (
-    <div className="w-full flex flex-col items-center justify-center">
+    <div className="w-full flex flex-col items-center justify-center h-screen lg:h-auto relative">
+      <div className="flex lg:hidden items-center justify-between w-full px-4 py-3 sticky top-0 z-50">
+        <Sheet>
+          <SheetTrigger asChild>
+            <button className="p-2 -ml-2 rounded-md">
+              <Menu className="w-5 h-5 dark:text-gray-100" />
+            </button>
+          </SheetTrigger>
+          <SheetContent
+            side="left"
+            className="w-[80%] max-w-[300px] p-0 dark:bg-gray-900"
+          >
+            <div className="h-full flex flex-col p-4">
+              <div className="flex items-center gap-2 mb-6 px-2">
+                <AutobotIcon size={24} />
+                <span className="font-bold text-lg dark:text-gray-100">
+                  AutoSage
+                </span>
+              </div>
+              <NavItems mobile />
+            </div>
+          </SheetContent>
+        </Sheet>
+
+        <div className="flex items-center gap-2">
+          <AutobotIcon size={20} />
+          <span className="font-semibold dark:text-gray-100">AutoSage</span>
+        </div>
+
+        <SidebarTrigger className="lg:hidden" />
+      </div>
+
       {/* TODO: Change condition to check if ID is present in the URL */}
       {messages.length === 0 ? (
         <>
@@ -255,7 +291,7 @@ const Interface = () => {
             ref={messagesContainerRef}
             className="h-full w-full flex flex-col items-start my-6 overflow-y-scroll"
           >
-            <div className="absolute top-2 right-2">
+            <div className="hidden lg:block absolute top-2 right-2">
               <button
                 onClick={() => setShareModalOpen(true)}
                 className="flex items-center gap-2 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800 py-2 px-3 rounded-full"
@@ -270,7 +306,7 @@ const Interface = () => {
               open={shareModalOpen}
               onOpenChange={setShareModalOpen}
             />
-            <div className="w-[68%] mx-auto flex flex-col justify-start items-start px-2 pt-10">
+            <div className="w-full lg:w-[68%] mx-auto flex flex-col justify-start items-start px-4 lg:px-2 pt-4 lg:pt-10 pb-18">
               {messages.map((message) => (
                 <>
                   {message.role === "user" && (
@@ -330,7 +366,7 @@ const Interface = () => {
                 </>
               ))}
             </div>
-            <div className="sticky bottom-0 w-full z-20">
+            <div className="sticky bottom-0 w-full lg:w-[calc(100%-4rem)] z-20 px-2 mx-auto pb-0">
               <ChatInput handleSubmit={() => {}} />
             </div>
           </div>

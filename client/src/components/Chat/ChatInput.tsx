@@ -233,7 +233,11 @@ const ChatInput = ({ handleSubmit, onSendMessage }: Props) => {
   }, [showAtMenu]);
 
   return (
-    <div className={`thin-scrollbar ${id ? "w-full" : "w-[95%] mx-auto"}`}>
+    <div
+      className={`thin-scrollbar ${
+        id ? "w-full" : "w-full lg:w-[95%] mx-auto"
+      }`}
+    >
       {/*<div className="w-[75%] mx-auto">
         {showSuggestedQuestions && (
           <SuggestedQuestions
@@ -242,7 +246,7 @@ const ChatInput = ({ handleSubmit, onSendMessage }: Props) => {
           />
         )}
       </div>*/}
-      <div className="relative w-[75%] mx-auto">
+      <div className="relative w-[100%] lg:w-[80%] mx-auto">
         {/* @ Menu with Combobox */}
         {showAtMenu && (
           <div

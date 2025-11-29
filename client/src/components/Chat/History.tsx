@@ -90,11 +90,11 @@ const History: React.FC<HistoryProps> = ({
   );
   return (
     <Sidebar
-      className={`${className} ${
+      className={`${className} hidden lg:flex ${
         state === "collapsed"
           ? "h-fit border-none [&_[data-sidebar=sidebar]]:bg-transparent dark:[&_[data-sidebar=sidebar]]:bg-transparent"
           : "h-full border-gray-300 dark:border-gray-800 [&_[data-sidebar=sidebar]]:bg-light-tertiary dark:[&_[data-sidebar=sidebar]]:bg-gray-950/20"
-      } ml-16 `}
+      } lg:ml-16 `}
       collapsible="icon"
     >
       {state === "collapsed" ? (

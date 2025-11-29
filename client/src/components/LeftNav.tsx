@@ -155,7 +155,7 @@ export const NavItems = ({ mobile = false }: { mobile?: boolean }) => {
 
 const LeftNav = () => {
   return (
-    <div className="hidden md:flex flex-col w-[4%] h-screen bg-gray-50 dark:bg-bg-card/90 px-4 py-4 space-y-4 justify-between">
+    <div className="hidden lg:flex flex-col w-[4%] h-screen bg-gray-50 dark:bg-bg-card/90 px-4 py-4 space-y-4 justify-between">
       <NavItems />
     </div>
   );
