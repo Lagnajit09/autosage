@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useState, useEffect } from "react";
 import {
   ReactFlow,
   Background,
@@ -21,6 +21,7 @@ import {
   Code2,
   Square,
 } from "lucide-react";
+import { AutobotIcon } from "../AutobotIcon";
 
 // Custom node component with dual handles
 const CustomNode = ({ data }) => {
@@ -96,6 +97,18 @@ const ServerMonitoringWorkflow = () => {
         else:
             print("System resources are within normal limits.")
     `);
+
+  const [isSmallDevice, setIsSmallDevice] = useState(false);
+
+  useEffect(() => {
+    const checkSize = () => {
+      setIsSmallDevice(window.innerWidth < 1024);
+    };
+    checkSize();
+    window.addEventListener("resize", checkSize);
+    return () => window.removeEventListener("resize", checkSize);
+  }, []);
+
   const initialNodes = useMemo(
     () => [
       // Start trigger
@@ -306,7 +319,7 @@ const ServerMonitoringWorkflow = () => {
   );
 
   return (
-    <div className="w-full overflow-hidden rounded-xl border border-gray-300 dark:border-gray-700 relative group">
+    <div className="hidden md:block w-full overflow-hidden rounded-xl border border-gray-300 dark:border-gray-700 relative group">
       <div className="w-[90vw] h-[90vh] bg-gradient-to-br from-slate-50 via-blue-50/30 to-indigo-50/40 dark:from-gray-950 dark:via-blue-900/20 dark:to-indigo-900/30">
         <ReactFlow
           nodes={nodes}
@@ -318,7 +331,7 @@ const ServerMonitoringWorkflow = () => {
           nodesConnectable={true}
           elementsSelectable={true}
           panOnDrag={true}
-          zoomOnScroll={true}
+          zoomOnScroll={!isSmallDevice}
           zoomOnPinch={true}
           zoomOnDoubleClick={true}
           onNodesChange={onNodesChange}
@@ -358,7 +371,11 @@ const ServerMonitoringWorkflow = () => {
       </div>
 
       {/* Legend */}
-      <div className="absolute top-4 left-4 bg-white/90 dark:bg-slate-800/90 backdrop-blur-sm rounded-lg p-4 shadow-lg border border-gray-200/50 dark:border-gray-700/50">
+      <div
+        className={`absolute top-4 left-4 bg-white/90 dark:bg-slate-800/90 backdrop-blur-sm rounded-lg p-4 shadow-lg border border-gray-200/50 dark:border-gray-700/50 ${
+          isSmallDevice ? "hidden" : ""
+        }`}
+      >
         <h3 className="font-semibold text-sm mb-2 text-gray-800 dark:text-gray-200">
           Workflow Legend
         </h3>
@@ -402,7 +419,11 @@ const ServerMonitoringWorkflow = () => {
         </div>
       </div>
 
-      <div className="w-[30%] h-[40%] rounded-lg absolute top-4 right-4 bg-gray-100 dark:bg-black overflow-hidden border border-gray-700 shadow-md">
+      <div
+        className={`w-[30%] h-[40%] rounded-lg absolute top-4 right-4 bg-gray-100 dark:bg-black overflow-hidden border border-gray-700 shadow-md ${
+          isSmallDevice ? "hidden" : ""
+        }`}
+      >
         {/* Top Bar */}
         <div className="flex items-center justify-between bg-gray-100 dark:bg-gray-950 px-4 py-2 border-b border-gray-700">
           <div className="flex items-center space-x-3">
@@ -441,16 +462,16 @@ const ServerMonitoringWorkflow = () => {
         />
       </div>
 
-      <div className="w-16 h-16 absolute bottom-4 right-4 rounded-full bg-gray-900 hover:bg-black border-2 dark:border-blue-500 shadow-lg">
-        <img
-          src="/ai.png"
-          alt="ai.png"
-          className="w-[80%] h-[80%] m-auto object-contain text-white"
-        />
+      <div className="w-16 h-16 absolute bottom-4 right-4 flex items-center justify-center rounded-full bg-gray-900 hover:bg-black border-2 dark:border-blue-500 shadow-lg">
+        <AutobotIcon size={32} />
       </div>
 
       {/* Tooltip positioned relative to main container */}
-      <span className="absolute bottom-20 right-4 px-3 py-2 bg-gray-200 dark:bg-gray-900 text-black dark:text-white text-sm rounded-lg shadow-lg opacity-0 group-hover:opacity-100 transition-opacity duration-300 z-50 w-[30%] text-left pointer-events-none">
+      <span
+        className={`absolute bottom-20 right-4 px-3 py-2 bg-gray-200 dark:bg-gray-900 text-black dark:text-white text-sm rounded-lg shadow-lg opacity-0 group-hover:opacity-100 transition-opacity duration-300 z-50 w-[30%] text-left pointer-events-none ${
+          isSmallDevice ? "hidden" : ""
+        }`}
+      >
         Hey! This is Autobot. I can help you generate workflows and scripts as
         per the request. Create a new project to get started.
       </span>

@@ -8,7 +8,7 @@ import { Moon, Sun } from "lucide-react";
 const Landing = () => {
   const { isDark, toggleTheme } = useTheme();
   return (
-    <div className="dark:bg-bg-card">
+    <div className="dark:bg-bg-card overflow-x-hidden">
       <div className="w-full h-10 px-8 flex justify-end items-center">
         <Button
           variant="outline"
