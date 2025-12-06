@@ -250,8 +250,9 @@ const Interface = () => {
   }, [messages.length]); // Will trigger when messages array changes (when messages become stateful)
 
   return (
-    <div className="w-full flex flex-col items-center justify-center h-screen lg:h-auto relative">
-      <div className="flex lg:hidden items-center justify-between w-full px-4 py-3 sticky top-0 z-50">
+    <div className="flex flex-col h-full w-full relative overflow-hidden">
+      {/* Mobile Header */}
+      <div className="flex lg:hidden items-center justify-between w-full px-4 py-3 border-b border-gray-200 dark:border-gray-800 shrink-0 bg-white dark:bg-gray-900 z-50">
         <Sheet>
           <SheetTrigger asChild>
             <button className="p-2 -ml-2 rounded-md">
@@ -282,120 +283,130 @@ const Interface = () => {
         <SidebarTrigger className="lg:hidden" />
       </div>
 
-      {/* TODO: Change condition to check if ID is present in the URL */}
+      {/* Top Controls (Desktop) */}
+      <div className="hidden lg:flex items-center gap-0 absolute top-4 right-4 z-20">
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              onClick={() => setCustomizeModalOpen(true)}
+              className="flex items-center gap-2 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800 py-2 px-3 rounded-full transition-colors"
+            >
+              <Settings2 className="w-4 h-4 text-gray-800 dark:text-gray-200" />
+            </button>
+          </TooltipTrigger>
+          <TooltipContent>
+            <p>Customize</p>
+          </TooltipContent>
+        </Tooltip>
+
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              onClick={() => setShareModalOpen(true)}
+              className="flex items-center gap-2 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800 py-2 px-3 rounded-full transition-colors"
+            >
+              <ShareIcon className="w-4 h-4 text-gray-800 dark:text-gray-200" />
+            </button>
+          </TooltipTrigger>
+          <TooltipContent>
+            <p>Share</p>
+          </TooltipContent>
+        </Tooltip>
+      </div>
+
+      <ShareModal open={shareModalOpen} onOpenChange={setShareModalOpen} />
+      <CustomizeModal
+        open={customizeModalOpen}
+        onOpenChange={setCustomizeModalOpen}
+      />
+
       {messages.length === 0 ? (
-        <>
-          <div className="text-center mb-8">
-            <p className="text-2xl text-gray-600 dark:text-gray-400">
+        <div className="flex-1 flex flex-col items-center justify-center p-4">
+          <div className="text-center mb-8 max-w-lg mx-auto">
+            <p className="text-2xl font-medium text-gray-600 dark:text-gray-400">
               {randomMessage}
             </p>
           </div>
-          <ChatInput handleSubmit={() => {}} />
-        </>
+          <div className="w-full max-w-2xl">
+            <ChatInput handleSubmit={() => {}} />
+          </div>
+        </div>
       ) : (
         <>
+          {/* Scrollable Messages Area */}
           <div
             ref={messagesContainerRef}
-            className="h-full w-full flex flex-col items-start my-6 overflow-y-scroll"
+            className="flex-1 w-full overflow-y-auto scroll-smooth"
           >
-            <div className="hidden lg:flex items-center gap-0 absolute top-2 right-2">
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <button
-                    onClick={() => setCustomizeModalOpen(true)}
-                    className="flex items-center gap-2 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800 py-2 px-3 rounded-full"
-                  >
-                    <Settings2 className="w-4 h-4 text-gray-800 dark:text-gray-200" />
-                  </button>
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p>Customize</p>
-                </TooltipContent>
-              </Tooltip>
-
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <button
-                    onClick={() => setShareModalOpen(true)}
-                    className="flex items-center gap-2 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800 py-2 px-3 rounded-full"
-                  >
-                    <ShareIcon className="w-4 h-4 text-gray-800 dark:text-gray-200" />
-                  </button>
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p>Share</p>
-                </TooltipContent>
-              </Tooltip>
-            </div>
-            <ShareModal
-              open={shareModalOpen}
-              onOpenChange={setShareModalOpen}
-            />
-            <CustomizeModal
-              open={customizeModalOpen}
-              onOpenChange={setCustomizeModalOpen}
-            />
-            <div className="w-full lg:w-[68%] mx-auto flex flex-col justify-start items-start px-4 lg:px-2 pt-4 lg:pt-10 pb-18">
+            <div className="max-w-[70%] mx-auto w-full flex flex-col gap-6 px-4 py-6 pb-4">
               {messages.map((message) => (
-                <>
+                <div key={message.id} className="w-full">
                   {message.role === "user" && (
-                    <div className="w-full flex items-start gap-2 rounded-xl mb-0">
-                      <div className="p-2 w-10 h-10 bg-purple-300/50 dark:bg-purple-500/30 text-gray-950 dark:text-gray-50 rounded-full flex items-center justify-center font-semibold ">
+                    <div className="w-full flex items-start gap-3 justify-start">
+                      <div className="p-2 w-10 h-10 bg-purple-300/50 dark:bg-purple-500/30 text-gray-950 dark:text-gray-50 rounded-full flex items-center justify-center font-semibold">
                         L
                       </div>
-                      <p className="w-fit bg-gray-300 dark:bg-gray-950/50 text-gray-900 dark:text-gray-200 font-medium py-4 px-4 rounded-xl">
+                      <div className="bg-gray-300 dark:bg-gray-950/50 text-gray-900 dark:text-gray-200 px-5 py-3.5 rounded-2xl rounded-tr-sm max-w-[85%] text-sm leading-relaxed shadow-sm font-medium">
                         {message.content}
-                      </p>
+                      </div>
                     </div>
                   )}
                   {message.role === "assistant" && (
-                    <div className="w-full text-gray-900 dark:text-gray-200 rounded-lg p-2 mb-10 prose prose-invert prose-pre:bg-gray-300 dark:prose-pre:bg-gray-900 prose-pre:border prose-pre:border-gray-700 max-w-none prose-p:my-0 prose-p:leading-relaxed">
-                      <ReactMarkdown
-                        components={{
-                          code(props: React.ComponentPropsWithoutRef<"code">) {
-                            const { children, className, ...rest } = props;
-                            const match = /language-(\w+)/.exec(
-                              className || ""
-                            );
-                            const language = match ? match[1] : "";
-                            const isInline = !match;
+                    <div className="w-full text-gray-900 dark:text-gray-200 rounded-lg prose prose-sm prose-invert prose-pre:border prose-pre:border-gray-700/50 max-w-none">
+                      <div>
+                        <ReactMarkdown
+                          components={{
+                            code(
+                              props: React.ComponentPropsWithoutRef<"code">
+                            ) {
+                              const { children, className, ...rest } = props;
+                              const match = /language-(\w+)/.exec(
+                                className || ""
+                              );
+                              const language = match ? match[1] : "";
+                              const isInline = !match;
 
-                            return isInline ? (
-                              <code
-                                className="px-1.5 py-0.5 text-purple-700 dark:text-purple-300/80 bg-gray-300/50 dark:bg-gray-500/30 rounded text-sm font-mono border border-gray-400/50 dark:border-gray-500/40"
-                                {...rest}
-                              >
-                                {children}
-                              </code>
-                            ) : (
-                              <CodeBlock
-                                code={String(children).replace(/\n$/, "")}
-                                language={language}
-                              />
-                            );
-                          },
-                          strong(
-                            props: React.ComponentPropsWithoutRef<"strong">
-                          ) {
-                            return (
-                              <strong
-                                className="font-bold text-gray-900 dark:text-gray-100"
-                                {...props}
-                              >
-                                {props.children}
-                              </strong>
-                            );
-                          },
-                        }}
-                      >
-                        {message.content}
-                      </ReactMarkdown>
+                              return isInline ? (
+                                <code
+                                  className="px-1.5 py-0.5 text-purple-700 dark:text-purple-300/80 bg-gray-300/50 dark:bg-gray-500/30 rounded text-sm font-mono border border-gray-400/50 dark:border-gray-500/40"
+                                  {...rest}
+                                >
+                                  {children}
+                                </code>
+                              ) : (
+                                <CodeBlock
+                                  code={String(children).replace(/\n$/, "")}
+                                  language={language}
+                                />
+                              );
+                            },
+                            strong(
+                              props: React.ComponentPropsWithoutRef<"strong">
+                            ) {
+                              return (
+                                <strong
+                                  className="font-bold text-gray-900 dark:text-gray-100"
+                                  {...props}
+                                >
+                                  {props.children}
+                                </strong>
+                              );
+                            },
+                          }}
+                        >
+                          {message.content}
+                        </ReactMarkdown>
+                      </div>
                     </div>
                   )}
-                </>
+                </div>
               ))}
             </div>
-            <div className="sticky bottom-0 w-full lg:w-[calc(100%-4rem)] z-20 px-2 mx-auto pb-0">
+          </div>
+
+          {/* Fixed Input Area */}
+          <div className="w-full shrink-0 z-20 pb-4 pt-2 px-4 bg-transparent">
+            <div className="max-w-[75%] mx-auto w-full">
               <ChatInput handleSubmit={() => {}} />
             </div>
           </div>
