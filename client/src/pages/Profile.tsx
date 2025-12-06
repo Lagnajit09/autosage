@@ -78,7 +78,7 @@ const Profile = () => {
 
   return (
     <SidebarProvider>
-      <div className="flex w-full h-screen bg-gray-50 dark:bg-workflow-void/90 overflow-hidden">
+      <div className="flex w-full h-screen bg-gray-100 dark:bg-workflow-void/90 overflow-hidden">
         <LeftNav />
 
         <div className="flex-1 flex flex-col h-full overflow-hidden">
