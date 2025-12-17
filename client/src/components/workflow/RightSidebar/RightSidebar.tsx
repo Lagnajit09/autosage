@@ -125,10 +125,10 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent className="w-80 h-[95%] bg-bg-primary/40 dark:bg-bg-primary/40 backdrop-blur-2xl border-t border-l border-borders-active/30 dark:border-borders-active/30 rounded-tl-3xl overflow-y-auto top-10">
+      <SheetContent className="w-80 h-[95%] bg-white dark:bg-gray-950 border-t border-l border-gray-200 dark:border-gray-800 rounded-tl-3xl overflow-y-auto top-10 shadow-xl">
         <SheetHeader className="mb-6">
-          <SheetTitle className="text-sm font-semibold text-text-primary dark:text-text-primary flex items-center">
-            <div className="w-1.5 h-1.5 bg-gradient-to-r from-ai-secondary to-ai-accent dark:from-ai-secondary dark:to-ai-accent rounded-full mr-3 animate-pulse"></div>
+          <SheetTitle className="text-sm font-semibold text-gray-900 dark:text-gray-100 flex items-center">
+            <div className="w-1.5 h-1.5 bg-purple-600 dark:bg-purple-400 rounded-full mr-3"></div>
             {selectedNode ? "Node Configuration" : "Edge Configuration"}
           </SheetTitle>
         </SheetHeader>
@@ -147,16 +147,11 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({
           {selectedNode && (
             <>
               {/* Node Info */}
-              <div
-                className="bg-gradient-to-r from-bg-secondary/40 to-bg-tertiary/20 dark:from-bg-secondary/40 dark:to-bg-tertiary/20 
-                            backdrop-blur-sm rounded-xl p-4 
-                            border border-borders-primary/40 dark:border-borders-primary/40
-                            hover:border-borders-primary/60 dark:hover:border-borders-primary/60 transition-all duration-300"
-              >
-                <div className="text-xs text-text-tertiary mb-2 uppercase tracking-wider">
+              <div className="bg-gray-50 dark:bg-gray-800 rounded-xl p-4 border border-gray-200 dark:border-gray-700 hover:border-purple-500 dark:hover:border-purple-500 transition-all duration-300">
+                <div className="text-xs text-gray-500 dark:text-gray-400 mb-2 uppercase tracking-wider">
                   Node Type
                 </div>
-                <div className="text-sm text-text-primary dark:text-text-primary font-semibold capitalize mb-3 flex items-center">
+                <div className="text-sm text-gray-900 dark:text-gray-100 font-semibold capitalize mb-3 flex items-center">
                   <div
                     className={`w-2 h-2 rounded-full mr-2 ${
                       selectedNode.type === "trigger"
@@ -168,7 +163,7 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({
                   ></div>
                   {selectedNode.type}
                 </div>
-                <div className="text-xs text-text-muted dark:text-text-muted bg-bg-card/50 dark:bg-bg-card/50 px-2 py-1 rounded-md">
+                <div className="text-xs text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-900 px-2 py-1 rounded-md">
                   ID: {selectedNode.id}
                 </div>
               </div>
@@ -176,7 +171,7 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({
               {/* Basic Settings */}
               <div className="space-y-5">
                 <div>
-                  <label className="block text-sm font-medium text-text-secondary dark:text-text-secondary mb-3">
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
                     Label
                   </label>
                   <input
@@ -184,9 +179,9 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({
                     value={String(selectedNode.data?.label || "")}
                     onChange={(e) => handleInputChange("label", e.target.value)}
                     className="w-full px-4 py-3 text-sm bg-transparent
-                             border border-borders-primary dark:border-borders-primary rounded-xl 
-                             text-text-primary dark:text-text-primary placeholder-text-muted dark:placeholder-text-muted 
-                             hover:border-borders-primary/50 dark:hover:border-borders-primary/50"
+                             border border-gray-300 dark:border-gray-700 rounded-xl 
+                             text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 
+                             hover:border-purple-500 dark:hover:border-purple-500"
                     placeholder="Enter node label"
                   />
                 </div>
@@ -201,9 +196,9 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({
                       handleInputChange("description", e.target.value)
                     }
                     className="w-full px-4 py-3 text-sm bg-transparent
-                             border border-borders-primary dark:border-borders-primary rounded-xl 
-                             text-text-primary dark:text-text-primary placeholder-text-muted dark:placeholder-text-muted 
-                             hover:border-borders-primary/50 dark:hover:border-borders-primary/50 resize-none"
+                             border border-gray-300 dark:border-gray-700 rounded-xl 
+                             text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 
+                             hover:border-purple-500 dark:hover:border-purple-500 resize-none"
                     rows={3}
                     placeholder="Enter description"
                   />
@@ -221,17 +216,17 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({
                       onClick={() => setShowParametersModal(true)}
                       size="sm"
                       className="text-xs py-2 px-3 
-                               bg-bg-secondary dark:bg-bg-secondary
+                               bg-purple-600 dark:bg-purple-600 hover:bg-purple-700 dark:hover:bg-purple-700
                                hover:from-ai-secondary/30 hover:to-ai-accent/30 dark:hover:from-ai-secondary/30 dark:hover:to-ai-accent/30 
                                border border-ai-secondary/40 dark:border-ai-secondary/40 hover:border-ai-accent/60 dark:hover:border-ai-accent/60
-                               text-ai-secondary dark:text-ai-secondary hover:text-ai-accent dark:hover:text-ai-accent rounded-lg
+                               text-gray-100 rounded-lg
                                transform hover:scale-105"
                     >
                       <Settings size={12} className="mr-1.5" />
                       Configure
                     </Button>
                   </div>
-                  <div className="text-xs text-text-muted dark:text-text-muted bg-bg-card/30 dark:bg-bg-card/30 px-3 py-2 rounded-lg">
+                  <div className="text-xs text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-900 px-3 py-2 rounded-lg">
                     {selectedNode.data?.parameters?.length || 0} parameter(s)
                     configured
                   </div>
@@ -248,10 +243,10 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({
                     value={selectedNode.data?.type || "script"}
                     onValueChange={(value) => handleInputChange("type", value)}
                   >
-                    <SelectTrigger className="w-full px-4 py-3 text-sm bg-transparent border border-borders-primary dark:border-borders-primary rounded-xl text-text-primary dark:text-text-primary hover:border-borders-primary/50 dark:hover:border-borders-primary/50 focus:outline-none">
+                    <SelectTrigger className="w-full px-4 py-3 text-sm bg-transparent border border-gray-300 dark:border-gray-700 rounded-xl text-gray-900 dark:text-gray-100 hover:border-purple-500 dark:hover:border-purple-500 focus:outline-none">
                       <SelectValue placeholder="Select action type" />
                     </SelectTrigger>
-                    <SelectContent className="bg-bg-primary dark:bg-bg-primary text-text-primary dark:text-text-primary border border-borders-primary dark:border-borders-primary">
+                    <SelectContent className="bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 border border-gray-200 dark:border-gray-800">
                       <SelectItem value="script">Script</SelectItem>
                       <SelectItem value="email">Email</SelectItem>
                     </SelectContent>
@@ -263,12 +258,12 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({
               {renderNodeSpecificConfig()}
 
               {/* Delete Node Button */}
-              <div className="pt-6 border-t border-borders-primary/20 dark:border-borders-primary/20">
+              <div className="pt-6 border-t border-gray-200 dark:border-gray-800">
                 <Button
                   onClick={handleDeleteNode}
                   variant="destructive"
-                  className="w-full text-sm py-3 bg-bg-error/30 dark:bg-bg-error/30
-                           hover:bg-bg-error/50 dark:hover:bg-bg-error/50
+                  className="w-full text-sm py-3 bg-red-50 dark:bg-red-900/20
+                           hover:bg-red-100 dark:hover:bg-red-900/30
                            border border-status-error/40 dark:border-status-error/40 hover:border-status-error/60 dark:hover:border-status-error/60
                            text-status-error dark:text-status-error hover:text-white dark:hover:text-white 
                            transition-all duration-300 rounded-xl

@@ -141,7 +141,7 @@ export const ScriptConf: React.FC<BaseConfigProps> = ({
           <SelectTrigger className="w-full h-11 text-sm bg-slate-700/25 dark:bg-slate-700/25 border border-slate-600/50 dark:border-slate-600/50 text-white dark:text-white">
             <SelectValue placeholder="Select script type" />
           </SelectTrigger>
-          <SelectContent className="bg-bg-primary dark:bg-bg-primary text-text-primary dark:text-text-primary border border-borders-primary dark:border-borders-primary">
+          <SelectContent className="bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 border border-gray-200 dark:border-gray-800">
             <SelectItem value="Python Script">Python Script</SelectItem>
             <SelectItem value="Powershell Script">Powershell Script</SelectItem>
             <SelectItem value="Shell Script">Shell Script</SelectItem>
@@ -192,7 +192,7 @@ export const ScriptConf: React.FC<BaseConfigProps> = ({
             <SelectTrigger className="w-full h-11 text-sm bg-slate-700/25 dark:bg-slate-700/25 border border-slate-600/50 dark:border-slate-600/50 text-white dark:text-white">
               <SelectValue placeholder="Choose a script..." />
             </SelectTrigger>
-            <SelectContent className="bg-bg-primary dark:bg-bg-primary text-text-primary dark:text-text-primary border border-borders-primary dark:border-borders-primary">
+            <SelectContent className="bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 border border-gray-200 dark:border-gray-800">
               {getSavedScripts().map((script: ScriptFile) => (
                 <SelectItem
                   key={script.id}
@@ -233,7 +233,7 @@ export const ScriptConf: React.FC<BaseConfigProps> = ({
           <SelectTrigger className="w-full h-11 text-sm bg-slate-700/25 dark:bg-slate-700/25 border border-slate-600/50 dark:border-slate-600/50 text-white dark:text-white">
             <SelectValue placeholder="Select execution mode" />
           </SelectTrigger>
-          <SelectContent className="bg-bg-primary dark:bg-bg-primary text-text-primary dark:text-text-primary border border-borders-primary dark:border-borders-primary">
+          <SelectContent className="bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 border border-gray-200 dark:border-gray-800">
             <SelectItem value="local">Local</SelectItem>
             <SelectItem value="remote">Remote</SelectItem>
           </SelectContent>

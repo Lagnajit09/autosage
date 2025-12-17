@@ -332,11 +332,11 @@ const WorkflowBuilderContent = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-workflow-void via-workflow-midnight to-workflow-deep dark:from-workflow-void dark:via-workflow-midnight dark:to-workflow-deep overflow-hidden">
-      <div className="w-full h-screen bg-bg-card dark:bg-bg-card backdrop-blur-xl border border-borders-primary/20 dark:border-borders-primary/20 shadow-2xl overflow-hidden">
+    <div className="min-h-screen bg-gray-50 dark:bg-workflow-void overflow-hidden">
+      <div className="w-full h-screen bg-transparent">
         {/* Header */}
-        <div className="w-[22%] absolute right-6 top-4 z-50 shadow-lg">
-          <div className="h-14 bg-bg-secondary/20 dark:bg-bg-secondary/20 backdrop-blur-lg border-2 border-borders-active/30 dark:border-borders-active/30 flex items-center justify-between px-6 shadow-lg rounded-3xl">
+        <div className="w-[22%] absolute right-6 top-4 z-50 shadow-sm">
+          <div className="h-14 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 flex items-center justify-between px-6 rounded-3xl">
             <div className="w-full flex items-center justify-between space-x-6">
               <div className="flex items-center space-x-3">
                 <div className="">
@@ -397,20 +397,13 @@ const WorkflowBuilderContent = () => {
         </div>
 
         {/* Main Content */}
-        <div className="h-[calc(100%)] flex">
+        <div className="w-full h-[calc(100%)] flex">
           <LeftSidebar onSaveWorkflow={saveWorkflow} />
 
           <div
-            className="flex-1 bg-gradient-to-br from-workflow-void/50 via-workflow-midnight/30 to-workflow-deep/40 dark:from-workflow-void/50 dark:via-workflow-midnight/30 dark:to-workflow-deep/40 rounded-3xl"
+            className="flex-1 h-[calc(100%-1rem)] bg-gray-100 dark:bg-gray-900/30 rounded-3xl relative overflow-hidden ml-4 my-2"
             ref={reactFlowWrapper}
           >
-            {/* Canvas background effects */}
-            <div className="absolute inset-0 bg-gradient-to-tr from-workflow-royal/5 via-transparent to-workflow-nebula/3 dark:from-workflow-royal/5 dark:via-transparent dark:to-workflow-nebula/3 pointer-events-none" />
-            <div
-              className="absolute top-1/4 right-1/3 w-64 h-64 bg-workflow-aurora/5 dark:bg-workflow-aurora/5 rounded-full blur-3xl animate-pulse-glow"
-              style={{ animationDelay: "2s" }}
-            />
-
             <ReactFlow
               nodes={nodes}
               edges={edges}
@@ -425,25 +418,20 @@ const WorkflowBuilderContent = () => {
               onPaneClick={onPaneClick}
               nodeTypes={nodeTypes}
               fitView
-              className="bg-transparent"
               defaultEdgeOptions={{
                 style: {
-                  stroke: "#dedede",
-                  strokeWidth: 2.5,
-                  filter: "drop-shadow(0 0 4px rgba(179, 115, 231, 0.3))",
+                  stroke: isDark ? "#4B5563" : "#9CA3AF",
+                  strokeWidth: 2,
                 },
                 type: "smoothstep",
               }}
             >
-              <Controls className="bg-light-tertiary dark:bg-bg-primary backdrop-blur-xl border border-borders-primary/30 dark:border-borders-primary/30 rounded-full shadow-2xl shadow-workflow-royal/20 dark:shadow-workflow-royal/20" />
+              <Controls className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-sm" />
               <Background
-                color="#ffffff"
-                gap={20}
-                size={1}
-                style={{
-                  backgroundColor: "#080013",
-                  opacity: 0.8,
-                }}
+                color={isDark ? "#666666" : "#3b3b3b"}
+                gap={30}
+                size={2}
+                className=""
               />
             </ReactFlow>
 
@@ -451,16 +439,9 @@ const WorkflowBuilderContent = () => {
             {nodes.length === 0 && (
               <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                 <div className="text-center relative">
-                  {/* Glow effect behind the icon */}
-                  <div className="absolute inset-0 bg-gradient-to-r from-workflow-royal/20 via-workflow-nebula/20 to-workflow-aurora/20 dark:from-workflow-royal/20 dark:via-workflow-nebula/20 dark:to-workflow-aurora/20 rounded-full blur-2xl scale-150"></div>
-
-                  <div
-                    className="w-16 h-16 bg-gradient-to-br from-workflow-royal/40 via-workflow-nebula/30 to-workflow-aurora/20 dark:from-workflow-royal/40 dark:via-workflow-nebula/30 dark:to-workflow-aurora/20 
-                                rounded-2xl flex items-center justify-center mx-auto mb-4 backdrop-blur-sm 
-                                border border-borders-primary/30 dark:border-borders-primary/30 shadow-2xl shadow-workflow-royal/20 dark:shadow-workflow-royal/20 relative z-10"
-                  >
+                  <div className="w-16 h-16 bg-white dark:bg-gray-800 rounded-2xl flex items-center justify-center mx-auto mb-4 border border-gray-200 dark:border-gray-700 shadow-sm relative z-10">
                     <svg
-                      className="w-8 h-8 text-workflow-aurora dark:text-workflow-aurora"
+                      className="w-8 h-8 text-purple-600 dark:text-purple-400"
                       fill="none"
                       stroke="currentColor"
                       viewBox="0 0 24 24"
@@ -474,25 +455,13 @@ const WorkflowBuilderContent = () => {
                     </svg>
                   </div>
 
-                  <h3 className="text-lg font-semibold bg-gradient-to-r from-text-primary via-workflow-aurora to-text-secondary dark:from-text-primary dark:via-workflow-aurora dark:to-text-secondary bg-clip-text text-transparent dark:text-transparent mb-3">
+                  <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-3">
                     Start Building Your Workflow
                   </h3>
-                  <p className="text-sm text-text-tertiary dark:text-text-tertiary max-w-md">
+                  <p className="text-sm text-gray-500 dark:text-gray-400 max-w-md">
                     Drag components from the sidebar to create intelligent
                     automation workflows
                   </p>
-
-                  {/* Animated hint */}
-                  <div className="mt-6 flex items-center justify-center space-x-2 text-workflow-nebula/60 dark:text-workflow-nebula/60">
-                    <div className="w-1 h-1 bg-workflow-nebula dark:bg-workflow-nebula rounded-full animate-pulse"></div>
-                    <span className="text-xs font-medium">
-                      Try the AI Generator for quick start
-                    </span>
-                    <div
-                      className="w-1 h-1 bg-workflow-nebula dark:bg-workflow-nebula rounded-full animate-pulse"
-                      style={{ animationDelay: "0.5s" }}
-                    ></div>
-                  </div>
                 </div>
               </div>
             )}

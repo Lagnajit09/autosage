@@ -67,7 +67,7 @@ export const DecisionConf: React.FC<DecisionConfigProps> = ({
           <SelectTrigger className="w-full h-11 text-sm bg-slate-700/25 dark:bg-slate-700/25 border border-slate-600/50 dark:border-slate-600/50 text-white dark:text-white">
             <SelectValue placeholder="Select node for true condition..." />
           </SelectTrigger>
-          <SelectContent className="bg-bg-primary dark:bg-bg-primary text-text-primary dark:text-text-primary border border-borders-primary dark:border-borders-primary">
+          <SelectContent className="bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 border border-gray-200 dark:border-gray-800">
             {getAvailableNodes().map((node) => (
               <SelectItem key={node.id} value={node.id} className="text-sm">
                 {node.data?.label || node.id} ({node.type})
@@ -103,7 +103,7 @@ export const DecisionConf: React.FC<DecisionConfigProps> = ({
           <SelectTrigger className="w-full h-11 text-sm bg-slate-700/25 dark:bg-slate-700/25 border border-slate-600/50 dark:border-slate-600/50 text-white dark:text-white">
             <SelectValue placeholder="Select node for false condition..." />
           </SelectTrigger>
-          <SelectContent className="bg-bg-primary dark:bg-bg-primary text-text-primary dark:text-text-primary border border-borders-primary dark:border-borders-primary">
+          <SelectContent className="bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 border border-gray-200 dark:border-gray-800">
             {getAvailableNodes().map((node) => (
               <SelectItem key={node.id} value={node.id} className="text-sm">
                 {node.data?.label || node.id} ({node.type})

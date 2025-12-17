@@ -104,9 +104,9 @@ export const ImportWorkflowDialog: React.FC<ImportWorkflowDialogProps> = ({
 
   return (
     <Dialog open={isOpen} onOpenChange={handleClose}>
-      <DialogContent className="max-w-2xl bg-workflow-midnight/40 dark:bg-workflow-midnight/40 backdrop-blur-sm border border-slate-700 dark:border-slate-700 text-white dark:text-white">
+      <DialogContent className="max-w-2xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 text-gray-900 dark:text-gray-100">
         <DialogHeader>
-          <DialogTitle className="text-white dark:text-white flex items-center">
+          <DialogTitle className="text-gray-900 dark:text-gray-100 flex items-center">
             <FileText
               size={18}
               className="mr-2 text-purple-400 dark:text-purple-400"
@@ -118,7 +118,7 @@ export const ImportWorkflowDialog: React.FC<ImportWorkflowDialogProps> = ({
         <div className="space-y-4">
           {/* Upload File Option */}
           <div>
-            <Label className="text-sm text-slate-300 dark:text-slate-300 mb-2 block">
+            <Label className="text-sm text-gray-700 dark:text-gray-300 mb-2 block">
               Upload JSON File
             </Label>
             <div className="relative">
@@ -131,7 +131,7 @@ export const ImportWorkflowDialog: React.FC<ImportWorkflowDialogProps> = ({
               />
               <label
                 htmlFor="json-file-upload"
-                className="w-full px-4 py-3 border-2 border-dashed border-slate-600/50 dark:border-slate-600/50 hover:border-purple-500/50 dark:hover:border-purple-500/50 rounded-md cursor-pointer transition-all duration-300 flex items-center justify-center space-x-3 text-slate-400 dark:text-slate-400 hover:text-slate-300 dark:hover:text-slate-300 bg-bg-primary/20 dark:bg-bg-primary/20 hover:bg-bg-primary/30 dark:hover:bg-bg-primary/30"
+                className="w-full px-4 py-3 border-2 border-dashed border-gray-300 dark:border-gray-700 hover:border-purple-500 dark:hover:border-purple-500 rounded-md cursor-pointer transition-all duration-300 flex items-center justify-center space-x-3 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700"
               >
                 <Upload
                   size={16}
@@ -153,7 +153,7 @@ export const ImportWorkflowDialog: React.FC<ImportWorkflowDialogProps> = ({
                 setJsonInput(e.target.value);
                 setError("");
               }}
-              className="w-full h-64 px-3 py-3 text-sm bg-bg-primary/20 dark:bg-bg-primary/20 border border-slate-600/50 dark:border-slate-600/50 rounded-md text-white dark:text-white placeholder-slate-400 dark:placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-purple-500/50 dark:focus:ring-purple-500/50 focus:border-transparent resize-none font-mono"
+              className="w-full h-64 px-3 py-3 text-sm bg-white dark:bg-gray-950 border border-gray-300 dark:border-gray-700 rounded-md text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500 dark:focus:ring-purple-500 focus:border-transparent resize-none font-mono"
               placeholder={`{
   "nodes": [
     {
@@ -170,7 +170,7 @@ export const ImportWorkflowDialog: React.FC<ImportWorkflowDialogProps> = ({
 
           {/* Error Display */}
           {error && (
-            <div className="bg-red-900/30 dark:bg-red-900/30 border border-red-500/30 dark:border-red-500/30 rounded-lg p-3">
+            <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-3">
               <div className="flex items-center space-x-2">
                 <div className="w-4 h-4 text-red-400 dark:text-red-400">
                   <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -189,20 +189,18 @@ export const ImportWorkflowDialog: React.FC<ImportWorkflowDialogProps> = ({
             </div>
           )}
 
-          <div className="bg-slate-700/30 dark:bg-slate-700/30 rounded-lg p-3 border border-slate-600/30 dark:border-slate-600/30">
-            <p className="text-xs text-slate-400 dark:text-slate-400 mb-1">
-              📁 Import Tips:
-            </p>
-            <ul className="text-xs text-slate-500 dark:text-slate-500 space-y-1">
-              <li>• JSON must contain valid nodes and edges arrays</li>
-              <li>• Each node needs id, type, and position properties</li>
-              <li>• Each edge needs id, source, and target properties</li>
+          <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-3 border border-gray-200 dark:border-gray-700">
+            <ul className="text-xs text-gray-500 dark:text-gray-400 space-y-1">
+              <li>
+                JSON must contain valid nodes (id, type, position, data) and
+                edges (id, source, target) arrays
+              </li>
             </ul>
-            <div className="mt-3 p-2 bg-slate-800/60 dark:bg-slate-800/60 rounded text-xs text-blue-300 dark:text-blue-300 border border-blue-700/30 dark:border-blue-700/30">
+            <div className="mt-3 p-2 bg-blue-50 dark:bg-blue-900/20 rounded text-xs text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
               <b>Supported formats:</b> Standard workflow JSON with nodes and
               edges structure.
               <br />
-              <span className="text-slate-400 dark:text-slate-400">
+              <span className="text-gray-500 dark:text-gray-400">
                 <i>
                   Upload a .json file or paste the JSON content directly into
                   the text area above.
@@ -215,11 +213,11 @@ export const ImportWorkflowDialog: React.FC<ImportWorkflowDialogProps> = ({
             <Button
               onClick={validateAndImport}
               disabled={!jsonInput.trim() || isValidating}
-              className="flex-1 bg-gradient-to-r from-purple-600 to-blue-600 dark:from-purple-600 dark:to-blue-600 hover:from-purple-700 hover:to-blue-700 dark:hover:from-purple-700 dark:hover:to-blue-700 text-white dark:text-white"
+              className="flex-1 bg-purple-600 dark:bg-purple-600 hover:bg-purple-700 dark:hover:bg-purple-700 text-white dark:text-white"
             >
               {isValidating ? (
                 <>
-                  <div className="w-4 h-4 border-2 border-white/30 dark:border-white/30 border-t-white dark:border-t-white rounded-full animate-spin mr-2" />
+                  <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin mr-2" />
                   Validating...
                 </>
               ) : (
@@ -232,7 +230,7 @@ export const ImportWorkflowDialog: React.FC<ImportWorkflowDialogProps> = ({
             <Button
               onClick={handleClose}
               variant="outline"
-              className="border-slate-600 dark:border-slate-600 text-slate-800 dark:text-slate-800 hover:bg-slate-300 dark:hover:bg-slate-300"
+              className="border-gray-300 dark:border-gray-700 text-gray-900 dark:text-gray-100 hover:bg-gray-100 dark:bg-gray-900 dark:hover:bg-gray-800"
             >
               Cancel
             </Button>

@@ -36,7 +36,7 @@ export const EdgeConf: React.FC<EdgeConfigProps> = ({
 
   return (
     <>
-      <div className="bg-slate-700/30 dark:bg-slate-700/30 backdrop-blur-sm rounded-lg p-4 border border-slate-600/30 dark:border-slate-600/30">
+      <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
         <div className="text-xs text-slate-400 dark:text-slate-400 mb-1">
           Edge Type
         </div>
@@ -73,7 +73,7 @@ export const EdgeConf: React.FC<EdgeConfigProps> = ({
             <SelectTrigger className="w-full h-11 text-sm bg-slate-700/25 dark:bg-slate-700/25 border border-slate-600/50 dark:border-slate-600/50 text-white dark:text-white">
               <SelectValue placeholder="Select edge type" />
             </SelectTrigger>
-            <SelectContent className="bg-bg-primary dark:bg-bg-primary text-text-primary dark:text-text-primary border border-borders-primary dark:border-borders-primary">
+            <SelectContent className="bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 border border-gray-200 dark:border-gray-800">
               <SelectItem value="default">Default</SelectItem>
               <SelectItem value="straight">Straight</SelectItem>
               <SelectItem value="step">Step</SelectItem>

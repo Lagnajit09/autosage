@@ -289,16 +289,16 @@ export const EmailConf: React.FC<BaseConfigProps> = ({
       {/* HTML Toggle */}
       <Label
         htmlFor="isHTML"
-        className="hover:bg-bg-secondary/50 dark:hover:bg-bg-secondary/50 flex items-start gap-3 rounded-lg border border-slate-600/50 dark:border-slate-600/50 p-3"
+        className="hover:bg-gray-100 dark:hover:bg-gray-800 flex items-start gap-3 rounded-lg border border-gray-300 dark:border-gray-700 p-3"
       >
         <Checkbox
           id="isHTML"
           checked={selectedNode.data?.isHTML || false}
           onCheckedChange={(checked) => handleInputChange("isHTML", checked)}
-          className="data-[state=checked]:border-blue-600 data-[state=checked]:bg-blue-600 data-[state=checked]:text-white dark:data-[state=checked]:border-blue-700 dark:data-[state=checked]:bg-blue-700 data-[state=unchecked]:border-borders-primary dark:data-[state=unchecked]:border-borders-primary"
+          className="data-[state=checked]:border-blue-600 data-[state=checked]:bg-blue-600 data-[state=checked]:text-white dark:data-[state=checked]:border-blue-700 dark:data-[state=checked]:bg-blue-700 data-[state=unchecked]:border-gray-300 dark:data-[state=unchecked]:border-gray-700"
         />
         <div className="grid gap-1.5 font-normal">
-          <p className="text-sm leading-none font-medium text-text-primary dark:text-text-primary">
+          <p className="text-sm leading-none font-medium text-gray-900 dark:text-gray-100">
             HTML Format
           </p>
         </div>
@@ -370,7 +370,7 @@ export const EmailConf: React.FC<BaseConfigProps> = ({
             <SelectTrigger className="w-full h-11 text-sm bg-slate-700/25 dark:bg-slate-700/25 border border-slate-600/50 dark:border-slate-600/50 text-white dark:text-white">
               <SelectValue placeholder="Select credentials..." />
             </SelectTrigger>
-            <SelectContent className="bg-bg-primary dark:bg-bg-primary text-text-primary dark:text-text-primary border border-borders-primary dark:border-borders-primary">
+            <SelectContent className="bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 border border-gray-200 dark:border-gray-800">
               {getSavedCredentials().map((credential: Credential) => (
                 <SelectItem
                   key={credential.id}

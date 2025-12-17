@@ -32,7 +32,7 @@ export const TriggerConf: React.FC<BaseConfigProps> = ({
             {" "}
             <SelectValue placeholder="Select trigger type" />
           </SelectTrigger>
-          <SelectContent className="bg-bg-primary dark:bg-bg-primary text-text-primary dark:text-text-primary border border-borders-primary dark:border-borders-primary">
+          <SelectContent className="bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 border border-gray-200 dark:border-gray-800">
             <SelectItem value="schedule">Schedule</SelectItem>
             <SelectItem value="webhook">Webhook</SelectItem>
             <SelectItem value="file">File Watcher</SelectItem>
