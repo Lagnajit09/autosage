@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { NodeData } from "@/utils/types";
 import Logo from "../Logo";
+import { Button } from "../ui/button";
 
 interface LeftSidebarProps {
   onSaveWorkflow: () => void;
@@ -99,7 +100,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({ onSaveWorkflow }) => {
                 className="group cursor-grab active:cursor-grabbing 
                          bg-gray-50 dark:bg-gray-900 
                          hover:bg-purple-50 dark:hover:bg-purple-900/10
-                         rounded-xl p-3 
+                         rounded-xl p-2 
                          border border-gray-200 dark:border-gray-800
                          hover:border-purple-200 dark:hover:border-purple-800
                          transition-all duration-200 ease-out
@@ -141,7 +142,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({ onSaveWorkflow }) => {
                 className="group cursor-grab active:cursor-grabbing 
                          bg-gray-50 dark:bg-gray-900 
                          hover:bg-blue-50 dark:hover:bg-blue-900/10
-                         rounded-xl p-3 
+                         rounded-xl p-2 
                          border border-gray-200 dark:border-gray-800
                          hover:border-blue-200 dark:hover:border-blue-800
                          transition-all duration-200 ease-out
@@ -182,7 +183,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({ onSaveWorkflow }) => {
                 className="group cursor-grab active:cursor-grabbing 
                          bg-gray-50 dark:bg-gray-900 
                          hover:bg-amber-50 dark:hover:bg-amber-900/10
-                         rounded-xl p-3 
+                         rounded-xl p-2 
                          border border-gray-200 dark:border-gray-800
                          hover:border-amber-200 dark:hover:border-amber-800
                          transition-all duration-200 ease-out
@@ -203,8 +204,8 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({ onSaveWorkflow }) => {
       </div>
 
       {/* Save Button at bottom */}
-      <div className="mt-auto pt-4 border-t border-button-light-primary-bg dark:border-borders-primary/20 relative z-10">
-        <button
+      <div className="mt-auto pt-4 border-t border-gray-300 dark:border-borders-primary/20 relative z-10">
+        <Button
           onClick={onSaveWorkflow}
           className="w-full bg-purple-600 hover:bg-purple-700 dark:bg-purple-600 dark:hover:bg-purple-700 
                    text-white dark:text-white
@@ -215,7 +216,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({ onSaveWorkflow }) => {
           <div className="flex items-center justify-center space-x-2">
             <span className="font-medium">Save Workflow</span>
           </div>
-        </button>
+        </Button>
       </div>
     </div>
   );

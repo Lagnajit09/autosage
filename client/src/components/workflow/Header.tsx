@@ -8,10 +8,12 @@ import {
   FileInput,
   Key,
   Moon,
+  PlayCircle,
   PlusSquare,
   Sun,
 } from "lucide-react";
 import { useTheme } from "@/provider/theme-provider";
+import { Button } from "../ui/button";
 
 const Header = ({
   nodes,
@@ -29,8 +31,12 @@ const Header = ({
   const { isDark, toggleTheme } = useTheme();
 
   return (
-    <div className="w-[25%] absolute right-6 top-4 z-50 shadow-sm">
-      <div className="h-14 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 flex items-center justify-between px-6 rounded-3xl">
+    <div className="w-[32%] flex items-center justify-end gap-2 absolute right-4 top-4 z-50">
+      <Button className="flex items-center bg-green-100 hover:bg-green-200 dark:bg-green-900/50 dark:hover:bg-green-800 text-green-600 dark:text-green-400 border-2 border-green-500/90 rounded-xl">
+        <PlayCircle />
+        <span className="font-medium">Run</span>
+      </Button>
+      <div className="h-14 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 flex items-center justify-between px-6 rounded-3xl shadow-sm">
         <div className="w-full flex items-center justify-between space-x-6">
           <div className="flex items-center space-x-3">
             <div className="">

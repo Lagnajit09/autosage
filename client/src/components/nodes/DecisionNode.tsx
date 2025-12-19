@@ -24,7 +24,7 @@ export const DecisionNode = ({
         className={`absolute inset-0 bg-white dark:bg-gray-900 border-2 rotate-45 rounded-lg transition-all duration-200 ${
           selected
             ? "border-amber-400 dark:border-amber-500 shadow-[0_0_25px_rgba(245,158,11,0.5)] dark:shadow-[0_0_25px_rgba(251,191,36,0.5)]"
-            : "border-amber-200 dark:border-amber-900/50 shadow-sm hover:shadow-[0_0_20px_rgba(245,158,11,0.3)] dark:hover:shadow-[0_0_20px_rgba(251,191,36,0.3)]"
+            : "border-amber-400 dark:border-amber-700/50 shadow-sm hover:shadow-[0_0_20px_rgba(245,158,11,0.3)] dark:hover:shadow-[0_0_20px_rgba(251,191,36,0.3)]"
         }`}
       ></div>
 
@@ -33,11 +33,11 @@ export const DecisionNode = ({
         <div className="p-1.5 bg-amber-50 dark:bg-amber-900/20 rounded-full border border-amber-100 dark:border-amber-800 mb-1">
           <GitBranch size={12} className="text-amber-600 dark:text-amber-400" />
         </div>
-        <h4 className="font-bold text-gray-900 dark:text-gray-100 text-[10px] w-full px-4 whitespace-normal break-words leading-tight">
+        <h4 className="font-bold text-gray-900 dark:text-gray-100 text-xs w-full px-4 whitespace-normal break-words leading-tight">
           {data.label || "Decision"}
         </h4>
         {data.condition && (
-          <div className="text-[9px] text-gray-600 dark:text-gray-400 mt-1 w-full px-2 whitespace-normal break-words bg-amber-50 dark:bg-amber-900/20 py-0.5 rounded border border-amber-100 dark:border-amber-800">
+          <div className="text-sm text-gray-800 dark:text-gray-200 mt-1 w-full px-2 whitespace-normal break-words bg-amber-50 dark:bg-amber-900/20 py-0.5 rounded border border-amber-100 dark:border-amber-800">
             {data.condition}
           </div>
         )}
@@ -61,7 +61,7 @@ export const DecisionNode = ({
           className="w-3 h-3 bg-emerald-500 border-2 border-white dark:border-gray-900"
         />
         <div className="absolute left-4 top-1/2 -translate-y-1/2 bg-emerald-50 dark:bg-emerald-900/20 px-1.5 py-0.5 rounded border border-emerald-200 dark:border-emerald-800 opacity-0 group-hover/true:opacity-100 transition-opacity duration-200 pointer-events-none">
-          <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 whitespace-nowrap">
+          <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400 whitespace-nowrap">
             True
           </span>
         </div>
@@ -76,7 +76,7 @@ export const DecisionNode = ({
           className="w-3 h-3 bg-red-500 border-2 border-white dark:border-gray-900"
         />
         <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-red-50 dark:bg-red-900/20 px-1.5 py-0.5 rounded border border-red-200 dark:border-red-800 opacity-0 group-hover/false:opacity-100 transition-opacity duration-200 pointer-events-none">
-          <span className="text-[10px] font-bold text-red-600 dark:text-red-400 whitespace-nowrap">
+          <span className="text-xs font-bold text-red-600 dark:text-red-400 whitespace-nowrap">
             False
           </span>
         </div>
