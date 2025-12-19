@@ -44,27 +44,27 @@ export const DecisionConf: React.FC<DecisionConfigProps> = ({
   return (
     <div className="space-y-4">
       <div>
-        <Label className="block text-sm font-medium text-slate-300 dark:text-slate-300 mb-2">
+        <Label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
           Condition
         </Label>
         <input
           type="text"
           value={String(selectedNode.data?.condition || "")}
           onChange={(e) => handleInputChange("condition", e.target.value)}
-          className="w-full px-3 py-2.5 text-sm bg-slate-700/25 dark:bg-slate-700/25 border border-slate-600/50 dark:border-slate-600/50 rounded-md text-white dark:text-white placeholder-slate-400 dark:placeholder-slate-400 focus:outline-none"
+          className="w-full px-3 py-2.5 text-sm bg-white dark:bg-gray-950 border border-gray-300 dark:border-gray-700 rounded-md text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none"
           placeholder="e.g., x > 0"
         />
       </div>
 
       <div>
-        <Label className="block text-sm font-medium text-slate-300 dark:text-slate-300 mb-2">
+        <Label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
           True Label (Node IDs)
         </Label>
         <Select
           onValueChange={(value) => handleTrueLabelChange([value])}
           value=""
         >
-          <SelectTrigger className="w-full h-11 text-sm bg-slate-700/25 dark:bg-slate-700/25 border border-slate-600/50 dark:border-slate-600/50 text-white dark:text-white">
+          <SelectTrigger className="w-full h-11 text-sm bg-white dark:bg-gray-950 border border-gray-300 dark:border-gray-700 text-gray-900 dark:text-gray-100">
             <SelectValue placeholder="Select node for true condition..." />
           </SelectTrigger>
           <SelectContent className="bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 border border-gray-200 dark:border-gray-800">
@@ -77,7 +77,7 @@ export const DecisionConf: React.FC<DecisionConfigProps> = ({
               <SelectItem
                 value="none"
                 disabled
-                className="text-sm text-slate-500 dark:text-slate-500"
+                className="text-sm text-gray-500 dark:text-gray-500"
               >
                 No nodes available
               </SelectItem>
@@ -86,21 +86,21 @@ export const DecisionConf: React.FC<DecisionConfigProps> = ({
         </Select>
         {selectedNode.data?.trueLabel &&
           selectedNode.data.trueLabel.length > 0 && (
-            <div className="mt-2 text-xs text-green-400 dark:text-green-400">
+            <div className="mt-2 text-xs text-emerald-600 dark:text-emerald-400">
               Connected to: {selectedNode.data.trueLabel.join(", ")}
             </div>
           )}
       </div>
 
       <div>
-        <Label className="block text-sm font-medium text-slate-300 dark:text-slate-300 mb-2">
+        <Label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
           False Label (Node IDs)
         </Label>
         <Select
           onValueChange={(value) => handleFalseLabelChange([value])}
           value=""
         >
-          <SelectTrigger className="w-full h-11 text-sm bg-slate-700/25 dark:bg-slate-700/25 border border-slate-600/50 dark:border-slate-600/50 text-white dark:text-white">
+          <SelectTrigger className="w-full h-11 text-sm bg-white dark:bg-gray-950 border border-gray-300 dark:border-gray-700 text-gray-900 dark:text-gray-100">
             <SelectValue placeholder="Select node for false condition..." />
           </SelectTrigger>
           <SelectContent className="bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 border border-gray-200 dark:border-gray-800">
@@ -113,7 +113,7 @@ export const DecisionConf: React.FC<DecisionConfigProps> = ({
               <SelectItem
                 value="none"
                 disabled
-                className="text-sm text-slate-500 dark:text-slate-500"
+                className="text-sm text-gray-500 dark:text-gray-500"
               >
                 No nodes available
               </SelectItem>
@@ -122,7 +122,7 @@ export const DecisionConf: React.FC<DecisionConfigProps> = ({
         </Select>
         {selectedNode.data?.falseLabel &&
           selectedNode.data.falseLabel.length > 0 && (
-            <div className="mt-2 text-xs text-red-400 dark:text-red-400">
+            <div className="mt-2 text-xs text-red-600 dark:text-red-400">
               Connected to: {selectedNode.data.falseLabel.join(", ")}
             </div>
           )}

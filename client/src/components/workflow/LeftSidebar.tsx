@@ -206,17 +206,13 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({ onSaveWorkflow }) => {
       <div className="mt-auto pt-4 border-t border-button-light-primary-bg dark:border-borders-primary/20 relative z-10">
         <button
           onClick={onSaveWorkflow}
-          className="w-full bg-gradient-to-r from-button-light-primary-active to-button-light-primary-active dark:from-ai-primary/20 dark:via-ai-secondary/20 dark:to-ai-accent/20 
-                   hover:from-button-light-primary-bg/90 hover:to-button-light-primary-bg/90 dark:hover:from-ai-primary/30 dark:hover:via-ai-secondary/30 dark:hover:to-ai-accent/30 
-                   border border-ai-primary/40 hover:border-ai-secondary/60 dark:border-ai-primary/40 dark:hover:border-ai-secondary/60
-                   text-text-secondary hover:text-text-primary dark:text-text-secondary dark:hover:text-text-primary 
+          className="w-full bg-purple-600 hover:bg-purple-700 dark:bg-purple-600 dark:hover:bg-purple-700 
+                   text-white dark:text-white
                    text-sm py-3 px-4 rounded-xl
-                   backdrop-blur-sm
-                   hover:shadow-lg hover:shadow-ai-primary/20 dark:hover:shadow-ai-primary/20
-                   transform hover:scale-[1.02] hover:-translate-y-0.5"
+                   shadow-sm hover:shadow-md
+                   transform hover:scale-[1.02] hover:-translate-y-0.5 transition-all duration-200"
         >
           <div className="flex items-center justify-center space-x-2">
-            <div className="w-2 h-2 bg-gradient-to-r from-ai-secondary to-ai-accent dark:from-ai-secondary dark:to-ai-accent rounded-full animate-pulse"></div>
             <span className="font-medium">Save Workflow</span>
           </div>
         </button>

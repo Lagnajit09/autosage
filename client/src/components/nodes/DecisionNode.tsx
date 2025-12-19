@@ -12,24 +12,24 @@ interface DecisionNodeData {
 
 export const DecisionNode = ({ data }: { data: DecisionNodeData }) => {
   return (
-    <div className="group relative bg-node-decision/25 dark:bg-node-decision/25 backdrop-blur-xl border-2 border-node-decision_border dark:border-node-decision_border rounded-2xl shadow-2xl min-w-[180px] hover:shadow-status-pending/30 dark:hover:shadow-status-pending/30">
+    <div className="group relative bg-white dark:bg-gray-900 border-2 border-amber-200 dark:border-amber-900/50 rounded-2xl shadow-sm min-w-[180px] hover:shadow-md transition-all duration-200">
       <Handle
         type="target"
         position={Position.Left}
-        className="w-4 h-4 bg-node-decision_border dark:bg-node-decision_border shadow-lg hover:shadow-status-pending/50 dark:hover:shadow-status-pending/50"
+        className="w-4 h-4 bg-amber-200 dark:bg-amber-800 border-2 border-white dark:border-gray-900"
       />
 
       <div className="relative p-4 z-10">
         {/* Enhanced header */}
         <div className="flex items-center space-x-3 mb-3">
-          <div className="p-2 bg-gradient-to-br from-status-pending/40 via-node-warning/30 to-status-pending/20 dark:from-status-pending/40 dark:via-node-warning/30 dark:to-status-pending/20 rounded-xl backdrop-blur-sm border border-status-pending/30 dark:border-status-pending/30 group-hover:scale-110 transition-transform duration-300">
+          <div className="p-2 bg-amber-50 dark:bg-amber-900/20 rounded-xl border border-amber-100 dark:border-amber-800 group-hover:scale-110 transition-transform duration-300">
             <GitBranch
               size={14}
-              className="text-status-pending dark:text-status-pending"
+              className="text-amber-600 dark:text-amber-400"
             />
           </div>
           <div className="flex-1 min-w-0">
-            <h4 className="font-bold text-text-primary dark:text-text-primary text-sm truncate">
+            <h4 className="font-bold text-gray-900 dark:text-gray-100 text-sm truncate">
               {data.label || "Decision"}
             </h4>
           </div>
@@ -37,17 +37,17 @@ export const DecisionNode = ({ data }: { data: DecisionNodeData }) => {
 
         {/* Enhanced condition display */}
         {data.condition && (
-          <div className="text-xs text-text-primary dark:text-text-primary mb-3 truncate bg-gradient-to-r from-status-pending/10 to-node-warning/10 dark:from-status-pending/10 dark:to-node-warning/10 px-2 py-1 rounded-lg backdrop-blur-sm border border-status-pending/20 dark:border-status-pending/20">
+          <div className="text-xs text-gray-700 dark:text-gray-300 mb-3 truncate bg-amber-50 dark:bg-amber-900/20 px-2 py-1 rounded-lg border border-amber-100 dark:border-amber-800">
             {data.condition}
           </div>
         )}
 
         {/* Enhanced footer */}
         <div className="flex items-center justify-between">
-          <div className="inline-flex items-center px-2.5 py-1 bg-gradient-to-r from-status-pending/30 to-node-warning/20 dark:from-status-pending/30 dark:to-node-warning/20 text-status-pending dark:text-status-pending text-xs font-semibold rounded-lg backdrop-blur-sm border border-status-pending/20 dark:border-status-pending/20">
+          <div className="inline-flex items-center px-2.5 py-1 bg-amber-50 dark:bg-amber-900/20 text-amber-600 dark:text-amber-400 text-xs font-semibold rounded-lg border border-amber-100 dark:border-amber-800">
             ⚡ Decision
           </div>
-          <div className="w-2 h-2 bg-gradient-to-r from-status-pending to-node-warning dark:from-status-pending dark:to-node-warning rounded-full animate-pulse-glow shadow-lg shadow-status-pending/50 dark:shadow-status-pending/50"></div>
+          <div className="w-2 h-2 bg-amber-400 dark:bg-amber-500 rounded-full animate-pulse"></div>
         </div>
       </div>
 
@@ -60,10 +60,10 @@ export const DecisionNode = ({ data }: { data: DecisionNodeData }) => {
             position={Position.Right}
             id="true"
             style={{ position: "static", transform: "none" }}
-            className="w-4 h-4 bg-node-success dark:bg-node-success shadow-lg hover:shadow-node-success/50 dark:hover:shadow-node-success/50"
+            className="w-4 h-4 bg-emerald-500 border-2 border-white dark:border-gray-900"
           />
-          <div className="absolute left-6 top-1/2 transform -translate-y-1/2 bg-gradient-to-r from-node-success/20 to-status-online/10 dark:from-node-success/20 dark:to-status-online/10 px-2 py-1 rounded-md backdrop-blur-sm border border-node-success/30 dark:border-node-success/30 opacity-0 group-hover/handle:opacity-100 transition-opacity duration-300 whitespace-nowrap">
-            <span className="text-xs font-medium text-node-success dark:text-node-success">
+          <div className="absolute left-6 top-1/2 transform -translate-y-1/2 bg-emerald-50 dark:bg-emerald-900/20 px-2 py-1 rounded-md border border-emerald-200 dark:border-emerald-800 opacity-0 group-hover/handle:opacity-100 transition-opacity duration-300 whitespace-nowrap">
+            <span className="text-xs font-medium text-emerald-600 dark:text-emerald-400">
               True
             </span>
           </div>
@@ -76,10 +76,10 @@ export const DecisionNode = ({ data }: { data: DecisionNodeData }) => {
             position={Position.Right}
             id="false"
             style={{ position: "static", transform: "none" }}
-            className="w-4 h-4 bg-node-error dark:bg-node-error shadow-lg hover:shadow-node-error/50 dark:hover:shadow-node-error/50"
+            className="w-4 h-4 bg-red-500 border-2 border-white dark:border-gray-900"
           />
-          <div className="absolute left-6 top-1/2 transform -translate-y-1/2 bg-gradient-to-r from-node-error/20 to-status-error/10 dark:from-node-error/20 dark:to-status-error/10 px-2 py-1 rounded-md backdrop-blur-sm border border-node-error/30 dark:border-node-error/30 opacity-0 group-hover/handle:opacity-100 transition-opacity duration-300 whitespace-nowrap">
-            <span className="text-xs font-medium text-node-error dark:text-node-error">
+          <div className="absolute left-6 top-1/2 transform -translate-y-1/2 bg-red-50 dark:bg-red-900/20 px-2 py-1 rounded-md border border-red-200 dark:border-red-800 opacity-0 group-hover/handle:opacity-100 transition-opacity duration-300 whitespace-nowrap">
+            <span className="text-xs font-medium text-red-600 dark:text-red-400">
               False
             </span>
           </div>

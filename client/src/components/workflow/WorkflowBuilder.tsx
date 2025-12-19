@@ -23,13 +23,8 @@ import { DecisionNode } from "../nodes/DecisionNode";
 import { AIWorkflowGenerator } from "./AIWorkflowGenerator";
 import GenieButton from "../GenieButton";
 import { CredentialVault } from "./CredentialVault";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@radix-ui/react-tooltip";
-import { CircleUserRound, FileInput, Key, Moon, Sun } from "lucide-react";
 import { useTheme } from "@/provider/theme-provider";
+import Header from "./Header";
 
 const nodeTypes = {
   trigger: TriggerNode,
@@ -335,66 +330,13 @@ const WorkflowBuilderContent = () => {
     <div className="min-h-screen bg-gray-50 dark:bg-workflow-void overflow-hidden">
       <div className="w-full h-screen bg-transparent">
         {/* Header */}
-        <div className="w-[22%] absolute right-6 top-4 z-50 shadow-sm">
-          <div className="h-14 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 flex items-center justify-between px-6 rounded-3xl">
-            <div className="w-full flex items-center justify-between space-x-6">
-              <div className="flex items-center space-x-3">
-                <div className="">
-                  <div className="text-sm text-text-secondary dark:text-text-secondary">
-                    {nodes.length} nodes
-                  </div>
-                  <div className="text-sm text-text-secondary dark:text-text-secondary">
-                    {edges.length} connections
-                  </div>
-                </div>
-              </div>
-
-              <div className="flex gap-2">
-                <Tooltip>
-                  <TooltipTrigger onClick={() => setShowImportDialog(true)}>
-                    <FileInput className="text-gray-900 dark:text-gray-900 bg-gray-300 dark:bg-gray-300 w-8 h-8 p-2 transition-transform duration-200 ease-in-out hover:scale-125 rounded-full" />
-                  </TooltipTrigger>
-                  <TooltipContent className="bg-bg-card dark:bg-bg-card text-text-primary dark:text-text-primary text-xs">
-                    <p>Import Workflow</p>
-                  </TooltipContent>
-                </Tooltip>
-
-                <Tooltip>
-                  <TooltipTrigger
-                    onClick={() => setShowCredentialVault(!showCredentialVault)}
-                  >
-                    <Key className="text-gray-900 dark:text-gray-900 bg-gray-300 dark:bg-gray-300 w-8 h-8 p-2 transition-transform duration-200 ease-in-out hover:scale-125 rounded-full" />
-                  </TooltipTrigger>
-                  <TooltipContent className="bg-bg-card dark:bg-bg-card text-text-primary dark:text-text-primary text-xs">
-                    <p>Credentials</p>
-                  </TooltipContent>
-                </Tooltip>
-
-                <Tooltip>
-                  <TooltipTrigger>
-                    <CircleUserRound className="text-gray-900 dark:text-gray-900 bg-gray-300 dark:bg-gray-300 w-8 h-8 p-2 transition-transform duration-200 ease-in-out hover:scale-125 rounded-full" />
-                  </TooltipTrigger>
-                  <TooltipContent className="bg-bg-card dark:bg-bg-card text-text-primary dark:text-text-primary text-xs">
-                    <p>Profile</p>
-                  </TooltipContent>
-                </Tooltip>
-
-                <Tooltip>
-                  <TooltipTrigger onClick={() => toggleTheme()}>
-                    {isDark ? (
-                      <Sun className="text-gray-900 dark:text-gray-900 bg-gray-300 dark:bg-gray-300 w-8 h-8 p-2 transition-transform duration-200 ease-in-out hover:scale-125 rounded-full" />
-                    ) : (
-                      <Moon className="text-gray-900 dark:text-gray-900 bg-gray-300 dark:bg-gray-300 w-8 h-8 p-2 transition-transform duration-200 ease-in-out hover:scale-125 rounded-full" />
-                    )}
-                  </TooltipTrigger>
-                  <TooltipContent className="bg-bg-card dark:bg-bg-card text-text-primary dark:text-text-primary text-xs">
-                    <p>{isDark ? "Light Mode" : "Dark Mode"}</p>
-                  </TooltipContent>
-                </Tooltip>
-              </div>
-            </div>
-          </div>
-        </div>
+        <Header
+          nodes={nodes.length}
+          edges={edges.length}
+          setShowCredentialVault={setShowCredentialVault}
+          showCredentialVault={showCredentialVault}
+          setShowImportDialog={setShowImportDialog}
+        />
 
         {/* Main Content */}
         <div className="w-full h-[calc(100%)] flex">
@@ -426,7 +368,7 @@ const WorkflowBuilderContent = () => {
                 type: "smoothstep",
               }}
             >
-              <Controls className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-sm" />
+              <Controls className="border border-gray-200 dark:border-gray-800 rounded-lg shadow-sm [&>button]:bg-gray-200 dark:[&>button]:bg-gray-800 [&>button]:text-gray-900 dark:[&>button]:text-gray-100" />
               <Background
                 color={isDark ? "#666666" : "#3b3b3b"}
                 gap={30}
