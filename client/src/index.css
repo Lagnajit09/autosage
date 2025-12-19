@@ -207,17 +207,9 @@
   stroke: #b373e7; /* workflow-nebula */
 }
 
-/* Node glow effects with your color palette */
+/* Node glow effects moved to individual node components */
 .react-flow__node {
   transition: all 0.2s ease;
-}
-
-.react-flow__node:hover {
-  box-shadow: 0 0 20px rgba(179, 115, 231, 0.3); /* workflow-nebula glow */
-}
-
-.react-flow__node.selected {
-  box-shadow: 0 0 25px rgba(179, 115, 231, 0.5); /* workflow-nebula glow */
 }
 
 /* Custom animations with your color palette */
@@ -421,14 +413,7 @@
   stroke: #8b5cf6; /* light primary accent */
 }
 
-/* Light theme node effects */
-.light .react-flow__node:hover {
-  box-shadow: 0 0 20px rgba(139, 92, 246, 0.3);
-}
-
-.light .react-flow__node.selected {
-  box-shadow: 0 0 25px rgba(139, 92, 246, 0.5);
-}
+/* Light theme node effects moved to individual node components */
 
 /* Light theme workflow styles */
 .light .workflow-node {

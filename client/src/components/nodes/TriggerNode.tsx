@@ -29,28 +29,35 @@ const getIcon = (type: string) => {
   }
 };
 
-export const TriggerNode = ({ data }: { data: TriggerNodeData }) => {
+export const TriggerNode = ({
+  data,
+  selected,
+}: {
+  data: TriggerNodeData;
+  selected?: boolean;
+}) => {
   return (
-    <div className="group relative bg-white dark:bg-gray-900 border-2 border-emerald-200 dark:border-emerald-900/50 rounded-2xl shadow-sm min-w-[180px] hover:shadow-md transition-all duration-200">
-      <div className="relative p-4 z-10">
-        {/* Enhanced header */}
-        <div className="flex items-center space-x-3 mb-3">
-          <div className="p-2 bg-emerald-50 dark:bg-emerald-900/20 rounded-xl border border-emerald-100 dark:border-emerald-800 group-hover:scale-110 transition-transform duration-300">
-            {getIcon(data.type)}
-          </div>
-          <div className="flex-1 min-w-0">
-            <h4 className="font-bold text-gray-900 dark:text-gray-100 text-sm truncate">
-              {data.label || "Trigger"}
-            </h4>
-          </div>
+    <div
+      className={`group relative bg-white dark:bg-gray-900 border-2 rounded-full w-40 h-40 flex flex-col justify-center items-center transition-all duration-200 ${
+        selected
+          ? "border-emerald-400 dark:border-emerald-500 shadow-[0_0_25px_rgba(16,185,129,0.5)] dark:shadow-[0_0_25px_rgba(52,211,153,0.5)]"
+          : "border-emerald-200 dark:border-emerald-900/50 shadow-sm hover:shadow-[0_0_20px_rgba(16,185,129,0.3)] dark:hover:shadow-[0_0_20px_rgba(52,211,153,0.3)]"
+      }`}
+    >
+      <div className="relative z-10 flex flex-col items-center p-4 w-full">
+        {/* Icon */}
+        <div className="p-3 bg-emerald-50 dark:bg-emerald-900/20 rounded-full border border-emerald-100 dark:border-emerald-800 mb-2 group-hover:scale-110 transition-transform duration-300">
+          {getIcon(data.type)}
         </div>
 
-        {/* Enhanced footer */}
-        <div className="flex items-center justify-between">
-          <div className="inline-flex items-center px-2.5 py-1 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400 text-xs font-semibold rounded-lg border border-emerald-100 dark:border-emerald-800">
-            ⚡ Trigger
-          </div>
-          <div className="w-2 h-2 bg-emerald-400 dark:bg-emerald-500 rounded-full animate-pulse"></div>
+        {/* Label */}
+        <h4 className="font-bold text-gray-900 dark:text-gray-100 text-xs text-center w-full px-2 whitespace-normal break-words leading-tight">
+          {data.label || "Trigger"}
+        </h4>
+
+        {/* Type Badge - simplified for circular layout */}
+        <div className="mt-2 px-2 py-0.5 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400 text-[10px] font-semibold rounded-full border border-emerald-100 dark:border-emerald-800">
+          Trigger
         </div>
       </div>
 
@@ -58,7 +65,7 @@ export const TriggerNode = ({ data }: { data: TriggerNodeData }) => {
       <Handle
         type="source"
         position={Position.Right}
-        className="w-4 h-4 bg-emerald-200 dark:bg-emerald-800 border-2 border-white dark:border-gray-900"
+        className="w-4 h-4 bg-emerald-200 dark:bg-emerald-800 border-2 border-white dark:border-gray-900 -right-2"
       />
     </div>
   );

@@ -27,9 +27,21 @@ const getIcon = (type: string) => {
   }
 };
 
-export const ActionNode = ({ data }: { data: ActionNodeData }) => {
+export const ActionNode = ({
+  data,
+  selected,
+}: {
+  data: ActionNodeData;
+  selected?: boolean;
+}) => {
   return (
-    <div className="group relative bg-white dark:bg-gray-900 border-2 border-blue-200 dark:border-blue-900/50 rounded-2xl shadow-sm min-w-[180px] hover:shadow-md transition-all duration-200">
+    <div
+      className={`group relative bg-white dark:bg-gray-900 border-2 rounded-2xl min-w-[180px] transition-all duration-200 ${
+        selected
+          ? "border-blue-400 dark:border-blue-500 shadow-[0_0_25px_rgba(59,130,246,0.5)] dark:shadow-[0_0_25px_rgba(96,165,250,0.5)]"
+          : "border-blue-200 dark:border-blue-900/50 shadow-sm hover:shadow-[0_0_20px_rgba(59,130,246,0.3)] dark:hover:shadow-[0_0_20px_rgba(96,165,250,0.3)]"
+      }`}
+    >
       {/* Input handle */}
       <Handle
         type="target"
