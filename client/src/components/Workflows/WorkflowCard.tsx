@@ -9,6 +9,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { Workflow } from "./types";
+import { useNavigate } from "react-router-dom";
 
 const statusColors = {
   active:
@@ -20,6 +21,7 @@ const statusColors = {
 };
 
 export const WorkflowCard = ({ workflow }: { workflow: Workflow }) => {
+  const navigate = useNavigate();
   return (
     <div className="group flex flex-col bg-white dark:bg-gray-800/40 border border-gray-200 dark:border-gray-700/50 rounded-xl overflow-hidden hover:shadow-lg hover:border-purple-500/30 dark:hover:border-purple-500/30 transition-all duration-300">
       <div className="p-4 md:p-6 flex-1">
@@ -91,7 +93,10 @@ export const WorkflowCard = ({ workflow }: { workflow: Workflow }) => {
           <Edit className="w-4 h-4 mr-2" />
           Edit
         </Button>
-        <Button className="flex-1 bg-purple-600 hover:bg-purple-700 text-white shadow-md shadow-purple-500/20">
+        <Button
+          onClick={() => navigate(`/workflow/execution/${workflow.id}`)}
+          className="flex-1 bg-purple-600 hover:bg-purple-700 text-white shadow-md shadow-purple-500/20"
+        >
           <Play className="w-4 h-4 mr-2" />
           Run
         </Button>

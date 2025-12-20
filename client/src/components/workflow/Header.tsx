@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { useTheme } from "@/provider/theme-provider";
 import { Button } from "../ui/button";
+import { useNavigate } from "react-router-dom";
 
 const Header = ({
   nodes,
@@ -29,10 +30,14 @@ const Header = ({
   showCredentialVault: boolean;
 }) => {
   const { isDark, toggleTheme } = useTheme();
+  const navigate = useNavigate();
 
   return (
     <div className="w-[32%] flex items-center justify-end gap-2 absolute right-4 top-4 z-50">
-      <Button className="flex items-center bg-green-100 hover:bg-green-200 dark:bg-green-900/50 dark:hover:bg-green-800 text-green-600 dark:text-green-400 border-2 border-green-500/90 rounded-xl">
+      <Button
+        onClick={() => navigate("/workflow/execution/2")}
+        className="flex items-center bg-green-100 hover:bg-green-200 dark:bg-green-900/50 dark:hover:bg-green-800 text-green-600 dark:text-green-400 border-2 border-green-500/90 rounded-xl"
+      >
         <PlayCircle />
         <span className="font-medium">Run</span>
       </Button>
@@ -80,7 +85,7 @@ const Header = ({
             </Tooltip>
 
             <Tooltip>
-              <TooltipTrigger>
+              <TooltipTrigger onClick={() => navigate("/profile")}>
                 <CircleUserRound className="text-gray-900 dark:text-gray-900 bg-purple-100 dark:bg-gray-300 w-8 h-8 p-2 transition-transform duration-200 ease-in-out hover:scale-125 rounded-full" />
               </TooltipTrigger>
               <TooltipContent className="text-xs p-1 rounded-md bg-gray-200 dark:bg-gray-800 dark:text-gray-200">

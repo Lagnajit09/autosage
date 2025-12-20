@@ -4,6 +4,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import Workflow from "./pages/Workflow";
+import WorkflowExecution from "./pages/WorkflowExecution";
 import NotFound from "./pages/NotFound";
 import SignUp from "./pages/SignUp";
 import SignIn from "./pages/SignIn";
@@ -39,6 +40,10 @@ const App = () => (
               {/* Protected Routes */}
               <Route element={<ProtectedRoute />}>
                 <Route path="/workflow" element={<Workflow />} />
+                <Route
+                  path="/workflow/execution/:id"
+                  element={<WorkflowExecution />}
+                />
                 <Route path="/workflows" element={<Workflows />} />
                 <Route path="/templates" element={<Templates />} />
                 <Route path="/dashboard" element={<Dashboard />} />
