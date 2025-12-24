@@ -11,14 +11,21 @@ import {
 import { NodeData } from "@/utils/types";
 import Logo from "../Logo";
 import { Button } from "../ui/button";
+import { Input } from "../ui/input";
 
 interface LeftSidebarProps {
   onSaveWorkflow: () => void;
+  workflowName: string;
+  setWorkflowName: (name: string) => void;
 }
 
 type DecisionType = "output-eval" | "condition" | "custom";
 
-export const LeftSidebar: React.FC<LeftSidebarProps> = ({ onSaveWorkflow }) => {
+export const LeftSidebar: React.FC<LeftSidebarProps> = ({
+  onSaveWorkflow,
+  workflowName,
+  setWorkflowName,
+}) => {
   // Handle drag start - this is where we prepare data for the drop
   const onDragStart = (
     event: React.DragEvent,
@@ -70,7 +77,17 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({ onSaveWorkflow }) => {
           <Logo />
         </div>
 
-        <div className="flex items-center mb-6 relative z-10">
+        {/* Workflow Name */}
+        <div className="mb-4">
+          <Input
+            placeholder="Workflow Name"
+            value={workflowName}
+            onChange={(e) => setWorkflowName(e.target.value)}
+            className="w-full p-2 border-2 border-gray-300 dark:border-gray-800 rounded-md"
+          />
+        </div>
+
+        <div className="flex items-center mb-4 relative z-10">
           <div className="w-2 h-2 bg-gradient-to-r from-workflow-royal to-workflow-nebula dark:from-workflow-nebula dark:to-workflow-aurora rounded-full mr-3 animate-pulse-glow"></div>
           <h2 className="text-sm font-semibold text-text-light-accent dark:text-text-primary">
             Components
@@ -80,8 +97,8 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({ onSaveWorkflow }) => {
 
       {/* Triggers Section */}
       <div className="mb-6 relative z-10">
-        <div className="text-xs text-node-trigger dark:text-text-primary mb-4 uppercase tracking-wider font-medium flex items-center">
-          <div className="w-1 h-1 bg-node-trigger dark:bg-node-success rounded-full mr-2"></div>
+        <div className="text-xs text-green-600 dark:text-green-400 mb-4 uppercase tracking-wider font-medium flex items-center">
+          <div className="w-1 h-1 bg-green-600 dark:bg-green-400 rounded-full mr-2"></div>
           Triggers
         </div>
         <div className="space-y-3">
@@ -99,15 +116,15 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({ onSaveWorkflow }) => {
                 }
                 className="group cursor-grab active:cursor-grabbing 
                          bg-gray-50 dark:bg-gray-900 
-                         hover:bg-purple-50 dark:hover:bg-purple-900/10
+                         hover:bg-green-50 dark:hover:bg-green-900/10
                          rounded-xl p-2 
                          border border-gray-200 dark:border-gray-800
-                         hover:border-purple-200 dark:hover:border-purple-800
+                         hover:border-green-200 dark:hover:border-green-800
                          transition-all duration-200 ease-out
                          transform hover:scale-[1.02]"
               >
                 <div className="flex items-center space-x-3">
-                  <div className="p-2 bg-purple-100 dark:bg-purple-900/20 rounded-lg text-purple-600 dark:text-purple-400 group-hover:text-purple-700 dark:group-hover:text-purple-300">
+                  <div className="p-2 bg-green-100 dark:bg-green-900/20 rounded-lg text-green-600 dark:text-green-400 group-hover:text-green-700 dark:group-hover:text-green-300">
                     <Icon size={14} />
                   </div>
                   <span className="text-sm text-gray-700 dark:text-gray-200 font-medium">
@@ -122,8 +139,8 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({ onSaveWorkflow }) => {
 
       {/* Actions Section */}
       <div className="mb-6 relative z-10">
-        <div className="text-xs text-node-action dark:text-text-primary mb-4 uppercase tracking-wider font-medium flex items-center">
-          <div className="w-1 h-1 bg-node-action dark:bg-ai-accent rounded-full mr-2"></div>
+        <div className="text-xs text-blue-600 dark:text-blue-400 mb-4 uppercase tracking-wider font-medium flex items-center">
+          <div className="w-1 h-1 bg-blue-600 dark:bg-blue-400 rounded-full mr-2"></div>
           Actions
         </div>
         <div className="space-y-3">
@@ -164,8 +181,8 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({ onSaveWorkflow }) => {
 
       {/* Decisions Section */}
       <div className="mb-6 relative z-10">
-        <div className="text-xs text-node-decision dark:text-text-primary mb-4 uppercase tracking-wider font-medium flex items-center">
-          <div className="w-1 h-1 bg-node-decision dark:bg-status-pending rounded-full mr-2"></div>
+        <div className="text-xs text-amber-600 dark:text-amber-400 mb-4 uppercase tracking-wider font-medium flex items-center">
+          <div className="w-1 h-1 bg-amber-600 dark:bg-amber-400 rounded-full mr-2"></div>
           Decisions
         </div>
         <div className="space-y-3">

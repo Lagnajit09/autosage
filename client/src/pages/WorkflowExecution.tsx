@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import LeftNav from "@/components/LeftNav";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -11,6 +11,7 @@ import {
   FileText,
   History,
   Activity,
+  Pencil,
 } from "lucide-react";
 import ExecutionNodes from "@/components/Execution/ExecutionNodes";
 import ExecutionTerminal from "@/components/Execution/ExecutionTerminal";
@@ -23,6 +24,8 @@ const WorkflowExecution = () => {
   const { id } = useParams();
   const [activeTab, setActiveTab] = useState("terminal");
   const [isExecuting, setIsExecuting] = useState(false);
+
+  const navigate = useNavigate();
 
   const handleExecute = () => {
     setIsExecuting(true);
@@ -48,6 +51,14 @@ const WorkflowExecution = () => {
           </div>
 
           <div className="flex items-center gap-2">
+            <Button
+              onClick={() => navigate("/workflow")}
+              disabled={isExecuting}
+              className="bg-blue-100 dark:bg-blue-900/30 border-2 border-blue-400 hover:bg-blue-200 dark:hover:bg-blue-900/50 text-blue-600 dark:text-blue-400 shadow-md shadow-blue-500/20"
+            >
+              <Pencil className={`w-4 h-4`} />
+              Edit
+            </Button>
             <Button
               onClick={handleExecute}
               disabled={isExecuting}

@@ -102,6 +102,7 @@ export interface Edge {
 }
 
 export interface WorkflowData {
+  name: string;
   nodes: Node[];
   edges: Edge[];
 }

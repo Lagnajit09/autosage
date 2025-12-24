@@ -25,6 +25,7 @@ import GenieButton from "../GenieButton";
 import { CredentialVault } from "./CredentialVault";
 import { useTheme } from "@/provider/theme-provider";
 import Header from "./Header";
+import { toast } from "@/hooks/use-toast";
 
 const nodeTypes = {
   trigger: TriggerNode,
@@ -36,6 +37,7 @@ const WorkflowBuilderContent = () => {
   const { isDark, toggleTheme } = useTheme();
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
+  const [workflowName, setWorkflowName] = useState("");
   const [selectedNode, setSelectedNode] = useState<Node | null>(null);
   const [selectedEdge, setSelectedEdge] = useState<Edge | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -51,10 +53,14 @@ const WorkflowBuilderContent = () => {
     const savedWorkflow = localStorage.getItem("currentWorkflow");
     if (savedWorkflow) {
       try {
-        const { nodes: savedNodes, edges: savedEdges } =
-          JSON.parse(savedWorkflow);
+        const {
+          nodes: savedNodes,
+          edges: savedEdges,
+          name,
+        } = JSON.parse(savedWorkflow);
         setNodes(savedNodes || []);
         setEdges(savedEdges || []);
+        setWorkflowName(name);
       } catch (error) {
         console.error("Error loading saved workflow:", error);
       }
@@ -63,9 +69,14 @@ const WorkflowBuilderContent = () => {
 
   // Auto-save to localStorage whenever nodes or edges change
   useEffect(() => {
-    const workflowData = { nodes, edges, timestamp: new Date().toISOString() };
+    const workflowData = {
+      name: workflowName,
+      nodes,
+      edges,
+      timestamp: new Date().toISOString(),
+    };
     localStorage.setItem("currentWorkflow", JSON.stringify(workflowData));
-  }, [nodes, edges]);
+  }, [nodes, edges, workflowName]);
 
   useEffect(() => {
     setSidebarOpen(!!(selectedNode || selectedEdge));
@@ -73,7 +84,7 @@ const WorkflowBuilderContent = () => {
 
   const importWorkflow = (workflowData: WorkflowData) => {
     try {
-      const { nodes: importedNodes, edges: importedEdges } = workflowData;
+      const { name, nodes: importedNodes, edges: importedEdges } = workflowData;
 
       if (importedNodes && Array.isArray(importedNodes)) {
         setNodes(importedNodes);
@@ -82,6 +93,8 @@ const WorkflowBuilderContent = () => {
       if (importedEdges && Array.isArray(importedEdges)) {
         setEdges(importedEdges);
       }
+
+      setWorkflowName(name || "");
 
       setShowImportDialog(false);
 
@@ -255,6 +268,7 @@ const WorkflowBuilderContent = () => {
   const saveWorkflow = () => {
     // Enhanced workflow logging with detailed node information
     const workflow = {
+      name: workflowName,
       nodes: nodes.map((node) => {
         const nodeDetails = {
           id: node.id,
@@ -320,6 +334,13 @@ const WorkflowBuilderContent = () => {
       totalEdges: edges.length,
     };
 
+    localStorage.setItem("currentWorkflow", JSON.stringify(workflow));
+
+    toast({
+      title: "Workflow Saved",
+      description: "Your workflow has been saved successfully.",
+    });
+
     console.log(
       "🌊 Complete Workflow Details Saved:",
       JSON.stringify(workflow, null, 2)
@@ -340,7 +361,11 @@ const WorkflowBuilderContent = () => {
 
         {/* Main Content */}
         <div className="w-full h-[calc(100%)] flex">
-          <LeftSidebar onSaveWorkflow={saveWorkflow} />
+          <LeftSidebar
+            onSaveWorkflow={saveWorkflow}
+            workflowName={workflowName}
+            setWorkflowName={setWorkflowName}
+          />
 
           <div
             className="flex-1 h-[calc(100%-1rem)] bg-gray-100 dark:bg-gray-900/30 rounded-3xl relative overflow-hidden ml-4 my-2"
