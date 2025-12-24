@@ -33,6 +33,9 @@ const nodeTypes = {
   decision: DecisionNode,
 };
 
+import { MobileRestrictedMessage } from "./MobileRestrictedMessage";
+import { useIsMobile } from "@/hooks/use-mobile";
+
 const WorkflowBuilderContent = () => {
   const { isDark, toggleTheme } = useTheme();
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
@@ -482,6 +485,12 @@ const WorkflowBuilderContent = () => {
 };
 
 export const WorkflowBuilder = () => {
+  const isMobile = useIsMobile();
+
+  if (isMobile) {
+    return <MobileRestrictedMessage />;
+  }
+
   return (
     <ReactFlowProvider>
       <WorkflowBuilderContent />
