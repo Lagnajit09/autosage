@@ -2,7 +2,7 @@ import { Navigate, Outlet } from "react-router-dom";
 import { useAuth } from "@clerk/clerk-react";
 import { Spinner } from "@/components/ui/spinner";
 
-const ProtectedRoute = () => {
+const PublicRoute = () => {
   const { isSignedIn, isLoaded } = useAuth();
 
   // Show loading state while checking authentication
@@ -17,7 +17,9 @@ const ProtectedRoute = () => {
     );
   }
 
-  return isSignedIn ? <Outlet /> : <Navigate to="/signin" replace />;
+  // If user is signed in, redirect to dashboard
+  // Otherwise, show the public route (sign in, sign up, landing page)
+  return isSignedIn ? <Navigate to="/dashboard" replace /> : <Outlet />;
 };
 
-export default ProtectedRoute;
+export default PublicRoute;

@@ -19,6 +19,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 
 import { SidebarTrigger } from "@/components/ui/sidebar";
+import { SignOutButton } from "@clerk/clerk-react";
 
 const TopNav = () => {
   const { isDark, toggleTheme } = useTheme();
@@ -137,10 +138,12 @@ const UserMenu = () => {
           <CreditCard />
           Subscription
         </DropdownMenuItem>
-        <DropdownMenuItem className="cursor-pointer dark:text-gray-300 dark:hover:bg-gray-700">
-          <LogOut />
-          LogOut
-        </DropdownMenuItem>
+        <SignOutButton>
+          <DropdownMenuItem className="cursor-pointer dark:text-gray-300 dark:hover:bg-gray-700">
+            <LogOut />
+            LogOut
+          </DropdownMenuItem>
+        </SignOutButton>
       </DropdownMenuContent>
     </DropdownMenu>
   );

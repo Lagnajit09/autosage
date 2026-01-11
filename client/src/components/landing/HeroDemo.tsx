@@ -464,7 +464,7 @@ const ServerMonitoringWorkflow = () => {
       </div>
 
       <div className="w-16 h-16 absolute bottom-4 right-4 flex items-center justify-center rounded-full bg-gray-900 hover:bg-black border-2 dark:border-blue-500 shadow-lg">
-        <AutobotIcon size={32} />
+        <AutobotIcon dark={true} size={32} />
       </div>
 
       {/* Tooltip positioned relative to main container */}

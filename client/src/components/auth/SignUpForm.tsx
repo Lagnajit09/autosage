@@ -5,6 +5,7 @@ import { z } from "zod";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { motion } from "framer-motion";
+import { useSignUp } from "@clerk/clerk-react";
 import {
   Form,
   FormControl,
@@ -19,7 +20,7 @@ import { Input } from "../ui/input";
 import { Checkbox } from "../ui/checkbox";
 import { useLoading } from "../../contexts/LoadingContext";
 import { Spinner } from "../ui/spinner";
-import { useNavigate, Link } from "react-router-dom"; // Fixed import
+import { useNavigate, Link } from "react-router-dom";
 import { toast } from "@/hooks/use-toast";
 import {
   Card,
@@ -30,24 +31,19 @@ import {
   CardDescription,
 } from "../ui/card";
 import { SocialAuth } from "./SocialAuth";
-import {
-  InputOTP,
-  InputOTPGroup,
-  InputOTPSlot,
-} from "@/components/ui/input-otp";
+import { VerifyEmail } from "./VerifyEmail";
 
 const SignUpSchema = z.object({
+  firstName: z.string().min(2, { message: "First name is required" }),
+  lastName: z.string().min(2, { message: "Last name is required" }),
   email: z.string().email({ message: "Invalid email address" }),
   acceptTerms: z.boolean().refine((val) => val === true, {
     message: "You must accept the terms and conditions",
   }),
 });
 
-const OTPSchema = z.object({
-  otp: z.string().min(6, { message: "OTP must be 6 characters" }),
-});
-
 export function SignUpForm() {
+  const { isLoaded, signUp, setActive } = useSignUp();
   const { isLoading, setIsLoading } = useLoading();
   const navigate = useNavigate();
   const [step, setStep] = useState<"email" | "otp">("email");
@@ -56,53 +52,51 @@ export function SignUpForm() {
   const form = useForm<z.infer<typeof SignUpSchema>>({
     resolver: zodResolver(SignUpSchema),
     defaultValues: {
+      firstName: "",
+      lastName: "",
       email: "",
       acceptTerms: false,
     },
   });
 
-  const otpForm = useForm<z.infer<typeof OTPSchema>>({
-    resolver: zodResolver(OTPSchema),
-    defaultValues: { otp: "" },
-  });
+  // Handle errors from Clerk
+  const handleError = (error: any) => {
+    console.error("Clerk Error:", error);
+    const msg = error.errors?.[0]?.message || "An unexpected error occurred.";
+    toast({
+      title: "Error",
+      description: msg,
+      variant: "destructive",
+    });
+  };
 
   const onEmailSubmit = async (values: z.infer<typeof SignUpSchema>) => {
+    if (!isLoaded) return;
     setIsLoading(true);
+
     try {
-      await new Promise((resolve) => setTimeout(resolve, 1000));
-      setEmail(values.email);
+      const { email, firstName, lastName } = values;
+
+      // Start the sign-up process
+      await signUp.create({
+        emailAddress: email,
+        firstName,
+        lastName,
+      });
+
+      // Prepare email verification
+      await signUp.prepareEmailAddressVerification({
+        strategy: "email_code",
+      });
+
+      setEmail(email);
       setStep("otp");
       toast({
         title: "Verification Sent",
         description: "We've sent a code to your email.",
       });
     } catch (error) {
-      toast({
-        title: "Error",
-        description: "Failed to send code.",
-        variant: "destructive",
-      });
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const onOTPSubmit = async (values: z.infer<typeof OTPSchema>) => {
-    setIsLoading(true);
-    try {
-      await new Promise((resolve) => setTimeout(resolve, 1000));
-      console.log("Verified OTP:", values.otp, "for new account:", email);
-      toast({
-        title: "Account Created!",
-        description: "Welcome to AutoSage.",
-      });
-      navigate("/dashboard");
-    } catch (error) {
-      toast({
-        title: "Error",
-        description: "Invalid code.",
-        variant: "destructive",
-      });
+      handleError(error);
     } finally {
       setIsLoading(false);
     }
@@ -133,6 +127,46 @@ export function SignUpForm() {
                   onSubmit={form.handleSubmit(onEmailSubmit)}
                   className="space-y-4"
                 >
+                  <div className="grid grid-cols-2 gap-4">
+                    <FormField
+                      control={form.control}
+                      name="firstName"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel className="text-gray-700 dark:text-gray-400">
+                            First Name
+                          </FormLabel>
+                          <FormControl>
+                            <Input
+                              placeholder="John"
+                              className="text-gray-800 dark:text-gray-200"
+                              {...field}
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="lastName"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel className="text-gray-700 dark:text-gray-400">
+                            Last Name
+                          </FormLabel>
+                          <FormControl>
+                            <Input
+                              placeholder="Doe"
+                              className="text-gray-800 dark:text-gray-200"
+                              {...field}
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
                   <FormField
                     control={form.control}
                     name="email"
@@ -172,14 +206,14 @@ export function SignUpForm() {
                           <FormLabel className="text-sm font-normal cursor-pointer text-gray-700 dark:text-gray-400">
                             I accept the{" "}
                             <Link
-                              to=""
+                              to="/terms"
                               className="text-gray-700 dark:text-gray-400 hover:underline font-medium"
                             >
                               Terms of Service
                             </Link>{" "}
                             and{" "}
                             <Link
-                              to=""
+                              to="/privacy"
                               className="text-gray-700 dark:text-gray-400 hover:underline font-medium"
                             >
                               Privacy Policy
@@ -220,58 +254,15 @@ export function SignUpForm() {
                   </span>
                 </div>
               </div>
-              <SocialAuth isLoading={isLoading} />
+              <SocialAuth isLoading={isLoading} mode="signup" />
             </>
           ) : (
-            <Form {...otpForm}>
-              <form
-                onSubmit={otpForm.handleSubmit(onOTPSubmit)}
-                className="space-y-4"
-              >
-                <FormField
-                  control={otpForm.control}
-                  name="otp"
-                  render={({ field }) => (
-                    <FormItem className="flex flex-col items-center justify-center">
-                      <FormLabel className="sr-only">
-                        One-Time Password
-                      </FormLabel>
-                      <FormControl>
-                        <InputOTP maxLength={6} {...field}>
-                          <InputOTPGroup className="text-gray-800 dark:text-gray-200">
-                            <InputOTPSlot index={0} />
-                            <InputOTPSlot index={1} />
-                            <InputOTPSlot index={2} />
-                            <InputOTPSlot index={3} />
-                            <InputOTPSlot index={4} />
-                            <InputOTPSlot index={5} />
-                          </InputOTPGroup>
-                        </InputOTP>
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <Button type="submit" className="w-full" disabled={isLoading}>
-                  {isLoading ? (
-                    <div className="flex items-center justify-center">
-                      <Spinner size="sm" variant="white" className="mr-2" />
-                      Verifying...
-                    </div>
-                  ) : (
-                    "Verify & Create Account"
-                  )}
-                </Button>
-                <Button
-                  variant="link"
-                  className="w-full text-xs font-normal"
-                  onClick={() => setStep("email")}
-                  type="button"
-                >
-                  Change Email
-                </Button>
-              </form>
-            </Form>
+            <VerifyEmail
+              mode="signup"
+              email={email}
+              onBack={() => setStep("email")}
+              onSuccess={() => navigate("/dashboard", { replace: true })}
+            />
           )}
         </CardContent>
         <CardFooter className="flex flex-col space-y-2">

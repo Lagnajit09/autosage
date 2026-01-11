@@ -23,53 +23,69 @@ import Settings from "./pages/Settings";
 import Profile from "./pages/Profile";
 import Plans from "./pages/Plans";
 import Billing from "./pages/Billing";
+import { SSOCallback } from "./components/auth/SSOCallback";
+import { ClerkProvider } from "@clerk/clerk-react";
+import PublicRoute from "./components/auth/PublicRoute";
 
 const queryClient = new QueryClient();
 
-localStorage.setItem("authToken", "1234567890");
+const App = () => {
+  const PUBLISHABLE_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
 
-const App = () => (
-  <QueryClientProvider client={queryClient}>
-    <ThemeProvider>
-      <LoadingProvider>
-        <TooltipProvider>
-          <Toaster />
-          <Sonner />
-          <BrowserRouter>
-            <Routes>
-              {/* Protected Routes */}
-              <Route element={<ProtectedRoute />}>
-                <Route path="/workflow" element={<Workflow />} />
-                <Route
-                  path="/workflow/execution/:id"
-                  element={<WorkflowExecution />}
-                />
-                <Route path="/workflows" element={<Workflows />} />
-                <Route path="/templates" element={<Templates />} />
-                <Route path="/dashboard" element={<Dashboard />} />
-                <Route path="/code-editor" element={<CodeEditor />} />
-                <Route path="/raw/:id" element={<ScriptViewer />} />
-                <Route path="/ai/autobot" element={<AutobotChat />} />
-                <Route path="/ai/autobot/:id" element={<AutobotChat />} />
-                <Route path="/settings" element={<Settings />} />
-                <Route path="/profile" element={<Profile />} />
-                <Route path="/plans" element={<Plans />} />
-                <Route path="/billing" element={<Billing />} />
-              </Route>
+  if (!PUBLISHABLE_KEY) {
+    throw new Error("Missing Publishable Key");
+  }
 
-              {/* Public Routes */}
-              <Route path="/signup" element={<SignUp />} />
-              <Route path="/signin" element={<SignIn />} />
-              <Route path="/" element={<Landing />} />
+  return (
+    <ClerkProvider publishableKey={PUBLISHABLE_KEY}>
+      <QueryClientProvider client={queryClient}>
+        <ThemeProvider>
+          <LoadingProvider>
+            <TooltipProvider>
+              <Toaster />
+              <Sonner />
+              <BrowserRouter>
+                <Routes>
+                  {/* Protected Routes */}
+                  <Route element={<ProtectedRoute />}>
+                    <Route path="/workflow" element={<Workflow />} />
+                    <Route
+                      path="/workflow/execution/:id"
+                      element={<WorkflowExecution />}
+                    />
+                    <Route path="/workflows" element={<Workflows />} />
+                    <Route path="/templates" element={<Templates />} />
+                    <Route path="/dashboard" element={<Dashboard />} />
+                    <Route path="/code-editor" element={<CodeEditor />} />
+                    <Route path="/raw/:id" element={<ScriptViewer />} />
+                    <Route path="/ai/autobot" element={<AutobotChat />} />
+                    <Route path="/ai/autobot/:id" element={<AutobotChat />} />
+                    <Route path="/settings" element={<Settings />} />
+                    <Route path="/profile" element={<Profile />} />
+                    <Route path="/plans" element={<Plans />} />
+                    <Route path="/billing" element={<Billing />} />
+                  </Route>
 
-              {/* Catch-all Route */}
-              <Route path="*" element={<NotFound />} />
-            </Routes>
-          </BrowserRouter>
-        </TooltipProvider>
-      </LoadingProvider>
-    </ThemeProvider>
-  </QueryClientProvider>
-);
+                  {/* Public Routes - redirect to dashboard if authenticated */}
+                  <Route element={<PublicRoute />}>
+                    <Route path="/signup" element={<SignUp />} />
+                    <Route path="/signin" element={<SignIn />} />
+                    <Route path="/" element={<Landing />} />
+                  </Route>
+
+                  {/* SSO Callback - no redirect needed */}
+                  <Route path="/sso-callback" element={<SSOCallback />} />
+
+                  {/* Catch-all Route */}
+                  <Route path="*" element={<NotFound />} />
+                </Routes>
+              </BrowserRouter>
+            </TooltipProvider>
+          </LoadingProvider>
+        </ThemeProvider>
+      </QueryClientProvider>
+    </ClerkProvider>
+  );
+};
 
 export default App;

@@ -10,9 +10,9 @@ const Signup = () => {
           {/* Header */}
           <AuthHeader route="/signin" />
 
-          <div className="flex flex-col items-center justify-center mt-6 md:mt-16">
+          <div className="flex flex-col items-center justify-center mt-6 md:mt-6">
             {/* Logo */}
-            <div className="mb-8 opacity-0 animate-[fade-in_0.6s_ease-out_0.4s_forwards]">
+            <div className="mb-6 opacity-0 animate-[fade-in_0.6s_ease-out_0.4s_forwards]">
               <div className="p-4 bg-background/50 dark:bg-purple-900/10 backdrop-blur-sm border border-border dark:border-purple-700/30 rounded-2xl flex items-center justify-center hover:scale-105 transition-transform duration-300 shadow-lg">
                 <Logo />
               </div>

@@ -1,16 +1,56 @@
 import { Button } from "@/components/ui/button";
+import { useSignIn, useSignUp } from "@clerk/clerk-react";
+import { toast } from "@/hooks/use-toast";
 
 interface SocialAuthProps {
   isLoading: boolean;
+  mode: "signin" | "signup";
 }
 
-export function SocialAuth({ isLoading }: SocialAuthProps) {
+export function SocialAuth({ isLoading, mode }: SocialAuthProps) {
+  const { signIn } = useSignIn();
+  const { signUp } = useSignUp();
+
+  const handleSocialAuth = async (
+    strategy: "oauth_github" | "oauth_google"
+  ) => {
+    try {
+      const authObject = mode === "signin" ? signIn : signUp;
+
+      if (!authObject) {
+        toast({
+          title: "Error",
+          description: "Authentication service not ready. Please try again.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      // Initiate OAuth flow
+      await authObject.authenticateWithRedirect({
+        strategy,
+        redirectUrl: "/sso-callback",
+        redirectUrlComplete: "/dashboard",
+      });
+    } catch (error: any) {
+      console.error("Social auth error:", error);
+      toast({
+        title: "Authentication Error",
+        description:
+          error.errors?.[0]?.message ||
+          "Failed to authenticate. Please try again.",
+        variant: "destructive",
+      });
+    }
+  };
+
   return (
     <div className="grid gap-2">
       <Button
         variant="outline"
         type="button"
         disabled={isLoading}
+        onClick={() => handleSocialAuth("oauth_github")}
         className="w-full bg-background hover:bg-accent hover:text-accent-foreground dark:bg-gray-950 dark:hover:bg-gray-800 dark:border-gray-700 dark:text-gray-100"
       >
         <svg
@@ -34,6 +74,7 @@ export function SocialAuth({ isLoading }: SocialAuthProps) {
         variant="outline"
         type="button"
         disabled={isLoading}
+        onClick={() => handleSocialAuth("oauth_google")}
         className="w-full bg-background hover:bg-accent hover:text-accent-foreground dark:bg-gray-950 dark:hover:bg-gray-800 dark:border-gray-700 dark:text-gray-100"
       >
         <svg
