@@ -1,6 +1,7 @@
 import Feature from "@/components/landing/feature-section";
 import Footer from "@/components/landing/footer";
 import Hero from "@/components/landing/hero-section";
+import PricingSection from "@/components/landing/pricing-section";
 import { Button } from "@/components/ui/button";
 import { useTheme } from "@/provider/theme-provider";
 import { Moon, Sun } from "lucide-react";
@@ -24,6 +25,7 @@ const Landing = () => {
       </div>
       <Hero />
       <Feature />
+      <PricingSection />
       <Footer />
     </div>
   );

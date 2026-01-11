@@ -369,6 +369,15 @@
   border-color: #b373e7; /* workflow-nebula */
 }
 
+.dark ::-webkit-scrollbar-track {
+  background: #111827; /* dark sidebar background */
+}
+
+.dark ::-webkit-scrollbar-thumb {
+  background: linear-gradient(to bottom, #8b5cf6, #c4b5fd); /* dark accents */
+  border-radius: 4px;
+}
+
 /* Light theme scrollbar */
 .light ::-webkit-scrollbar-track {
   background: #f1f5f9; /* light sidebar background */
