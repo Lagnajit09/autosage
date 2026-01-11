@@ -3,10 +3,10 @@ import { Link } from "react-router-dom";
 
 const AuthHeader = ({ route }: { route: string }) => {
   return (
-    <div className="w-full flex items-center justify-between mb-12 opacity-0 animate-[fade-in_0.6s_ease-out_0.2s_forwards]">
+    <div className="w-full flex items-center justify-between mb-8 opacity-0 animate-[fade-in_0.6s_ease-out_0.2s_forwards]">
       <Link
         to="/"
-        className="text-gray-400 hover:text-white transition-colors duration-200 flex items-center gap-2 text-sm hover:scale-105 transform transition-transform"
+        className="text-gray-700 dark:text-gray-400 hover:text-foreground transition-all duration-200 flex items-center gap-2 text-sm hover:scale-105"
       >
         <svg
           width="16"
@@ -23,10 +23,12 @@ const AuthHeader = ({ route }: { route: string }) => {
         Back to Home
       </Link>
       <div className="flex items-center gap-2 text-sm">
-        <span className="text-gray-400">Already a member?</span>
+        <span className="text-gray-700 dark:text-gray-400">
+          {route === "/signin" ? "Already a member?" : "New to AutoSage?"}
+        </span>
         <Link
           to={route}
-          className="text-white hover:text-purple-300 transition-colors duration-200 border border-gray-600 hover:border-purple-500 px-3 py-1 rounded hover:scale-105 transform transition-all"
+          className="text-gray-900 dark:text-gray-100 hover:text-primary transition-all duration-200 border border-border hover:border-primary px-4 py-1.5 rounded-full hover:shadow-sm hover:scale-105 font-medium"
         >
           {route === "/signin" ? "Sign In" : "Sign Up"}
         </Link>
