@@ -1,6 +1,7 @@
 import { Navigate, Outlet } from "react-router-dom";
 import { useAuth } from "@clerk/clerk-react";
 import { Spinner } from "@/components/ui/spinner";
+import Loader from "../Loader";
 
 const PublicRoute = () => {
   const { isSignedIn, isLoaded } = useAuth();
@@ -8,11 +9,8 @@ const PublicRoute = () => {
   // Show loading state while checking authentication
   if (!isLoaded) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-800">
-        <div className="text-center">
-          <Spinner size="lg" className="mx-auto mb-4" />
-          <p className="text-gray-600 dark:text-gray-400">Loading...</p>
-        </div>
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-50 to-gray-100 dark:from-black dark:to-gray-900">
+        <Loader />
       </div>
     );
   }
