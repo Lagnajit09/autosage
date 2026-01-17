@@ -10,10 +10,11 @@ from .utils import api_response
 @require_http_methods(["GET"])
 def list_workflows(request):
     try:
-        # if not request.user.is_authenticated:
-        #     return api_response(False, "Unauthorized", status=401)
+        if not request.user.is_authenticated:
+            return api_response(False, "Unauthorized", status=401)
         
-        workflows = Workflow.objects.all()
+        # Filter by current user
+        workflows = Workflow.objects.filter(user=request.user)
         data = [WorkflowSerializer.to_representation(w) for w in workflows]
         return api_response(True, "Workflows retrieved successfully", data=data)
     except Exception as e:
@@ -23,8 +24,8 @@ def list_workflows(request):
 @require_http_methods(["POST"])
 def create_workflow(request):
     try:
-        # if not request.user.is_authenticated:
-        #     return api_response(False, "Unauthorized", status=401)
+        if not request.user.is_authenticated:
+            return api_response(False, "Unauthorized", status=401)
         
         try:
             data = json.loads(request.body)
@@ -37,6 +38,7 @@ def create_workflow(request):
             
         cleaned_data = form.cleaned_data
         workflow = Workflow.objects.create(
+            user=request.user,  # Assign the current user
             name=cleaned_data['name'],
             nodes=cleaned_data.get('nodes', []),
             edges=cleaned_data.get('edges', [])
@@ -50,8 +52,8 @@ def create_workflow(request):
 @require_http_methods(["GET"])
 def retrieve_workflow(request, pk):
     try:
-        # if not request.user.is_authenticated:
-        #     return api_response(False, "Unauthorized", status=401)
+        if not request.user.is_authenticated:
+            return api_response(False, "Unauthorized", status=401)
         
         try:
             workflow = get_object_or_404(Workflow, pk=pk)
@@ -78,20 +80,6 @@ def update_workflow(request, pk):
             data = json.loads(request.body)
         except json.JSONDecodeError:
             return api_response(False, "Invalid JSON format", status=400)
-        
-        # Merge existing data with new data for partial updates or full validation
-        # Since it's PUT, we might expect full replace, but logic below allows partial if we pass instance?
-        # Standard Form doesn't take 'instance'. We'll mix existing data manually if needed, or just validate incoming.
-        # However, PUT usually implies replacing/updating. 
-        # If the user sends partial data, Form(data) with required=True fields will fail.
-        # But for 'name', it is required. 
-        # Let's populate form with existing data updated by request data to simulate standard update validation?
-        # Or better: check if it's a partial update? Standard PUT is full. 
-        # Let's assume the user sends the fields they want to change, but if name is missing?
-        # If request.body is passed to Form, and name is missing, Form says "Name is required".
-        # This is correct for PUT (replace) or we can allow partial if we treat it as PATCH logic or make fields not required?
-        # The user's previous manual logic allowed handling partials using `data.get("name", workflow.name)`.
-        # To support that with Forms, we should construct the data dict fully.
         
         update_data = {
             "name": data.get("name", workflow.name),

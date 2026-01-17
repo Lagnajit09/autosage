@@ -10,9 +10,11 @@ import {
   ExecutionRow,
   RecentItemCard,
 } from "@/components/Dashboard/RecentActions";
+import { useAuth } from "@clerk/clerk-react";
 
 const Dashboard = () => {
-  // Dynamic Welcome Message
+  const { getToken, isSignedIn } = useAuth();
+
   const [welcomeMessage, setWelcomeMessage] = useState("");
 
   useEffect(() => {
@@ -27,6 +29,21 @@ const Dashboard = () => {
     const randomMessage = messages[Math.floor(Math.random() * messages.length)];
     setWelcomeMessage(randomMessage);
   }, []);
+
+  useEffect(() => {
+    if (isSignedIn) {
+      getClerkToken();
+    }
+  }, [getToken]);
+
+  const getClerkToken = async () => {
+    try {
+      const token = await getToken();
+      console.log("Bearer ", token);
+    } catch (error) {
+      console.error("Failed to get token:", error);
+    }
+  };
 
   // Mock Data
   const stats = {

@@ -24,6 +24,10 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = config('SECRET_KEY', default='django-insecure-9&eg$=amhr5f6@k=*w-_8(j6@l_(bt4(fk-r+=u#^wjxj9&d&0')
 
+# Clerk Configuration
+CLERK_PUBLISHABLE_KEY = config('CLERK_PUBLISHABLE_KEY', default='')
+CLERK_SECRET_KEY = config('CLERK_SECRET_KEY', default='')
+
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = config('DEBUG', default=True, cast=bool)
 
@@ -48,6 +52,7 @@ MIDDLEWARE = [
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
+    'server.middleware.ClerkAuthMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
