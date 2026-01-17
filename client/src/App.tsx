@@ -48,7 +48,8 @@ const App = () => {
                 <Routes>
                   {/* Protected Routes */}
                   <Route element={<ProtectedRoute />}>
-                    <Route path="/workflow" element={<Workflow />} />
+                    <Route path="/workflow/new" element={<Workflow />} />
+                    <Route path="/workflow/:id" element={<Workflow />} />
                     <Route
                       path="/workflow/execution/:id"
                       element={<WorkflowExecution />}

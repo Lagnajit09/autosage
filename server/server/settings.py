@@ -31,7 +31,7 @@ CLERK_SECRET_KEY = config('CLERK_SECRET_KEY', default='')
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = config('DEBUG', default=True, cast=bool)
 
-ALLOWED_HOSTS = ["http://localhost", "http://127.0.0.1", "localhost", "127.0.0.1"]
+ALLOWED_HOSTS = ["http://localhost:5173", "http://127.0.0.1:5173", "localhost", "127.0.0.1"]
 
 
 # Application definition

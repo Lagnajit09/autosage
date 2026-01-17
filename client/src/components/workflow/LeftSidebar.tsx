@@ -30,13 +30,13 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
   const onDragStart = (
     event: React.DragEvent,
     nodeType: string, // "trigger" or "action"
-    nodeData: NodeData // The data we want to attach to the new node
+    nodeData: NodeData, // The data we want to attach to the new node
   ) => {
     // Store the node type and data in the drag event
     event.dataTransfer.setData("application/reactflow", nodeType);
     event.dataTransfer.setData(
       "application/nodedata",
-      JSON.stringify(nodeData)
+      JSON.stringify(nodeData),
     );
     event.dataTransfer.effectAllowed = "move";
   };
@@ -83,7 +83,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
             placeholder="Workflow Name"
             value={workflowName}
             onChange={(e) => setWorkflowName(e.target.value)}
-            className="w-full p-2 border-2 border-gray-300 dark:border-gray-800 rounded-md"
+            className="w-full p-2 dark:text-gray-100 border-2 border-gray-300 dark:border-gray-800 rounded-md"
           />
         </div>
 

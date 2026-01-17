@@ -26,6 +26,12 @@ import { CredentialVault } from "./CredentialVault";
 import { useTheme } from "@/provider/theme-provider";
 import Header from "./Header";
 import { toast } from "@/hooks/use-toast";
+import {
+  createWorkflow,
+  updateWorkflow,
+  deleteWorkflow,
+} from "@/lib/actions/workflow";
+import { useAuth } from "@clerk/clerk-react";
 
 const nodeTypes = {
   trigger: TriggerNode,
@@ -36,8 +42,16 @@ const nodeTypes = {
 import { MobileRestrictedMessage } from "./MobileRestrictedMessage";
 import { useIsMobile } from "@/hooks/use-mobile";
 
-const WorkflowBuilderContent = () => {
-  const { isDark, toggleTheme } = useTheme();
+const WorkflowBuilderContent = ({
+  initialData = null,
+  workflowId = null,
+}: {
+  initialData: WorkflowData | null;
+  workflowId?: string | null;
+}) => {
+  const { isDark } = useTheme();
+  const { getToken, isSignedIn } = useAuth();
+  const [token, setToken] = useState<string | null>(null);
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
   const [workflowName, setWorkflowName] = useState("");
@@ -51,24 +65,48 @@ const WorkflowBuilderContent = () => {
     useState<ReactFlowInstance | null>(null);
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
 
+  useEffect(() => {
+    if (isSignedIn) {
+      getClerkToken();
+    }
+  }, [isSignedIn, getToken]);
+
+  const getClerkToken = async () => {
+    try {
+      const clerkToken = await getToken();
+      setToken(clerkToken);
+    } catch (error) {
+      console.error("Failed to get token:", error);
+    }
+  };
+
   // Load workflow from localStorage on component mount
   useEffect(() => {
-    const savedWorkflow = localStorage.getItem("currentWorkflow");
-    if (savedWorkflow) {
-      try {
-        const {
-          nodes: savedNodes,
-          edges: savedEdges,
-          name,
-        } = JSON.parse(savedWorkflow);
-        setNodes(savedNodes || []);
-        setEdges(savedEdges || []);
-        setWorkflowName(name);
-      } catch (error) {
-        console.error("Error loading saved workflow:", error);
+    let dataToLoad = null;
+    if (initialData) {
+      dataToLoad = initialData;
+    } else {
+      const savedWorkflow = localStorage.getItem("currentWorkflow");
+      if (savedWorkflow) {
+        try {
+          dataToLoad = JSON.parse(savedWorkflow);
+        } catch (error) {
+          console.error("Error loading saved workflow:", error);
+        }
       }
     }
-  }, [setNodes, setEdges]);
+
+    if (dataToLoad) {
+      const {
+        nodes: savedNodes = [],
+        edges: savedEdges = [],
+        name = "",
+      } = dataToLoad;
+      setNodes(savedNodes);
+      setEdges(savedEdges);
+      setWorkflowName(name);
+    }
+  }, [initialData, setNodes, setEdges, setWorkflowName]);
 
   // Auto-save to localStorage whenever nodes or edges change
   useEffect(() => {
@@ -114,7 +152,7 @@ const WorkflowBuilderContent = () => {
 
   const onConnect = useCallback(
     (params: Connection) => setEdges((eds) => addEdge(params, eds)),
-    [setEdges]
+    [setEdges],
   );
 
   const onDragOver = useCallback((event: React.DragEvent) => {
@@ -131,7 +169,7 @@ const WorkflowBuilderContent = () => {
       const reactFlowBounds = reactFlowWrapper.current.getBoundingClientRect();
       const type = event.dataTransfer.getData("application/reactflow");
       const nodeData = JSON.parse(
-        event.dataTransfer.getData("application/nodedata")
+        event.dataTransfer.getData("application/nodedata"),
       );
 
       if (!type) return;
@@ -154,7 +192,7 @@ const WorkflowBuilderContent = () => {
 
       setNodes((nds) => nds.concat(newNode));
     },
-    [reactFlowInstance, setNodes]
+    [reactFlowInstance, setNodes],
   );
 
   const onNodeClick = useCallback((_: React.MouseEvent, node: Node) => {
@@ -182,10 +220,10 @@ const WorkflowBuilderContent = () => {
             return updatedNode;
           }
           return node;
-        })
+        }),
       );
     },
-    [setNodes]
+    [setNodes],
   );
 
   const updateEdgeData = useCallback(
@@ -198,21 +236,21 @@ const WorkflowBuilderContent = () => {
             return updatedEdge;
           }
           return edge;
-        })
+        }),
       );
     },
-    [setEdges]
+    [setEdges],
   );
 
   const deleteNode = useCallback(
     (nodeId: string) => {
       setNodes((nds) => nds.filter((node) => node.id !== nodeId));
       setEdges((eds) =>
-        eds.filter((edge) => edge.source !== nodeId && edge.target !== nodeId)
+        eds.filter((edge) => edge.source !== nodeId && edge.target !== nodeId),
       );
       setSelectedNode(null);
     },
-    [setNodes, setEdges]
+    [setNodes, setEdges],
   );
 
   const deleteEdge = useCallback(
@@ -220,14 +258,14 @@ const WorkflowBuilderContent = () => {
       setEdges((eds) => eds.filter((edge) => edge.id !== edgeId));
       setSelectedEdge(null);
     },
-    [setEdges]
+    [setEdges],
   );
 
   const handleReactFlowInit = useCallback(
     (reactFlowInstance: ReactFlowInstance) => {
       setReactFlowInstance(reactFlowInstance);
     },
-    []
+    [],
   );
 
   // edge creation handler for decision nodes
@@ -244,31 +282,49 @@ const WorkflowBuilderContent = () => {
             sourceHandle === "true"
               ? "#10b981"
               : sourceHandle === "false"
-              ? "#ef4444"
-              : "#ffffff",
+                ? "#ef4444"
+                : "#ffffff",
           strokeWidth: 2,
         },
         label:
           sourceHandle === "true"
             ? "True"
             : sourceHandle === "false"
-            ? "False"
-            : undefined,
+              ? "False"
+              : undefined,
       };
 
       setEdges((eds) => {
         // Remove existing edge with same source and sourceHandle to avoid duplicates
         const filteredEdges = eds.filter(
           (edge) =>
-            !(edge.source === sourceId && edge.sourceHandle === sourceHandle)
+            !(edge.source === sourceId && edge.sourceHandle === sourceHandle),
         );
         return [...filteredEdges, newEdge];
       });
     },
-    [setEdges]
+    [setEdges],
   );
 
-  const saveWorkflow = () => {
+  const saveWorkflow = async () => {
+    if (!workflowName.trim()) {
+      toast({
+        title: "Error",
+        description: "Please enter a workflow name.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!token) {
+      toast({
+        title: "Error",
+        description: "Authentication required. Please sign in.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     // Enhanced workflow logging with detailed node information
     const workflow = {
       name: workflowName,
@@ -287,7 +343,7 @@ const WorkflowBuilderContent = () => {
             if (savedFiles) {
               const files = JSON.parse(savedFiles);
               const selectedScript = files.find(
-                (file: ScriptFile) => file.id === node.data.selectedScript
+                (file: ScriptFile) => file.id === node.data.selectedScript,
               );
               if (selectedScript) {
                 // Generate blob URL for the script content
@@ -332,22 +388,64 @@ const WorkflowBuilderContent = () => {
         label: edge.label,
         style: edge.style,
       })),
-      timestamp: new Date().toISOString(),
-      totalNodes: nodes.length,
-      totalEdges: edges.length,
     };
 
-    localStorage.setItem("currentWorkflow", JSON.stringify(workflow));
+    try {
+      await getClerkToken();
+      let response;
+      if (workflowId) {
+        // Update existing workflow
+        response = await updateWorkflow(workflowId, workflow, token);
+        toast({
+          title: "Workflow Updated",
+          description: "Your workflow has been updated successfully.",
+        });
+      } else {
+        // Create new workflow
+        response = await createWorkflow(workflow, token);
+        toast({
+          title: "Workflow Created",
+          description: "Your workflow has been created successfully.",
+        });
+        // If we get a workflow ID back, we could update the URL or store it
+        if (response?.data?.id) {
+          // Optionally update the browser URL to reflect the new workflow ID
+          window.history.replaceState(
+            null,
+            "",
+            `/workflow/${response.data.id}`,
+          );
+        }
+      }
 
-    toast({
-      title: "Workflow Saved",
-      description: "Your workflow has been saved successfully.",
-    });
+      // Also save to localStorage for backup
+      const workflowWithMetadata = {
+        ...workflow,
+        timestamp: new Date().toISOString(),
+        totalNodes: nodes.length,
+        totalEdges: edges.length,
+        id: response?.data?.id || workflowId,
+      };
+      localStorage.setItem(
+        "currentWorkflow",
+        JSON.stringify(workflowWithMetadata),
+      );
 
-    console.log(
-      "🌊 Complete Workflow Details Saved:",
-      JSON.stringify(workflow, null, 2)
-    );
+      console.log(
+        "🌊 Complete Workflow Details Saved:",
+        JSON.stringify(workflowWithMetadata, null, 2),
+      );
+    } catch (error) {
+      console.error("Failed to save workflow:", error);
+      toast({
+        title: "Error",
+        description:
+          error instanceof Error
+            ? error.message
+            : "Failed to save workflow. Please try again.",
+        variant: "destructive",
+      });
+    }
   };
 
   return (
@@ -484,7 +582,13 @@ const WorkflowBuilderContent = () => {
   );
 };
 
-export const WorkflowBuilder = () => {
+export const WorkflowBuilder = ({
+  initialData,
+  workflowId = null,
+}: {
+  initialData: WorkflowData | null;
+  workflowId?: string | null;
+}) => {
   const isMobile = useIsMobile();
 
   if (isMobile) {
@@ -493,7 +597,10 @@ export const WorkflowBuilder = () => {
 
   return (
     <ReactFlowProvider>
-      <WorkflowBuilderContent />
+      <WorkflowBuilderContent
+        initialData={initialData}
+        workflowId={workflowId}
+      />
     </ReactFlowProvider>
   );
 };

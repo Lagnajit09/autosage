@@ -60,7 +60,8 @@ class ClerkAuthMiddleware:
                 token,
                 public_key,
                 algorithms=['RS256'],
-                options={"verify_aud": False}
+                options={"verify_aud": False, "verify_iat": True},
+                leeway=60  # Allow 60 seconds of clock skew
             )
             
             user_id = payload.get('sub')

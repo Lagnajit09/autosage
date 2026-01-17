@@ -13,6 +13,7 @@ import {
   SheetHeader,
   SheetTrigger,
 } from "@/components/ui/sheet";
+import { useNavigate } from "react-router-dom";
 
 // Mock Data
 const workflows: Workflow[] = [
@@ -88,6 +89,7 @@ const Workflows = () => {
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
   const [searchQuery, setSearchQuery] = useState("");
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState("");
+  const navigate = useNavigate();
 
   // Debounce search query
   useEffect(() => {
@@ -107,8 +109,8 @@ const Workflows = () => {
         .toLowerCase()
         .includes(debouncedSearchQuery.toLowerCase()) ||
       workflow.tags.some((tag) =>
-        tag.toLowerCase().includes(debouncedSearchQuery.toLowerCase())
-      )
+        tag.toLowerCase().includes(debouncedSearchQuery.toLowerCase()),
+      ),
   );
 
   return (
@@ -193,7 +195,7 @@ const Workflows = () => {
                         "h-8 w-8 p-0 rounded-md transition-all",
                         viewMode === "grid"
                           ? "bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm"
-                          : "text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-800"
+                          : "text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-800",
                       )}
                     >
                       <LayoutGrid className="w-4 h-4" />
@@ -206,14 +208,17 @@ const Workflows = () => {
                         "h-8 w-8 p-0 rounded-md transition-all",
                         viewMode === "list"
                           ? "bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm"
-                          : "text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-800"
+                          : "text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-800",
                       )}
                     >
                       <List className="w-4 h-4" />
                     </Button>
                   </div>
 
-                  <Button className="hidden md:flex bg-[#a768d0] hover:bg-[#9556bf] text-white shadow-md shadow-purple-500/20 transition-all hover:shadow-purple-500/40">
+                  <Button
+                    className="hidden md:flex bg-[#a768d0] hover:bg-[#9556bf] text-white shadow-md shadow-purple-500/20 transition-all hover:shadow-purple-500/40"
+                    onClick={() => navigate("/workflow/new")}
+                  >
                     <Plus className="w-4 h-4 mr-2" />
                     New Workflow
                   </Button>
@@ -227,7 +232,7 @@ const Workflows = () => {
                 "animate-in fade-in slide-in-from-bottom-4 duration-500",
                 viewMode === "grid"
                   ? "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6"
-                  : "flex flex-col space-y-4"
+                  : "flex flex-col space-y-4",
               )}
             >
               {filteredWorkflows.length > 0 ? (
@@ -236,7 +241,7 @@ const Workflows = () => {
                     <WorkflowCard key={workflow.id} workflow={workflow} />
                   ) : (
                     <WorkflowListItem key={workflow.id} workflow={workflow} />
-                  )
+                  ),
                 )
               ) : (
                 <div className="col-span-full flex flex-col items-center justify-center py-12 text-center">
