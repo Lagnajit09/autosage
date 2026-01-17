@@ -87,6 +87,8 @@ const Dashboard = () => {
       type: "workflow" as const,
       date: "2 hours ago",
       status: "active" as const,
+      total_nodes: 5,
+      total_edges: 4,
     },
     // {
     //   title: "Email Automator",

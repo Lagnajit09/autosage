@@ -32,3 +32,14 @@ class WorkflowSerializer(forms.Form):
             "created_at": workflow.created_at.isoformat(),
             "modified_at": workflow.modified_at.isoformat(),
         }
+
+    @staticmethod
+    def to_list_representation(workflow):
+        return {
+            "id": str(workflow.id),
+            "name": workflow.name,
+            "total_nodes": len(workflow.nodes),
+            "total_edges": len(workflow.edges),
+            "created_at": workflow.created_at.isoformat(),
+            "modified_at": workflow.modified_at.isoformat(),
+        }

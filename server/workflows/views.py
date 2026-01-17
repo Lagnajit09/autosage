@@ -15,7 +15,7 @@ def list_workflows(request):
         
         # Filter by current user
         workflows = Workflow.objects.filter(user=request.user)
-        data = [WorkflowSerializer.to_representation(w) for w in workflows]
+        data = [WorkflowSerializer.to_list_representation(w) for w in workflows]
         return api_response(True, "Workflows retrieved successfully", data=data)
     except Exception as e:
         return api_response(False, "Internal Server Error", errors=str(e), status=500)
