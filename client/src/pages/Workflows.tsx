@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import LeftNav, { NavItems } from "@/components/LeftNav";
 import { Button } from "@/components/ui/button";
 import { LayoutGrid, List, Plus, Search, Menu } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { cn, formatDate } from "@/lib/utils";
 import { Workflow } from "@/components/Workflows/types";
 import { WorkflowCard } from "@/components/Workflows/WorkflowCard";
 import { WorkflowListItem } from "@/components/Workflows/WorkflowListItem";
@@ -14,82 +14,73 @@ import {
   SheetTrigger,
 } from "@/components/ui/sheet";
 import { useNavigate } from "react-router-dom";
-
-// Mock Data
-const workflows: Workflow[] = [
-  {
-    id: "1",
-    title: "Data Scraper Pro",
-    description:
-      "Automated scraping of competitor prices and inventory updates daily.",
-    status: "active",
-    lastRun: "2 hours ago",
-    avgDuration: "45s",
-    runs: 1240,
-    tags: ["Scraping", "E-commerce"],
-  },
-  {
-    id: "2",
-    title: "Email Marketing Automator",
-    description:
-      "Sends personalized follow-up emails to new leads from the landing page.",
-    status: "active",
-    lastRun: "1 day ago",
-    avgDuration: "12s",
-    runs: 850,
-    tags: ["Marketing", "Email"],
-  },
-  {
-    id: "3",
-    title: "Weekly Report Generator",
-    description:
-      "Compiles weekly sales data and generates a PDF report for stakeholders.",
-    status: "paused",
-    lastRun: "5 days ago",
-    avgDuration: "2m 10s",
-    runs: 45,
-    tags: ["Reporting", "Analytics"],
-  },
-  {
-    id: "4",
-    title: "Database Backup",
-    description:
-      "Performs a full backup of the production database and uploads to S3.",
-    status: "active",
-    lastRun: "12 hours ago",
-    avgDuration: "5m 30s",
-    runs: 365,
-    tags: ["DevOps", "Maintenance"],
-  },
-  {
-    id: "5",
-    title: "Social Media Poster",
-    description:
-      "Schedules and posts content to Twitter and LinkedIn automatically.",
-    status: "draft",
-    lastRun: "Never",
-    avgDuration: "-",
-    runs: 0,
-    tags: ["Social", "Marketing"],
-  },
-  {
-    id: "6",
-    title: "Invoice Processor",
-    description:
-      "Extracts data from incoming invoice PDFs and updates the accounting system.",
-    status: "active",
-    lastRun: "30 mins ago",
-    avgDuration: "15s",
-    runs: 2100,
-    tags: ["Finance", "Automation"],
-  },
-];
+import { useAuth } from "@clerk/clerk-react";
+import { apiRequest } from "@/lib/api-client";
+import Loader from "@/components/Loader";
 
 const Workflows = () => {
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
   const [searchQuery, setSearchQuery] = useState("");
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState("");
+  const [workflows, setWorkflows] = useState<Workflow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [token, setToken] = useState<string | null>(null);
+
   const navigate = useNavigate();
+  const { getToken, isSignedIn } = useAuth();
+
+  // Get Clerk Token
+  useEffect(() => {
+    if (isSignedIn) {
+      const getClerkToken = async () => {
+        try {
+          const clerkToken = await getToken();
+          setToken(clerkToken);
+        } catch (error) {
+          console.error("Failed to get token:", error);
+        }
+      };
+      getClerkToken();
+    } else {
+      setLoading(false);
+    }
+  }, [isSignedIn, getToken]);
+
+  // Fetch Workflows
+  useEffect(() => {
+    if (token) {
+      const fetchWorkflows = async () => {
+        setLoading(true);
+        try {
+          const response = await apiRequest("/api/workflows/list/", {}, token);
+          const data = response?.data || response || [];
+
+          // Map server response to client Workflow type with default values
+          const mappedWorkflows: Workflow[] = Array.isArray(data)
+            ? data.map((item: any) => ({
+                id: item.id,
+                title: item.name || "Untitled Workflow",
+                description: item.description || "Autosage Workflow",
+                lastRun: formatDate(item.created_at) || "Never",
+                runs: typeof item.runs === "number" ? item.runs : 0,
+                total_nodes:
+                  typeof item.total_nodes === "number" ? item.total_nodes : 0,
+                total_edges:
+                  typeof item.total_edges === "number" ? item.total_edges : 0,
+              }))
+            : [];
+
+          setWorkflows(mappedWorkflows);
+        } catch (error) {
+          console.error("Failed to fetch workflows:", error);
+          setWorkflows([]); // Fallback to empty list on error
+        } finally {
+          setLoading(false);
+        }
+      };
+      fetchWorkflows();
+    }
+  }, [token]);
 
   // Debounce search query
   useEffect(() => {
@@ -107,11 +98,16 @@ const Workflows = () => {
         .includes(debouncedSearchQuery.toLowerCase()) ||
       workflow.description
         .toLowerCase()
-        .includes(debouncedSearchQuery.toLowerCase()) ||
-      workflow.tags.some((tag) =>
-        tag.toLowerCase().includes(debouncedSearchQuery.toLowerCase()),
-      ),
+        .includes(debouncedSearchQuery.toLowerCase()),
   );
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-100 dark:bg-workflow-void/90">
+        <Loader />
+      </div>
+    );
+  }
 
   return (
     <div className="flex w-full h-screen bg-gray-100 dark:bg-workflow-void/90 overflow-hidden">

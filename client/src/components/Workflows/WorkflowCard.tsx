@@ -11,15 +11,6 @@ import { cn } from "@/lib/utils";
 import { Workflow } from "./types";
 import { useNavigate } from "react-router-dom";
 
-const statusColors = {
-  active:
-    "bg-green-100 text-green-700 dark:bg-green-500/20 dark:text-green-400 border-green-200 dark:border-green-500/30",
-  draft:
-    "bg-gray-100 text-gray-700 dark:bg-gray-500/20 dark:text-gray-400 border-gray-200 dark:border-gray-500/30",
-  paused:
-    "bg-yellow-100 text-yellow-700 dark:bg-yellow-500/20 dark:text-yellow-400 border-yellow-200 dark:border-yellow-500/30",
-};
-
 export const WorkflowCard = ({ workflow }: { workflow: Workflow }) => {
   const navigate = useNavigate();
   return (
@@ -63,7 +54,7 @@ export const WorkflowCard = ({ workflow }: { workflow: Workflow }) => {
           {workflow.description}
         </p>
 
-        <div className="flex flex-wrap gap-2 mb-4">
+        {/* <div className="flex flex-wrap gap-2 mb-4">
           {workflow.tags.map((tag) => (
             <span
               key={tag}
@@ -72,14 +63,17 @@ export const WorkflowCard = ({ workflow }: { workflow: Workflow }) => {
               {tag}
             </span>
           ))}
-        </div>
+        </div> */}
 
         <div className="flex items-center justify-between pt-4 border-t border-gray-100 dark:border-gray-700/50">
           <Badge
             variant="outline"
-            className={cn("capitalize border", statusColors[workflow.status])}
+            className={cn(
+              "capitalize border",
+              "bg-green-100 text-green-700 dark:bg-green-500/20 dark:text-green-400 border-green-200 dark:border-green-500/30",
+            )}
           >
-            {workflow.status}
+            {workflow.total_nodes} nodes
           </Badge>
           <div className="flex items-center gap-1 text-xs text-gray-400">
             <Clock className="w-3 h-3" />
@@ -89,7 +83,10 @@ export const WorkflowCard = ({ workflow }: { workflow: Workflow }) => {
       </div>
 
       <div className="p-4 bg-gray-50 dark:bg-gray-800/80 border-t border-gray-200 dark:border-gray-700/50 flex items-center justify-between gap-2">
-        <Button className="flex-1 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 border border-gray-200 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-600 hover:text-purple-600 dark:hover:text-purple-400 shadow-sm">
+        <Button
+          onClick={() => navigate(`/workflow/${workflow.id}`)}
+          className="flex-1 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 border border-gray-200 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-600 hover:text-purple-600 dark:hover:text-purple-400 shadow-sm"
+        >
           <Edit className="w-4 h-4 mr-2" />
           Edit
         </Button>

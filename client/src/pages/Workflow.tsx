@@ -4,6 +4,7 @@ import { useAuth } from "@clerk/clerk-react";
 import { WorkflowBuilder } from "../components/workflow/WorkflowBuilder";
 import { apiRequest } from "../lib/api-client";
 import Loader from "@/components/Loader";
+import NotFound from "./NotFound";
 
 const Workflow = () => {
   const { id } = useParams();
@@ -54,7 +55,7 @@ const Workflow = () => {
         <Loader />
       </div>
     );
-  if (id && !initialData) return <div>Workflow not found.</div>;
+  if (id && !initialData) return <NotFound />;
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-950">

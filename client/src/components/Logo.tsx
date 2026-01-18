@@ -1,6 +1,12 @@
+import { useNavigate } from "react-router-dom";
+
 const Logo = () => {
+  const navigate = useNavigate();
   return (
-    <div className="flex items-center gap-4">
+    <div
+      className="flex items-center gap-4 cursor-pointer"
+      onClick={() => navigate("/")}
+    >
       {/* Add Logo SVG */}
 
       <span className="text-xl md:text-2xl font-extrabold">
