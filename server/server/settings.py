@@ -45,6 +45,7 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'corsheaders',
     'workflows.apps.WorkflowsConfig',
+    'vault.apps.VaultConfig',
 ]
 
 MIDDLEWARE = [

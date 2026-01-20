@@ -1,3 +1,64 @@
 from django.db import models
+from django.conf import settings
+from django.utils.translation import gettext_lazy as _
 
-# Create your models here.
+class Credential(models.Model):
+    class Type(models.TextChoices):
+        USERNAME_PASSWORD = 'username_password', _('Username/Password')
+        SSH_KEY = 'ssh_key', _('SSH Key')
+
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='credentials', null=True, blank=True)
+    name = models.CharField(max_length=255)
+    credential_type = models.CharField(max_length=50, choices=Type.choices)
+    
+    username = models.CharField(max_length=255, blank=True, null=True)
+    password = models.CharField(max_length=255, blank=True, null=True) 
+    ssh_key = models.TextField(blank=True, null=True)
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    modified_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = ('user', 'name')
+        ordering = ["-modified_at"]
+        verbose_name = "Credential"
+        verbose_name_plural = "Credentials"
+        db_table = "credentials"
+
+    def __str__(self):
+        return f"{self.name} ({self.get_credential_type_display()})"
+
+class Server(models.Model):
+    class ConnectionMethod(models.TextChoices):
+        WINRM = 'winrm', _('WinRM (Windows)')
+        SSH = 'ssh', _('SSH (Linux/Unix)')
+    
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='servers', null=True, blank=True)
+    name = models.CharField(max_length=255)
+    host = models.CharField(max_length=255)
+    port = models.IntegerField(
+        help_text=_("Override default port if needed. Default: 5985 for WinRM, 22 for SSH"),
+        blank=True, 
+        null=True
+    )
+    connection_method = models.CharField(max_length=50, choices=ConnectionMethod.choices)
+    credential = models.ForeignKey(
+        Credential, 
+        on_delete=models.SET_NULL, 
+        null=True, 
+        blank=True, 
+        related_name='servers'
+    )
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    modified_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = ('user', 'name')
+        ordering = ["-modified_at"]
+        verbose_name = "Server"
+        verbose_name_plural = "Servers"
+        db_table = "servers"
+
+    def __str__(self):
+        return f"{self.name} ({self.host})"
