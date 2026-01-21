@@ -3,7 +3,6 @@ import { useNavigate } from "react-router-dom";
 import { Plus, Loader2 } from "lucide-react";
 import { DashboardSidebar } from "@/components/Dashboard/Sidebar";
 import TopNav from "@/components/Dashboard/TopNav";
-import LeftNav from "@/components/LeftNav";
 import { SidebarProvider } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
 import { ProBanner, AutobotBanner } from "@/components/Dashboard/Banners";

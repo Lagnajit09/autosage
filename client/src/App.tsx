@@ -2,7 +2,8 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, useNavigate } from "react-router-dom";
+import { useEffect } from "react";
 import Workflow from "./pages/Workflow";
 import WorkflowExecution from "./pages/WorkflowExecution";
 import NotFound from "./pages/NotFound";
@@ -29,6 +30,23 @@ import PublicRoute from "./components/auth/PublicRoute";
 
 const queryClient = new QueryClient();
 
+const ServerErrorListener = () => {
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    const handleServerError = () => {
+      navigate("/server-error");
+    };
+
+    window.addEventListener("server-error", handleServerError);
+    return () => {
+      window.removeEventListener("server-error", handleServerError);
+    };
+  }, [navigate]);
+
+  return null;
+};
+
 const App = () => {
   const PUBLISHABLE_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
 
@@ -45,6 +63,7 @@ const App = () => {
               <Toaster />
               <Sonner />
               <BrowserRouter>
+                <ServerErrorListener />
                 <Routes>
                   {/* Protected Routes */}
                   <Route element={<ProtectedRoute />}>
@@ -76,6 +95,18 @@ const App = () => {
 
                   {/* SSO Callback - no redirect needed */}
                   <Route path="/sso-callback" element={<SSOCallback />} />
+
+                  {/* Server Error Route */}
+                  <Route
+                    path="/server-error"
+                    element={
+                      <NotFound
+                        header="Server Issue"
+                        userMessage="Our servers are currently experiencing difficulties or are down for maintenance. Please try again in a few moments."
+                        errorCode="500"
+                      />
+                    }
+                  />
 
                   {/* Catch-all Route */}
                   <Route path="*" element={<NotFound />} />

@@ -8,7 +8,7 @@ export const getAuthToken = () => localStorage.getItem("authToken");
 export const apiRequest = async (
   endpoint: string,
   options: RequestInit = {},
-  token: string | null = null
+  token: string | null = null,
 ) => {
   const headers = new Headers(options.headers);
 
@@ -26,17 +26,29 @@ export const apiRequest = async (
     headers.set("Content-Type", "application/json");
   }
 
-  const response = await fetch(`${API_BASE_URL}${endpoint}`, {
-    ...options,
-    headers,
-  });
+  try {
+    const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+      ...options,
+      headers,
+    });
 
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}));
-    throw new Error(
-      errorData.detail || errorData.message || "An error occurred"
-    );
+    if (!response.ok) {
+      if (response.status >= 500) {
+        window.dispatchEvent(new CustomEvent("server-error"));
+      }
+
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(
+        errorData.detail || errorData.message || "An error occurred",
+      );
+    }
+
+    return response.json();
+  } catch (error) {
+    if (error instanceof Error && error.message === "Failed to fetch") {
+      window.dispatchEvent(new CustomEvent("server-error"));
+    }
+
+    throw error;
   }
-
-  return response.json();
 };

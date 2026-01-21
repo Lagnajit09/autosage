@@ -76,7 +76,10 @@ export const DashboardSidebar = () => {
       </SidebarContent>
 
       <div className="mt-4 mb-2 px-2">
-        <Button className="w-full bg-gray-800 hover:bg-gray-800/90 text-primary-foreground">
+        <Button
+          onClick={() => navigate("/workflow/new")}
+          className="w-full bg-gray-800 hover:bg-gray-800/90 text-primary-foreground"
+        >
           <Plus className="w-4 h-4 mr-2" />
           New Workflow
         </Button>
