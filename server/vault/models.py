@@ -1,19 +1,23 @@
 from django.db import models
 from django.conf import settings
 from django.utils.translation import gettext_lazy as _
+from .fields import EncryptedCharField, EncryptedTextField
 
 class Credential(models.Model):
     class Type(models.TextChoices):
         USERNAME_PASSWORD = 'username_password', _('Username/Password')
         SSH_KEY = 'ssh_key', _('SSH Key')
+        CERTIFICATE = 'certificate', _('Certificate')
 
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='credentials', null=True, blank=True)
     name = models.CharField(max_length=255)
     credential_type = models.CharField(max_length=50, choices=Type.choices)
     
     username = models.CharField(max_length=255, blank=True, null=True)
-    password = models.CharField(max_length=255, blank=True, null=True) 
-    ssh_key = models.TextField(blank=True, null=True)
+    password = EncryptedCharField(max_length=255, blank=True, null=True) 
+    ssh_key = EncryptedTextField(blank=True, null=True)
+    key_passphrase = EncryptedCharField(max_length=255, blank=True, null=True)
+    cert_pem = EncryptedTextField(blank=True, null=True)
     
     created_at = models.DateTimeField(auto_now_add=True)
     modified_at = models.DateTimeField(auto_now=True)

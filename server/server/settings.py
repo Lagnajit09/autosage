@@ -24,6 +24,9 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = config('SECRET_KEY', default='django-insecure-9&eg$=amhr5f6@k=*w-_8(j6@l_(bt4(fk-r+=u#^wjxj9&d&0')
 
+# Vault Encryption Key
+VAULT_ENCRYPTION_KEY = config('VAULT_ENCRYPTION_KEY', default='django-insecure-WWy_XbN_amXeON93ehJvtsHv5CRVqSo0qgjtatg20iQ')
+
 # Clerk Configuration
 CLERK_PUBLISHABLE_KEY = config('CLERK_PUBLISHABLE_KEY', default='')
 CLERK_SECRET_KEY = config('CLERK_SECRET_KEY', default='')
