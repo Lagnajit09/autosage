@@ -22,7 +22,7 @@ import { ImportWorkflowDialog } from "./ImportWorkflowDialog";
 import { DecisionNode } from "../nodes/DecisionNode";
 import { AIWorkflowGenerator } from "./AIWorkflowGenerator";
 import GenieButton from "../GenieButton";
-import { CredentialVault } from "./CredentialVault";
+import Vault from "./Vault";
 import { useTheme } from "@/provider/theme-provider";
 import Header from "./Header";
 import { toast } from "@/hooks/use-toast";
@@ -59,7 +59,7 @@ const WorkflowBuilderContent = ({
   const [selectedEdge, setSelectedEdge] = useState<Edge | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [showImportDialog, setShowImportDialog] = useState(false);
-  const [showCredentialVault, setShowCredentialVault] = useState(false);
+  const [showVault, setShowVault] = useState(false);
   const [showAIGenerator, setShowAIGenerator] = useState(false);
   const [reactFlowInstance, setReactFlowInstance] =
     useState<ReactFlowInstance | null>(null);
@@ -455,8 +455,8 @@ const WorkflowBuilderContent = ({
         <Header
           nodes={nodes.length}
           edges={edges.length}
-          setShowCredentialVault={setShowCredentialVault}
-          showCredentialVault={showCredentialVault}
+          setShowVault={setShowVault}
+          showVault={showVault}
           setShowImportDialog={setShowImportDialog}
         />
 
@@ -568,9 +568,7 @@ const WorkflowBuilderContent = ({
       />
 
       {/* Credential Vault */}
-      {showCredentialVault && (
-        <CredentialVault onClose={() => setShowCredentialVault(false)} />
-      )}
+      {showVault && <Vault />}
 
       {/* AI Workflow Generator */}
       <AIWorkflowGenerator

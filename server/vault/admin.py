@@ -1,5 +1,11 @@
 from django.contrib import admin
-from .models import Credential, Server
+from .models import Vault, Credential, Server
+
+@admin.register(Vault)
+class VaultAdmin(admin.ModelAdmin):
+    list_display = ('name', 'owner') 
+    list_filter = ('name', 'owner')
+    search_fields = ('name', 'owner')
 
 @admin.register(Credential)
 class CredentialAdmin(admin.ModelAdmin):
