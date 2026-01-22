@@ -3,13 +3,32 @@ from django.conf import settings
 from django.utils.translation import gettext_lazy as _
 from .fields import EncryptedCharField, EncryptedTextField
 
+
+# TODO: (Future Implementation) Sharing Team Access, Read-Only/Edit access, Many-to-Many Relation
+class Vault(models.Model):
+    name = models.CharField(max_length=255)
+    owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='vaults', null=True, blank=True)
+    description = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    modified_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = ('owner', 'name')
+        ordering = ["-modified_at"]
+        verbose_name = "Vault"
+        verbose_name_plural = "Vaults"
+        db_table = "vaults"
+
+    def __str__(self):
+        return f"{self.name} ({self.owner})"
+
 class Credential(models.Model):
     class Type(models.TextChoices):
         USERNAME_PASSWORD = 'username_password', _('Username/Password')
         SSH_KEY = 'ssh_key', _('SSH Key')
         CERTIFICATE = 'certificate', _('Certificate')
 
-    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='credentials', null=True, blank=True)
+    vault = models.ForeignKey(Vault, on_delete=models.CASCADE, related_name='credentials')
     name = models.CharField(max_length=255)
     credential_type = models.CharField(max_length=50, choices=Type.choices)
     
@@ -23,7 +42,7 @@ class Credential(models.Model):
     modified_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        unique_together = ('user', 'name')
+        unique_together = ('vault', 'name')
         ordering = ["-modified_at"]
         verbose_name = "Credential"
         verbose_name_plural = "Credentials"
@@ -37,7 +56,7 @@ class Server(models.Model):
         WINRM = 'winrm', _('WinRM (Windows)')
         SSH = 'ssh', _('SSH (Linux/Unix)')
     
-    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='servers', null=True, blank=True)
+    vault = models.ForeignKey(Vault, on_delete=models.CASCADE, related_name='servers')
     name = models.CharField(max_length=255)
     host = models.CharField(max_length=255)
     port = models.IntegerField(
@@ -58,7 +77,7 @@ class Server(models.Model):
     modified_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        unique_together = ('user', 'name')
+        unique_together = ('vault', 'name')
         ordering = ["-modified_at"]
         verbose_name = "Server"
         verbose_name_plural = "Servers"
