@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import ChatInput from "./ChatInput";
 import { CodeBlock } from "./CodeBlock";
-import { LucideSettings, Settings2, ShareIcon } from "lucide-react";
+import { DatabaseZap, Settings2, ShareIcon } from "lucide-react";
 import ShareModal from "./ShareModal";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { NavItems } from "../LeftNav";
@@ -15,6 +15,8 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import CustomizeModal from "./CustomizeModal";
+import { Button } from "@/components/ui/button";
+import { Vault } from "../vault/Vault";
 
 const welcomeMessages = [
   "Hello! How can I help you today?",
@@ -231,6 +233,7 @@ const Interface = () => {
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const [shareModalOpen, setShareModalOpen] = useState(false);
   const [customizeModalOpen, setCustomizeModalOpen] = useState(false);
+  const [vaultModalOpen, setVaultModalOpen] = useState(false);
 
   // Scroll to bottom on mount and when messages change
   useEffect(() => {
@@ -287,12 +290,26 @@ const Interface = () => {
       <div className="hidden lg:flex items-center gap-0 absolute top-4 right-4 z-20">
         <Tooltip>
           <TooltipTrigger asChild>
-            <button
+            <Button
+              onClick={() => setVaultModalOpen(true)}
+              className="flex items-center gap-2 cursor-pointer bg-transparent hover:bg-gray-100 dark:hover:bg-gray-800 py-2 px-3 rounded-full transition-colors"
+            >
+              <DatabaseZap className="w-4 h-4 text-gray-800 dark:text-gray-200" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>
+            <p>Vault</p>
+          </TooltipContent>
+        </Tooltip>
+
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
               onClick={() => setCustomizeModalOpen(true)}
-              className="flex items-center gap-2 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800 py-2 px-3 rounded-full transition-colors"
+              className="flex items-center gap-2 cursor-pointer bg-transparent hover:bg-gray-100 dark:hover:bg-gray-800 py-2 px-3 rounded-full transition-colors"
             >
               <Settings2 className="w-4 h-4 text-gray-800 dark:text-gray-200" />
-            </button>
+            </Button>
           </TooltipTrigger>
           <TooltipContent>
             <p>Customize</p>
@@ -301,12 +318,12 @@ const Interface = () => {
 
         <Tooltip>
           <TooltipTrigger asChild>
-            <button
+            <Button
               onClick={() => setShareModalOpen(true)}
-              className="flex items-center gap-2 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800 py-2 px-3 rounded-full transition-colors"
+              className="flex items-center gap-2 cursor-pointer bg-transparent hover:bg-gray-100 dark:hover:bg-gray-800 py-2 px-3 rounded-full transition-colors"
             >
               <ShareIcon className="w-4 h-4 text-gray-800 dark:text-gray-200" />
-            </button>
+            </Button>
           </TooltipTrigger>
           <TooltipContent>
             <p>Share</p>
@@ -319,6 +336,7 @@ const Interface = () => {
         open={customizeModalOpen}
         onOpenChange={setCustomizeModalOpen}
       />
+      <Vault isOpen={vaultModalOpen} setIsOpen={setVaultModalOpen} />
 
       {messages.length === 0 ? (
         <div className="flex-1 flex flex-col items-center justify-center p-4">
@@ -357,11 +375,11 @@ const Interface = () => {
                         <ReactMarkdown
                           components={{
                             code(
-                              props: React.ComponentPropsWithoutRef<"code">
+                              props: React.ComponentPropsWithoutRef<"code">,
                             ) {
                               const { children, className, ...rest } = props;
                               const match = /language-(\w+)/.exec(
-                                className || ""
+                                className || "",
                               );
                               const language = match ? match[1] : "";
                               const isInline = !match;
@@ -381,7 +399,7 @@ const Interface = () => {
                               );
                             },
                             strong(
-                              props: React.ComponentPropsWithoutRef<"strong">
+                              props: React.ComponentPropsWithoutRef<"strong">,
                             ) {
                               return (
                                 <strong

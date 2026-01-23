@@ -6,7 +6,14 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { Button } from "@/components/ui/button";
-import { CreditCard, LogOut, Moon, Search, Sun } from "lucide-react";
+import {
+  CreditCard,
+  DatabaseZap,
+  LogOut,
+  Moon,
+  Search,
+  Sun,
+} from "lucide-react";
 import { useTheme } from "@/provider/theme-provider";
 import { Input } from "@/components/ui/input";
 import {
@@ -20,9 +27,11 @@ import {
 
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { SignOutButton } from "@clerk/clerk-react";
+import { Vault } from "../vault/Vault";
 
 const TopNav = () => {
   const { isDark, toggleTheme } = useTheme();
+  const [showVault, setShowVault] = useState(false);
   const [showMobileSearch, setShowMobileSearch] = useState(false);
 
   if (showMobileSearch) {
@@ -53,7 +62,7 @@ const TopNav = () => {
           Dashboard
         </div>
       </div>
-      <div className="flex items-center gap-2">
+      <div className="flex items-center">
         {/* Mobile Search Icon */}
         <Button
           variant="ghost"
@@ -65,7 +74,7 @@ const TopNav = () => {
         </Button>
 
         {/* Desktop Search Input */}
-        <div className="relative hidden md:block w-64 lg:w-80">
+        <div className="relative hidden md:block w-64 lg:w-80 mr-2">
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-700 dark:text-gray-300 w-5 h-5" />
           <Input
             type="text"
@@ -76,10 +85,19 @@ const TopNav = () => {
 
         <ToolTipIcon
           icon={
+            <DatabaseZap className="w-5 h-5 md:w-6 md:h-6 text-gray-900 dark:text-gray-100" />
+          }
+          tooltip={"Vault"}
+          onClick={() => {
+            setShowVault(true);
+          }}
+        />
+        <ToolTipIcon
+          icon={
             isDark ? (
-              <Sun className="w-5 h-5 md:w-6 md:h-6 text-light-primary" />
+              <Sun className="w-5 h-5 md:w-6 md:h-6 dark:text-gray-100" />
             ) : (
-              <Moon className="w-5 h-5 md:w-6 md:h-6 text-text-light-primary/70" />
+              <Moon className="w-5 h-5 md:w-6 md:h-6 text-gray-900" />
             )
           }
           tooltip={isDark ? "Light Mode" : "Dark Mode"}
@@ -87,6 +105,8 @@ const TopNav = () => {
         />
         <UserMenu />
       </div>
+
+      <Vault isOpen={showVault} setIsOpen={setShowVault} />
     </div>
   );
 };
@@ -124,7 +144,12 @@ const UserMenu = () => {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger>
-        <AvatarCircles avatarUrls={[]} username="Lagnajit" onClick={() => {}} />
+        <AvatarCircles
+          className="ml-2"
+          avatarUrls={[]}
+          username="Lagnajit"
+          onClick={() => {}}
+        />
       </DropdownMenuTrigger>
       <DropdownMenuContent className="dark:bg-gray-800 dark:border-gray-900">
         <DropdownMenuLabel>
