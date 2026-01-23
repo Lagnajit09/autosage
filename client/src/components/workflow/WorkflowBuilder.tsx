@@ -22,7 +22,7 @@ import { ImportWorkflowDialog } from "./ImportWorkflowDialog";
 import { DecisionNode } from "../nodes/DecisionNode";
 import { AIWorkflowGenerator } from "./AIWorkflowGenerator";
 import GenieButton from "../GenieButton";
-import Vault from "./Vault";
+import { Vault } from "../vault/Vault";
 import { useTheme } from "@/provider/theme-provider";
 import Header from "./Header";
 import { toast } from "@/hooks/use-toast";
@@ -568,7 +568,7 @@ const WorkflowBuilderContent = ({
       />
 
       {/* Credential Vault */}
-      {showVault && <Vault />}
+      <Vault isOpen={showVault} setIsOpen={setShowVault} />
 
       {/* AI Workflow Generator */}
       <AIWorkflowGenerator

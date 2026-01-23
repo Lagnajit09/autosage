@@ -9,14 +9,6 @@ export interface ScriptFile {
   source: "upload" | "editor";
 }
 
-export interface Credential {
-  id: string;
-  name: string;
-  username: string;
-  password: string;
-  createdAt: string;
-}
-
 export interface Parameter {
   id: string;
   name: string;
@@ -123,7 +115,7 @@ export interface DecisionConfigProps extends BaseConfigProps {
   onCreateEdge?: (
     sourceId: string,
     targetId: string,
-    sourceHandle?: string
+    sourceHandle?: string,
   ) => void;
 }
 
@@ -148,4 +140,32 @@ export interface AuthResponse {
   success: boolean;
   message: string;
   user?: any;
+}
+
+export interface Vault {
+  id: number;
+  name: string;
+  description: string;
+}
+
+export interface Credential {
+  id: number;
+  vaultId: number;
+  name: string;
+  credential_type: "username_password" | "ssh_key" | "certificate";
+  username?: string;
+  password?: string;
+  ssh_key?: string;
+  key_passphrase?: string;
+  cert_pem?: string;
+}
+
+export interface Server {
+  id: number;
+  vaultId: number;
+  name: string;
+  host: string;
+  port?: number;
+  connection_method: "winrm" | "ssh";
+  credentialId?: number;
 }
