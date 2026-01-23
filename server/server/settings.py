@@ -52,6 +52,11 @@ INSTALLED_APPS = [
     'vault.apps.VaultConfig',
 ]
 
+REST_FRAMEWORK = {
+    'EXCEPTION_HANDLER': 'server.exceptions.custom_exception_handler',
+}
+
+
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'django.middleware.common.CommonMiddleware',
