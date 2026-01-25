@@ -52,7 +52,7 @@ const Workflows = () => {
       const fetchWorkflows = async () => {
         setLoading(true);
         try {
-          const response = await apiRequest("/api/workflows/list/", {}, token);
+          const response = await apiRequest("/api/workflows/", {}, token);
           const data = response?.data || response || [];
 
           // Map server response to client Workflow type with default values

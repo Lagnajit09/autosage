@@ -23,6 +23,19 @@ const Dashboard = () => {
   const [showFirstVisitWelcome, setShowFirstVisitWelcome] = useState(false);
   const [setupTimer, setSetupTimer] = useState(0);
 
+  // TODO: Remove this in Production
+  useEffect(() => {
+    const getClerkToken = async () => {
+      try {
+        const clerkToken = await getToken({ template: "LongLivedJWT" });
+        console.log("clerkToken", clerkToken);
+      } catch (error) {
+        console.error("Failed to get token:", error);
+      }
+    };
+    getClerkToken();
+  }, []);
+
   useEffect(() => {
     if (showFirstVisitWelcome) {
       const interval = setInterval(() => {
@@ -57,21 +70,6 @@ const Dashboard = () => {
       }
     }
   }, [user]);
-
-  useEffect(() => {
-    if (isSignedIn) {
-      getClerkToken();
-    }
-  }, [getToken]);
-
-  const getClerkToken = async () => {
-    try {
-      const token = await getToken();
-      console.log("Bearer ", token);
-    } catch (error) {
-      console.error("Failed to get token:", error);
-    }
-  };
 
   // Mock Data
   const stats = {

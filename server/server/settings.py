@@ -53,6 +53,12 @@ INSTALLED_APPS = [
 ]
 
 REST_FRAMEWORK = {
+    'DEFAULT_AUTHENTICATION_CLASSES': [
+        'server.authentication.MiddlewareAuthentication',
+    ],
+    'DEFAULT_PERMISSION_CLASSES': [
+        'rest_framework.permissions.IsAuthenticated',
+    ],
     'EXCEPTION_HANDLER': 'server.exceptions.custom_exception_handler',
 }
 

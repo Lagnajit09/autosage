@@ -1,121 +1,72 @@
-import json
-from django.views.decorators.csrf import csrf_exempt
-from django.views.decorators.http import require_http_methods
-from django.shortcuts import get_object_or_404
+from rest_framework import generics, status
+from rest_framework.permissions import IsAuthenticated
 from .models import Workflow
 from .serializers import WorkflowSerializer
-from .utils import api_response
+from server.utils import api_response
 
-@csrf_exempt
-@require_http_methods(["GET"])
-def list_workflows(request):
-    try:
-        if not request.user.is_authenticated:
-            return api_response(False, "Unauthorized", status=401)
-        
-        # Filter by current user
-        workflows = Workflow.objects.filter(user=request.user)
-        data = [WorkflowSerializer.to_list_representation(w) for w in workflows]
-        return api_response(True, "Workflows retrieved successfully", data=data)
-    except Exception as e:
-        return api_response(False, "Internal Server Error", errors=str(e), status=500)
+class WorkflowListCreateView(generics.ListCreateAPIView):
+    """
+    List all workflows owned by the user or create a new workflow.
+    """
+    serializer_class = WorkflowSerializer
+    permission_classes = [IsAuthenticated]
 
-@csrf_exempt
-@require_http_methods(["POST"])
-def create_workflow(request):
-    try:
-        if not request.user.is_authenticated:
-            return api_response(False, "Unauthorized", status=401)
-        
-        try:
-            data = json.loads(request.body)
-        except json.JSONDecodeError:
-            return api_response(False, "Invalid JSON format", status=400)
-            
-        form = WorkflowSerializer(data)
-        if not form.is_valid():
-            return api_response(False, "Validation failed", errors=form.errors, status=400)
-            
-        cleaned_data = form.cleaned_data
-        workflow = Workflow.objects.create(
-            user=request.user,  # Assign the current user
-            name=cleaned_data['name'],
-            nodes=cleaned_data.get('nodes', []),
-            edges=cleaned_data.get('edges', [])
+    def get_queryset(self):
+        return Workflow.objects.filter(user=self.request.user)
+
+    def perform_create(self, serializer):
+        serializer.save(user=self.request.user)
+
+    def list(self, request, *args, **kwargs):
+        response = super().list(request, *args, **kwargs)
+        return api_response(
+            success=True,
+            message="Workflows retrieved successfully.",
+            data=response.data,
+            status_code=status.HTTP_200_OK
         )
-        return api_response(True, "Workflow created successfully", data=WorkflowSerializer.to_representation(workflow), status=201)
-        
-    except Exception as e:
-        return api_response(False, "Internal Server Error", errors=str(e), status=500)
 
-@csrf_exempt
-@require_http_methods(["GET"])
-def retrieve_workflow(request, pk):
-    try:
-        if not request.user.is_authenticated:
-            return api_response(False, "Unauthorized", status=401)
-        
-        try:
-            workflow = get_object_or_404(Workflow, pk=pk)
-        except Exception: 
-            return api_response(False, "Workflow not found", status=404)
+    def create(self, request, *args, **kwargs):
+        response = super().create(request, *args, **kwargs)
+        return api_response(
+            success=True,
+            message="Workflow created successfully.",
+            data=response.data,
+            status_code=status.HTTP_201_CREATED
+        )
 
-        return api_response(True, "Workflow retrieved successfully", data=WorkflowSerializer.to_representation(workflow))
-    except Exception as e:
-        return api_response(False, "Internal Server Error", errors=str(e), status=500)
+class WorkflowDetailView(generics.RetrieveUpdateDestroyAPIView):
+    """
+    Retrieve, update or delete a workflow instance.
+    """
+    serializer_class = WorkflowSerializer
+    permission_classes = [IsAuthenticated]
 
-@csrf_exempt
-@require_http_methods(["PUT"])
-def update_workflow(request, pk):
-    try:
-        if not request.user.is_authenticated:
-            return api_response(False, "Unauthorized", status=401)
-        
-        try:
-            workflow = get_object_or_404(Workflow, pk=pk)
-        except Exception:
-            return api_response(False, "Workflow not found", status=404)
-        
-        try:
-            data = json.loads(request.body)
-        except json.JSONDecodeError:
-            return api_response(False, "Invalid JSON format", status=400)
-        
-        update_data = {
-            "name": data.get("name", workflow.name),
-            "nodes": data.get("nodes", workflow.nodes),
-            "edges": data.get("edges", workflow.edges)
-        }
-        
-        form = WorkflowSerializer(update_data) # Validate the final state
-        if not form.is_valid():
-             return api_response(False, "Validation failed", errors=form.errors, status=400)
-             
-        cleaned_data = form.cleaned_data
-        workflow.name = cleaned_data['name']
-        workflow.nodes = cleaned_data['nodes']
-        workflow.edges = cleaned_data['edges']
-        workflow.save()
-        
-        return api_response(True, "Workflow updated successfully", data=WorkflowSerializer.to_representation(workflow))
-        
-    except Exception as e:
-        return api_response(False, "Internal Server Error", errors=str(e), status=500)
+    def get_queryset(self):
+        return Workflow.objects.filter(user=self.request.user)
 
-@csrf_exempt
-@require_http_methods(["DELETE"])
-def delete_workflow(request, pk):
-    try:
-        if not request.user.is_authenticated:
-            return api_response(False, "Unauthorized", status=401)
-        
-        try:
-            workflow = get_object_or_404(Workflow, pk=pk)
-        except Exception:
-             return api_response(False, "Workflow not found", status=404)
-             
-        workflow.delete()
-        return api_response(True, "Workflow deleted successfully", status=200)
-        
-    except Exception as e:
-        return api_response(False, "Internal Server Error", errors=str(e), status=500)
+    def retrieve(self, request, *args, **kwargs):
+        response = super().retrieve(request, *args, **kwargs)
+        return api_response(
+            success=True,
+            message="Workflow retrieved successfully.",
+            data=response.data,
+            status_code=status.HTTP_200_OK
+        )
+
+    def update(self, request, *args, **kwargs):
+        response = super().update(request, *args, **kwargs)
+        return api_response(
+            success=True,
+            message="Workflow updated successfully.",
+            data=response.data,
+            status_code=status.HTTP_200_OK
+        )
+
+    def destroy(self, request, *args, **kwargs):
+        super().destroy(request, *args, **kwargs)
+        return api_response(
+            success=True,
+            message="Workflow deleted successfully.",
+            status_code=status.HTTP_200_OK # Using 200 instead of 204 to match user request for consistency
+        )

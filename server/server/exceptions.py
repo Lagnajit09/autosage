@@ -13,12 +13,23 @@ def custom_exception_handler(exc, context):
     response = exception_handler(exc, context)
 
     if response is not None:
-        # Structured response for DRF-handled exceptions (ValidationErrors, NotAuthenticated, etc.)
+        # User-friendly message based on status code
+        message = "An error occurred during the request."
+        if response.status_code == 400:
+            message = "Validation failed. Please check the provided data."
+        elif response.status_code == 401:
+            message = "Authentication required. Please log in."
+        elif response.status_code == 403:
+            message = "You do not have permission to perform this action."
+        elif response.status_code == 404:
+            message = "The requested resource was not found."
+
+        # Structured response for DRF-handled exceptions
         response.data = {
             "status": "error",
-            "message": "A validation error occurred." if response.status_code == 400 else "An error occurred during the request.",
+            "message": message,
             "data": None,
-            "errors": response.data # This usually contains the field-specific errors
+            "errors": response.data # This contains the system/technical errors
         }
     else:
         # Unhandled exceptions (Internal Server Errors)
@@ -26,7 +37,7 @@ def custom_exception_handler(exc, context):
         
         response = Response({
             "status": "error",
-            "message": "An internal server error occurred.",
+            "message": "A system error occurred. Our team has been notified.",
             "data": None,
             "errors": str(exc) # The raw error for debugging
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

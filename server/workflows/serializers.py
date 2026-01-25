@@ -1,52 +1,30 @@
-from django import forms
+from rest_framework import serializers
 from .models import Workflow
 import random
 
-class WorkflowSerializer(forms.Form):
-    name = forms.CharField(max_length=255, required=True, error_messages={'required': 'Name is required'})
-    nodes = forms.JSONField(required=False, initial=list)
-    edges = forms.JSONField(required=False, initial=list)
+class WorkflowSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Workflow
+        fields = ['id', 'name', 'description', 'nodes', 'edges', 'created_at', 'modified_at']
+        read_only_fields = ['id', 'created_at', 'modified_at']
 
-    def clean_nodes(self):
-        nodes = self.cleaned_data.get('nodes')
-        if nodes is None:
-            return []
-        if not isinstance(nodes, list):
-            raise forms.ValidationError("Nodes must be a list.")
-        return nodes
+    def to_representation(self, instance):
+        """
+        Custom representation to include dynamic fields if needed.
+        Check if we are in a list context or detail context.
+        """
+        ret = super().to_representation(instance)
+        
+        # If the context is 'list', use the list representation
+        if self.context.get('request') and self.context['request'].method == 'GET' and 'pk' not in self.context.get('view', {}).kwargs:
+             ret['total_nodes'] = len(instance.nodes)
+             ret['total_edges'] = len(instance.edges)
 
-    def clean_edges(self):
-        edges = self.cleaned_data.get('edges')
-        if edges is None:
-            return []
-        if not isinstance(edges, list):
-            raise forms.ValidationError("Edges must be a list.")
-        return edges
-
-    @staticmethod
-    def to_representation(workflow):
-        return {
-            "id": str(workflow.id),
-            "name": workflow.name,
-            "description": workflow.description,
-            "nodes": workflow.nodes,
-            "edges": workflow.edges,
-            "created_at": workflow.created_at.isoformat(),
-            "modified_at": workflow.modified_at.isoformat(),
-        }
-
-    # TODO: last_run and runs are not implemented and will be implemented after execution-engine is implemented
-
-    @staticmethod
-    def to_list_representation(workflow):
-        return {
-            "id": str(workflow.id),
-            "name": workflow.name,
-            "description": workflow.description,
-            "total_nodes": len(workflow.nodes),
-            "total_edges": len(workflow.edges),
-            "created_at": workflow.created_at.isoformat(),
-            "modified_at": workflow.modified_at.isoformat(),
-            "last_run": workflow.created_at.isoformat(),
-            "runs": random.randint(1, 100),
-        }
+            #  TODO: Integrate with Execution-engine
+             ret['last_run'] = instance.created_at.isoformat()
+             ret['runs'] = random.randint(1, 100)
+             # Remove nodes/edges from list view as they are too large
+             ret.pop('nodes', None)
+             ret.pop('edges', None)
+        
+        return ret
