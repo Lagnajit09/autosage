@@ -2,7 +2,7 @@ from django.shortcuts import get_object_or_404
 from rest_framework import status, generics
 from rest_framework.permissions import IsAuthenticated
 from .models import Vault, Credential, Server
-from .serializers import VaultSerializer, CredentialSerializer, ServerSerializer
+from .serializers import VaultSerializer, CredentialSerializer, CredentialRevealSerializer, ServerSerializer
 from server.utils import api_response
 
 class VaultListCreateView(generics.ListCreateAPIView):
@@ -159,6 +159,26 @@ class CredentialDetailView(generics.RetrieveUpdateDestroyAPIView):
         return api_response(
             success=True,
             message="Credential deleted successfully.",
+            status_code=status.HTTP_200_OK
+        )
+
+class CredentialRevealView(generics.RetrieveAPIView):
+    """
+    Reveal sensitive credential fields for a specific credential.
+    This endpoint explicitly returns password, ssh_key, and other sensitive data.
+    """
+    serializer_class = CredentialRevealSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        return Credential.objects.filter(vault__owner=self.request.user)
+
+    def retrieve(self, request, *args, **kwargs):
+        response = super().retrieve(request, *args, **kwargs)
+        return api_response(
+            success=True,
+            message="Credential secrets revealed successfully.",
+            data=response.data,
             status_code=status.HTTP_200_OK
         )
 

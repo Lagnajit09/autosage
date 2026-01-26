@@ -106,6 +106,83 @@ class CredentialTests(APITestCase):
         response = self.client.patch(url, data, format='json')
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
 
+    def test_credential_secrets_masked_in_list(self):
+        """SECURITY TEST: Ensure sensitive fields are NOT exposed in list endpoint"""
+        Credential.objects.create(
+            vault=self.vault, 
+            name='My Cred', 
+            credential_type='username_password',
+            username='admin',
+            password='supersecret123'
+        )
+        
+        response = self.client.get(self.cred_url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        
+        # Check that sensitive fields are NOT present
+        cred_data = response.data['data'][0]
+        self.assertNotIn('password', cred_data)
+        self.assertNotIn('ssh_key', cred_data)
+        self.assertNotIn('key_passphrase', cred_data)
+        self.assertNotIn('cert_pem', cred_data)
+        
+        # But non-sensitive fields should be present
+        self.assertIn('username', cred_data)
+        self.assertIn('name', cred_data)
+
+    def test_credential_secrets_masked_in_detail(self):
+        """SECURITY TEST: Ensure sensitive fields are NOT exposed in detail endpoint"""
+        cred = Credential.objects.create(
+            vault=self.vault, 
+            name='My Cred', 
+            credential_type='username_password',
+            username='admin',
+            password='supersecret123'
+        )
+        
+        url = reverse('credential-detail', args=[cred.id])
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        
+        # Check that sensitive fields are NOT present
+        cred_data = response.data['data']
+        self.assertNotIn('password', cred_data)
+        self.assertNotIn('ssh_key', cred_data)
+
+    def test_credential_reveal_exposes_secrets(self):
+        """SECURITY TEST: Ensure reveal endpoint DOES expose sensitive fields"""
+        cred = Credential.objects.create(
+            vault=self.vault, 
+            name='My Cred', 
+            credential_type='username_password',
+            username='admin',
+            password='supersecret123'
+        )
+        
+        url = reverse('credential-reveal', args=[cred.id])
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        
+        # Check that ALL fields including sensitive ones ARE present
+        cred_data = response.data['data']
+        self.assertIn('password', cred_data)
+        self.assertEqual(cred_data['password'], 'supersecret123')
+        self.assertIn('username', cred_data)
+
+    def test_credential_reveal_blocked_for_other_users(self):
+        """SECURITY TEST: Ensure users cannot reveal secrets for other users' credentials"""
+        cred = Credential.objects.create(
+            vault=self.other_vault, 
+            name='Other Cred', 
+            credential_type='username_password',
+            username='admin',
+            password='othersecret'
+        )
+        
+        url = reverse('credential-reveal', args=[cred.id])
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
 class ServerTests(APITestCase):
     def setUp(self):
         self.user = User.objects.create_user(username='testuser', password='testpassword')
