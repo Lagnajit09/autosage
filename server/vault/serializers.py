@@ -39,6 +39,20 @@ class ServerSerializer(serializers.ModelSerializer):
         fields = '__all__'
         read_only_fields = ('created_at', 'modified_at')
 
+    def validate(self, data):
+        """
+        Validate port based on connection method if port is not provided.
+        Also provides basic validation for port range.
+        """
+        conn_method = data.get('connection_method')
+        port = data.get('port')
+
+        if port is not None:
+            if not (1 <= port <= 65535):
+                raise serializers.ValidationError({"port": "Port must be between 1 and 65535."})
+        
+        return data
+
 class VaultSerializer(serializers.ModelSerializer):
     credentials = CredentialSerializer(many=True, read_only=True)
     servers = ServerSerializer(many=True, read_only=True)

@@ -6,4 +6,6 @@ urlpatterns = [
     path('vaults/<int:pk>/', views.VaultDetailView.as_view(), name='vault-detail'),
     path('credentials/', views.CredentialListCreateView.as_view(), name='credential-list-create'),
     path('credentials/<int:pk>/', views.CredentialDetailView.as_view(), name='credential-detail'),
+    path('servers/', views.ServerListCreateView.as_view(), name='server-list-create'),
+    path('servers/<int:pk>/', views.ServerDetailView.as_view(), name='server-detail'),
 ]

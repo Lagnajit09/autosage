@@ -1,8 +1,8 @@
 from django.shortcuts import get_object_or_404
 from rest_framework import status, generics
 from rest_framework.permissions import IsAuthenticated
-from .models import Vault, Credential
-from .serializers import VaultSerializer, CredentialSerializer
+from .models import Vault, Credential, Server
+from .serializers import VaultSerializer, CredentialSerializer, ServerSerializer
 from server.utils import api_response
 
 class VaultListCreateView(generics.ListCreateAPIView):
@@ -92,11 +92,14 @@ class CredentialListCreateView(generics.ListCreateAPIView):
         serializer.save()
 
     def list(self, request, *args, **kwargs):
-        # Allow filtering by vault_id
+        # Allow filtering by vault_id AFTER validating ownership
         vault_id = request.query_params.get('vault_id')
         queryset = self.get_queryset()
+        
         if vault_id:
-            queryset = queryset.filter(vault_id=vault_id)
+            # Ensure the vault belongs to the user before filtering
+            vault = get_object_or_404(Vault, pk=vault_id, owner=self.request.user)
+            queryset = queryset.filter(vault=vault)
         
         serializer = self.get_serializer(queryset, many=True)
         return api_response(
@@ -134,13 +137,15 @@ class CredentialDetailView(generics.RetrieveUpdateDestroyAPIView):
             status_code=status.HTTP_200_OK
         )
 
-    def update(self, request, *args, **kwargs):
+    def perform_update(self, serializer):
         # Ensure that if the vault is updated, the user owns the new vault
-        vault_id = request.data.get('vault')
-        if vault_id:
-            from .models import Vault
-            vault = get_object_or_404(Vault, pk=vault_id, owner=self.request.user)
-        
+        vault = serializer.validated_data.get('vault')
+        if vault and vault.owner != self.request.user:
+            from rest_framework.exceptions import PermissionDenied
+            raise PermissionDenied("You do not have permission to move credentials to this vault.")
+        serializer.save()
+
+    def update(self, request, *args, **kwargs):
         response = super().update(request, *args, **kwargs)
         return api_response(
             success=True,
@@ -154,5 +159,108 @@ class CredentialDetailView(generics.RetrieveUpdateDestroyAPIView):
         return api_response(
             success=True,
             message="Credential deleted successfully.",
+            status_code=status.HTTP_200_OK
+        )
+
+class ServerListCreateView(generics.ListCreateAPIView):
+    """
+    List all servers owned by the user or create a new server.
+    """
+    serializer_class = ServerSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        # Only return servers if the user owns the vault they belong to
+        return Server.objects.filter(vault__owner=self.request.user)
+
+    def perform_create(self, serializer):
+        # Validate that the vault belongs to the user
+        vault = serializer.validated_data.get('vault')
+        if vault.owner != self.request.user:
+            from rest_framework.exceptions import PermissionDenied
+            raise PermissionDenied("You do not have permission to add servers to this vault.")
+        
+        # Validate that the credential (if provided) belongs to a vault owned by the user
+        credential = serializer.validated_data.get('credential')
+        if credential and credential.vault.owner != self.request.user:
+            from rest_framework.exceptions import PermissionDenied
+            raise PermissionDenied("The selected credential does not belong to you.")
+            
+        serializer.save()
+
+    def list(self, request, *args, **kwargs):
+        # Allow filtering by vault_id AFTER validating ownership
+        vault_id = request.query_params.get('vault_id')
+        queryset = self.get_queryset()
+        
+        if vault_id:
+            # Ensure the vault belongs to the user before filtering
+            vault = get_object_or_404(Vault, pk=vault_id, owner=self.request.user)
+            queryset = queryset.filter(vault=vault)
+        
+        serializer = self.get_serializer(queryset, many=True)
+        return api_response(
+            success=True,
+            message="Servers retrieved successfully.",
+            data=serializer.data,
+            status_code=status.HTTP_200_OK
+        )
+
+    def create(self, request, *args, **kwargs):
+        response = super().create(request, *args, **kwargs)
+        return api_response(
+            success=True,
+            message="Server created successfully.",
+            data=response.data,
+            status_code=status.HTTP_201_CREATED
+        )
+
+class ServerDetailView(generics.RetrieveUpdateDestroyAPIView):
+    """
+    Retrieve, update or delete a server instance.
+    """
+    serializer_class = ServerSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        return Server.objects.filter(vault__owner=self.request.user)
+
+    def retrieve(self, request, *args, **kwargs):
+        response = super().retrieve(request, *args, **kwargs)
+        return api_response(
+            success=True,
+            message="Server retrieved successfully.",
+            data=response.data,
+            status_code=status.HTTP_200_OK
+        )
+
+    def perform_update(self, serializer):
+        # Ensure that if the vault or credential is updated, they belong to the user
+        vault = serializer.validated_data.get('vault')
+        if vault and vault.owner != self.request.user:
+            from rest_framework.exceptions import PermissionDenied
+            raise PermissionDenied("You do not have permission to move servers to this vault.")
+            
+        credential = serializer.validated_data.get('credential')
+        if credential and credential.vault.owner != self.request.user:
+            from rest_framework.exceptions import PermissionDenied
+            raise PermissionDenied("The selected credential does not belong to you.")
+        
+        serializer.save()
+
+    def update(self, request, *args, **kwargs):
+        response = super().update(request, *args, **kwargs)
+        return api_response(
+            success=True,
+            message="Server updated successfully.",
+            data=response.data,
+            status_code=status.HTTP_200_OK
+        )
+
+    def destroy(self, request, *args, **kwargs):
+        super().destroy(request, *args, **kwargs)
+        return api_response(
+            success=True,
+            message="Server deleted successfully.",
             status_code=status.HTTP_200_OK
         )
