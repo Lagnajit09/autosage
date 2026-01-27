@@ -1,3 +1,4 @@
+import uuid
 from django.db import models
 from django.conf import settings
 from django.utils.translation import gettext_lazy as _
@@ -6,6 +7,7 @@ from .fields import EncryptedCharField, EncryptedTextField
 
 # TODO: (Future Implementation) Sharing Team Access, Read-Only/Edit access, Many-to-Many Relation
 class Vault(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     name = models.CharField(max_length=255)
     owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='vaults', null=True, blank=True)
     description = models.TextField(blank=True)
@@ -23,6 +25,7 @@ class Vault(models.Model):
         return f"{self.name} ({self.owner})"
 
 class Credential(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     class Type(models.TextChoices):
         USERNAME_PASSWORD = 'username_password', _('Username/Password')
         SSH_KEY = 'ssh_key', _('SSH Key')
@@ -52,6 +55,7 @@ class Credential(models.Model):
         return f"{self.name} ({self.get_credential_type_display()})"
 
 class Server(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     class ConnectionMethod(models.TextChoices):
         WINRM = 'winrm', _('WinRM (Windows)')
         SSH = 'ssh', _('SSH (Linux/Unix)')

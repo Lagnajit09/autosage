@@ -311,8 +311,8 @@ class ServerDetailView(generics.RetrieveUpdateDestroyAPIView):
 class CredentialMoveToVaultView(APIView):
     """
     Move a credential from one vault to another.
-    POST /api/vault/credentials/<id>/move-to-vault/
-    Body: {"vault_id": <new_vault_id>}
+    POST /api/vault/credentials/<uuid:pk>/move-to-vault/
+    Body: {"vault_id": <new_vault_uuid>}
     """
     permission_classes = [IsAuthenticated]
 
@@ -347,8 +347,8 @@ class CredentialMoveToVaultView(APIView):
 class ServerLinkCredentialView(APIView):
     """
     Link or unlink a credential to/from a server.
-    POST /api/vault/servers/<id>/link-credential/
-    Body: {"credential_id": <credential_id>}  # or null to unlink
+    POST /api/vault/servers/<uuid:pk>/link-credential/
+    Body: {"credential_id": <credential_uuid>}  # or null to unlink
     """
     permission_classes = [IsAuthenticated]
 
@@ -393,7 +393,7 @@ class ServerLinkCredentialView(APIView):
 class ServerUnlinkCredentialView(APIView):
     """
     Unlink credential from a server.
-    POST /api/vault/servers/<id>/unlink-credential/
+    POST /api/vault/servers/<uuid:pk>/unlink-credential/
     """
     permission_classes = [IsAuthenticated]
 
