@@ -21,8 +21,12 @@ class CredentialSerializer(serializers.ModelSerializer):
     def validate(self, data):
         """
         Check that the required fields are present for the given credential type.
-        This validation still runs on create/update even though fields are write_only.
+        This validation only runs on CREATE, not on partial updates (PATCH).
         """
+        # Skip type-specific validation for partial updates
+        if self.partial:
+            return data
+            
         cred_type = data.get('credential_type')
         
         if cred_type == Credential.Type.USERNAME_PASSWORD:

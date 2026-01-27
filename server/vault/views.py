@@ -1,5 +1,6 @@
 from django.shortcuts import get_object_or_404
 from rest_framework import status, generics
+from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
 from .models import Vault, Credential, Server
 from .serializers import VaultSerializer, CredentialSerializer, CredentialRevealSerializer, ServerSerializer
@@ -56,6 +57,8 @@ class VaultDetailView(generics.RetrieveUpdateDestroyAPIView):
         )
 
     def update(self, request, *args, **kwargs):
+        # Force partial=True to allow individual field updates via PUT
+        kwargs['partial'] = True
         response = super().update(request, *args, **kwargs)
         return api_response(
             success=True,
@@ -146,6 +149,8 @@ class CredentialDetailView(generics.RetrieveUpdateDestroyAPIView):
         serializer.save()
 
     def update(self, request, *args, **kwargs):
+        # Force partial=True to allow individual field updates via PUT
+        kwargs['partial'] = True
         response = super().update(request, *args, **kwargs)
         return api_response(
             success=True,
@@ -201,10 +206,16 @@ class ServerListCreateView(generics.ListCreateAPIView):
             raise PermissionDenied("You do not have permission to add servers to this vault.")
         
         # Validate that the credential (if provided) belongs to a vault owned by the user
+        # AND belongs to the same vault as the server
         credential = serializer.validated_data.get('credential')
-        if credential and credential.vault.owner != self.request.user:
-            from rest_framework.exceptions import PermissionDenied
-            raise PermissionDenied("The selected credential does not belong to you.")
+        if credential:
+            if credential.vault.owner != self.request.user:
+                from rest_framework.exceptions import PermissionDenied
+                raise PermissionDenied("The selected credential does not belong to you.")
+            
+            if credential.vault != vault:
+                from rest_framework.exceptions import ValidationError
+                raise ValidationError({"credential": ["The credential must belong to the same vault as the server."]})
             
         serializer.save()
 
@@ -262,13 +273,23 @@ class ServerDetailView(generics.RetrieveUpdateDestroyAPIView):
             raise PermissionDenied("You do not have permission to move servers to this vault.")
             
         credential = serializer.validated_data.get('credential')
-        if credential and credential.vault.owner != self.request.user:
-            from rest_framework.exceptions import PermissionDenied
-            raise PermissionDenied("The selected credential does not belong to you.")
+        if credential:
+            if credential.vault.owner != self.request.user:
+                from rest_framework.exceptions import PermissionDenied
+                raise PermissionDenied("The selected credential does not belong to you.")
+            
+            # Check if credential is in the same vault as the server
+            # Use the new vault if it's being updated, otherwise use existing vault
+            target_vault = vault if vault else self.get_object().vault
+            if credential.vault != target_vault:
+                from rest_framework.exceptions import ValidationError
+                raise ValidationError({"credential": ["The credential must belong to the same vault as the server."]})
         
         serializer.save()
 
     def update(self, request, *args, **kwargs):
+        # Force partial=True to allow individual field updates via PUT
+        kwargs['partial'] = True
         response = super().update(request, *args, **kwargs)
         return api_response(
             success=True,
@@ -282,5 +303,118 @@ class ServerDetailView(generics.RetrieveUpdateDestroyAPIView):
         return api_response(
             success=True,
             message="Server deleted successfully.",
+            status_code=status.HTTP_200_OK
+        )
+
+# Link/Unlink Endpoints
+
+class CredentialMoveToVaultView(APIView):
+    """
+    Move a credential from one vault to another.
+    POST /api/vault/credentials/<id>/move-to-vault/
+    Body: {"vault_id": <new_vault_id>}
+    """
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, pk):
+        # Get the credential (must be owned by user)
+        credential = get_object_or_404(Credential, pk=pk, vault__owner=request.user)
+        
+        # Get the target vault (must be owned by user)
+        vault_id = request.data.get('vault_id')
+        if not vault_id:
+            return api_response(
+                success=False,
+                message="vault_id is required.",
+                errors={"vault_id": ["This field is required."]},
+                status_code=status.HTTP_400_BAD_REQUEST
+            )
+        
+        target_vault = get_object_or_404(Vault, pk=vault_id, owner=request.user)
+        
+        # Move the credential
+        old_vault_name = credential.vault.name
+        credential.vault = target_vault
+        credential.save()
+        
+        return api_response(
+            success=True,
+            message=f"Credential moved from '{old_vault_name}' to '{target_vault.name}' successfully.",
+            data=CredentialSerializer(credential).data,
+            status_code=status.HTTP_200_OK
+        )
+
+class ServerLinkCredentialView(APIView):
+    """
+    Link or unlink a credential to/from a server.
+    POST /api/vault/servers/<id>/link-credential/
+    Body: {"credential_id": <credential_id>}  # or null to unlink
+    """
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, pk):
+        # Get the server (must be owned by user)
+        server = get_object_or_404(Server, pk=pk, vault__owner=request.user)
+        
+        credential_id = request.data.get('credential_id')
+        
+        # If credential_id is null or empty, unlink
+        if credential_id is None or credential_id == '':
+            server.credential = None
+            server.save()
+            return api_response(
+                success=True,
+                message="Credential unlinked from server successfully.",
+                data=ServerSerializer(server).data,
+                status_code=status.HTTP_200_OK
+            )
+        
+        # Otherwise, link the credential (must be owned by user)
+        # AND must be in the same vault as the server
+        credential = get_object_or_404(Credential, pk=credential_id, vault__owner=request.user)
+        
+        if credential.vault != server.vault:
+            return api_response(
+                success=False,
+                message="The credential must belong to the same vault as the server.",
+                status_code=status.HTTP_400_BAD_REQUEST
+            )
+        
+        server.credential = credential
+        server.save()
+        
+        return api_response(
+            success=True,
+            message=f"Credential '{credential.name}' linked to server '{server.name}' successfully.",
+            data=ServerSerializer(server).data,
+            status_code=status.HTTP_200_OK
+        )
+
+class ServerUnlinkCredentialView(APIView):
+    """
+    Unlink credential from a server.
+    POST /api/vault/servers/<id>/unlink-credential/
+    """
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, pk):
+        # Get the server (must be owned by user)
+        server = get_object_or_404(Server, pk=pk, vault__owner=request.user)
+        
+        if not server.credential:
+            return api_response(
+                success=False,
+                message="Server does not have any linked credential.",
+                status_code=status.HTTP_400_BAD_REQUEST
+            )
+        
+        old_credential_name = server.credential.name
+        server.credential = None
+        server.save()
+        
+        return api_response(
+            success=True,
+            message=f"Credential '{old_credential_name}' unlinked from server successfully.",
+            data=ServerSerializer(server).data,
             status_code=status.HTTP_200_OK
         )

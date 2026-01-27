@@ -121,13 +121,13 @@ class CredentialTests(APITestCase):
         
         # Check that sensitive fields are NOT present
         cred_data = response.data['data'][0]
+        self.assertNotIn('username', cred_data)
         self.assertNotIn('password', cred_data)
         self.assertNotIn('ssh_key', cred_data)
         self.assertNotIn('key_passphrase', cred_data)
         self.assertNotIn('cert_pem', cred_data)
         
         # But non-sensitive fields should be present
-        self.assertIn('username', cred_data)
         self.assertIn('name', cred_data)
 
     def test_credential_secrets_masked_in_detail(self):
@@ -146,6 +146,7 @@ class CredentialTests(APITestCase):
         
         # Check that sensitive fields are NOT present
         cred_data = response.data['data']
+        self.assertNotIn('username', cred_data)
         self.assertNotIn('password', cred_data)
         self.assertNotIn('ssh_key', cred_data)
 
@@ -189,6 +190,7 @@ class ServerTests(APITestCase):
         self.user2 = User.objects.create_user(username='otheruser', password='testpassword')
         self.client.force_authenticate(user=self.user)
         self.vault = Vault.objects.create(name='My Vault', owner=self.user)
+        self.vault2 = Vault.objects.create(name='My Vault 2', owner=self.user)
         self.other_vault = Vault.objects.create(name='Other Vault', owner=self.user2)
         self.cred = Credential.objects.create(vault=self.vault, name='My Cred', credential_type='username_password')
         self.other_cred = Credential.objects.create(vault=self.other_vault, name='Other Cred', credential_type='username_password')
@@ -271,3 +273,88 @@ class ServerTests(APITestCase):
         data = {'credential': self.other_cred.id}
         response = self.client.patch(url, data, format='json')
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_partial_update_credential_name_only(self):
+        """Verify that updating ONLY the name of a credential works (PATCH)."""
+        cred = Credential.objects.create(
+            vault=self.vault, 
+            name='Old Name', 
+            credential_type='username_password',
+            username='admin',
+            password='password123'
+        )
+        url = reverse('credential-detail', args=[cred.id])
+        data = {'name': 'New Name'}
+        response = self.client.patch(url, data, format='json')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        cred.refresh_from_db()
+        self.assertEqual(cred.name, 'New Name')
+
+    def test_move_credential_to_another_vault(self):
+        """Verify the move-to-vault endpoint."""
+        new_vault = Vault.objects.create(name='Secondary Vault', owner=self.user)
+        cred = Credential.objects.create(vault=self.vault, name='Move Me', credential_type='username_password')
+        url = reverse('credential-move-to-vault', args=[cred.id])
+        data = {'vault_id': new_vault.id}
+        response = self.client.post(url, data, format='json')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        cred.refresh_from_db()
+        self.assertEqual(cred.vault, new_vault)
+
+    def test_partial_update_server_name_only(self):
+        """Verify that updating ONLY the name of a server works (PATCH)."""
+        server = Server.objects.create(vault=self.vault, name='Old Server', host='1.1.1.1', connection_method='ssh')
+        url = reverse('server-detail', args=[server.id])
+        data = {'name': 'New Server'}
+        response = self.client.patch(url, data, format='json')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        server.refresh_from_db()
+        self.assertEqual(server.name, 'New Server')
+
+    def test_link_credential_to_server(self):
+        """Verify the link-credential endpoint."""
+        server = Server.objects.create(vault=self.vault, name='My Server', host='1.1.1.1', connection_method='ssh')
+        url = reverse('server-link-credential', args=[server.id])
+        data = {'credential_id': self.cred.id}
+        response = self.client.post(url, data, format='json')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        server.refresh_from_db()
+        self.assertEqual(server.credential, self.cred)
+
+    def test_unlink_credential_from_server(self):
+        """Verify the unlink-credential endpoint."""
+        server = Server.objects.create(vault=self.vault, name='My Server', host='1.1.1.1', connection_method='ssh', credential=self.cred)
+        url = reverse('server-unlink-credential', args=[server.id])
+        response = self.client.post(url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        server.refresh_from_db()
+        self.assertIsNone(server.credential)
+
+    def test_link_credential_mismatched_vault_blocked(self):
+        """SECURITY TEST: Ensure credentials from different vaults cannot be linked to a server."""
+        # Create a credential in vault2
+        cred2 = Credential.objects.create(vault=self.vault2, name='Cred in Vault 2', credential_type='username_password')
+        # Create a server in vault1
+        server = Server.objects.create(vault=self.vault, name='Server in Vault 1', host='1.1.1.1', connection_method='ssh')
+        
+        url = reverse('server-link-credential', args=[server.id])
+        data = {'credential_id': cred2.id}
+        response = self.client.post(url, data, format='json')
+        
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("must belong to the same vault", response.data['message'])
+
+    def test_create_server_mismatched_vault_credential_blocked(self):
+        """SECURITY TEST: Ensure servers cannot be created with a credential from a different vault."""
+        cred2 = Credential.objects.create(vault=self.vault2, name='Cred in Vault 2', credential_type='username_password')
+        
+        data = {
+            'vault': self.vault.id, # Vault 1
+            'name': 'Server',
+            'host': '1.1.1.1',
+            'connection_method': 'ssh',
+            'credential': cred2.id # Cred from Vault 2
+        }
+        response = self.client.post(self.server_url, data, format='json')
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("must belong to the same vault", str(response.data))
