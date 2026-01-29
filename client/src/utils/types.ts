@@ -143,14 +143,16 @@ export interface AuthResponse {
 }
 
 export interface Vault {
-  id: number;
+  id: string;
   name: string;
   description: string;
+  credentials?: Credential[];
+  servers?: Server[];
 }
 
 export interface Credential {
-  id: number;
-  vaultId: number;
+  id: string;
+  vault: string;
   name: string;
   credential_type: "username_password" | "ssh_key" | "certificate";
   username?: string;
@@ -161,11 +163,11 @@ export interface Credential {
 }
 
 export interface Server {
-  id: number;
-  vaultId: number;
+  id: string;
+  vault: string;
   name: string;
   host: string;
   port?: number;
   connection_method: "winrm" | "ssh";
-  credentialId?: number;
+  credential?: string;
 }

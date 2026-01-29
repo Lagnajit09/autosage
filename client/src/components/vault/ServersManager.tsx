@@ -18,8 +18,11 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Card } from "@/components/ui/card";
-import { Plus, Trash2, Edit, Key } from "lucide-react";
+import { Plus, Trash2, Edit, Key, Loader2 } from "lucide-react";
 import { Server, Credential } from "@/utils/types";
+import { apiRequest } from "@/lib/api-client";
+import { toast } from "sonner";
+import { useAuth } from "@clerk/clerk-react";
 
 export function ServersManager({
   vaultId,
@@ -27,18 +30,20 @@ export function ServersManager({
   availableCredentials,
   onUpdate,
 }: {
-  vaultId: number;
+  vaultId: string;
   servers: Server[];
   availableCredentials: Credential[];
   onUpdate: (s: Server[]) => void;
 }) {
+  const { getToken } = useAuth();
   const [isAdding, setIsAdding] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const [name, setName] = useState("");
   const [host, setHost] = useState("");
   const [port, setPort] = useState<string>("");
   const [method, setMethod] = useState<Server["connection_method"]>("ssh");
   const [credId, setCredId] = useState<string>("none");
-  const [editId, setEditId] = useState<number | null>(null);
+  const [editId, setEditId] = useState<string | null>(null);
 
   const resetForm = () => {
     setName("");
@@ -50,25 +55,50 @@ export function ServersManager({
     setIsAdding(false);
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!name || !host) return;
 
-    const newServer: Server = {
-      id: editId || Date.now(),
-      vaultId,
-      name,
-      host,
-      port: port ? parseInt(port) : undefined,
-      connection_method: method,
-      credentialId: credId && credId !== "none" ? parseInt(credId) : undefined,
-    };
+    setIsSaving(true);
+    try {
+      const payload: any = {
+        vault: vaultId,
+        name,
+        host,
+        port: port ? parseInt(port) : undefined,
+        connection_method: method,
+        credential: credId && credId !== "none" ? credId : null,
+      };
 
-    if (editId) {
-      onUpdate(servers.map((s) => (s.id === editId ? newServer : s)));
-    } else {
-      onUpdate([...servers, newServer]);
+      const endpoint = editId
+        ? `/api/vault/servers/${editId}/`
+        : `/api/vault/servers/`;
+
+      const token = await getToken();
+      const response = await apiRequest(
+        endpoint,
+        {
+          method: editId ? "PUT" : "POST",
+          body: JSON.stringify(payload),
+        },
+        token,
+      );
+
+      if (response.success) {
+        if (editId) {
+          onUpdate(servers.map((s) => (s.id === editId ? response.data : s)));
+          toast.success("Server updated successfully");
+        } else {
+          onUpdate([...servers, response.data]);
+          toast.success("Server created successfully");
+        }
+        resetForm();
+      }
+    } catch (error) {
+      console.error("Failed to save server:", error);
+      toast.error("Failed to save server");
+    } finally {
+      setIsSaving(false);
     }
-    resetForm();
   };
 
   const handleEdit = (server: Server) => {
@@ -78,11 +108,29 @@ export function ServersManager({
     setHost(server.host);
     setPort(server.port?.toString() || "");
     setMethod(server.connection_method);
-    setCredId(server.credentialId?.toString() || "none");
+    setCredId(server.credential || "none");
   };
 
-  const handleDelete = (id: number) => {
-    onUpdate(servers.filter((s) => s.id !== id));
+  const handleDelete = async (id: string) => {
+    if (!confirm("Are you sure you want to delete this server?")) return;
+
+    try {
+      const token = await getToken();
+      const response = await apiRequest(
+        `/api/vault/servers/${id}/`,
+        {
+          method: "DELETE",
+        },
+        token,
+      );
+      if (response.success) {
+        onUpdate(servers.filter((s) => s.id !== id));
+        toast.success("Server deleted successfully");
+      }
+    } catch (error) {
+      console.error("Failed to delete server:", error);
+      toast.error("Failed to delete server");
+    }
   };
 
   return (
@@ -204,9 +252,16 @@ export function ServersManager({
               </Button>
               <Button
                 onClick={handleSave}
-                className="bg-blue-600 hover:bg-blue-500 text-white"
+                disabled={isSaving}
+                className="bg-blue-600 hover:bg-blue-500 text-white min-w-[80px]"
               >
-                {editId ? "Update" : "Save"}
+                {isSaving ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : editId ? (
+                  "Update"
+                ) : (
+                  "Save"
+                )}
               </Button>
             </div>
           </div>
@@ -247,7 +302,7 @@ export function ServersManager({
             ) : (
               servers.map((server) => {
                 const linkedCred = availableCredentials.find(
-                  (c) => c.id === server.credentialId,
+                  (c) => c.id === server.credential,
                 );
                 return (
                   <TableRow

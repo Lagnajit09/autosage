@@ -19,26 +19,31 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Card } from "@/components/ui/card";
-import { Plus, Trash2, Edit } from "lucide-react";
+import { Plus, Trash2, Edit, Loader2 } from "lucide-react";
 import { Credential } from "@/utils/types";
+import { apiRequest } from "@/lib/api-client";
+import { toast } from "sonner";
+import { useAuth } from "@clerk/clerk-react";
 
 export function CredentialsManager({
   vaultId,
   credentials,
   onUpdate,
 }: {
-  vaultId: number;
+  vaultId: string;
   credentials: Credential[];
   onUpdate: (c: Credential[]) => void;
 }) {
+  const { getToken } = useAuth();
   const [isAdding, setIsAdding] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const [name, setName] = useState("");
   const [type, setType] =
     useState<Credential["credential_type"]>("username_password");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [sshKey, setSshKey] = useState("");
-  const [editId, setEditId] = useState<number | null>(null);
+  const [editId, setEditId] = useState<string | null>(null);
 
   const resetForm = () => {
     setName("");
@@ -50,25 +55,56 @@ export function CredentialsManager({
     setIsAdding(false);
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!name) return;
 
-    const newCred: Credential = {
-      id: editId || Date.now(),
-      vaultId,
-      name,
-      credential_type: type,
-      username: type === "username_password" ? username : undefined,
-      password: type === "username_password" ? password : undefined,
-      ssh_key: type === "ssh_key" ? sshKey : undefined,
-    };
+    setIsSaving(true);
+    try {
+      const payload: any = {
+        vault: vaultId,
+        name,
+        credential_type: type,
+      };
 
-    if (editId) {
-      onUpdate(credentials.map((c) => (c.id === editId ? newCred : c)));
-    } else {
-      onUpdate([...credentials, newCred]);
+      if (type === "username_password") {
+        payload.username = username;
+        payload.password = password;
+      } else if (type === "ssh_key") {
+        payload.ssh_key = sshKey;
+      }
+
+      const endpoint = editId
+        ? `/api/vault/credentials/${editId}/`
+        : `/api/vault/credentials/`;
+
+      const token = await getToken();
+      const response = await apiRequest(
+        endpoint,
+        {
+          method: editId ? "PUT" : "POST",
+          body: JSON.stringify(payload),
+        },
+        token,
+      );
+
+      if (response.success) {
+        if (editId) {
+          onUpdate(
+            credentials.map((c) => (c.id === editId ? response.data : c)),
+          );
+          toast.success("Credential updated successfully");
+        } else {
+          onUpdate([...credentials, response.data]);
+          toast.success("Credential created successfully");
+        }
+        resetForm();
+      }
+    } catch (error) {
+      console.error("Failed to save credential:", error);
+      toast.error("Failed to save credential");
+    } finally {
+      setIsSaving(false);
     }
-    resetForm();
   };
 
   const handleEdit = (cred: Credential) => {
@@ -77,12 +113,30 @@ export function CredentialsManager({
     setName(cred.name);
     setType(cred.credential_type);
     setUsername(cred.username || "");
-    setPassword(cred.password || "");
-    setSshKey(cred.ssh_key || "");
+    setPassword(""); // Don't show old password for security, let them update if they want
+    setSshKey(""); // Don't show old key for security
   };
 
-  const handleDelete = (id: number) => {
-    onUpdate(credentials.filter((c) => c.id !== id));
+  const handleDelete = async (id: string) => {
+    if (!confirm("Are you sure you want to delete this credential?")) return;
+
+    try {
+      const token = await getToken();
+      const response = await apiRequest(
+        `/api/vault/credentials/${id}/`,
+        {
+          method: "DELETE",
+        },
+        token,
+      );
+      if (response.success) {
+        onUpdate(credentials.filter((c) => c.id !== id));
+        toast.success("Credential deleted successfully");
+      }
+    } catch (error) {
+      console.error("Failed to delete credential:", error);
+      toast.error("Failed to delete credential");
+    }
   };
 
   return (
@@ -190,9 +244,16 @@ export function CredentialsManager({
               </Button>
               <Button
                 onClick={handleSave}
-                className="bg-blue-600 hover:bg-blue-500 text-white"
+                disabled={isSaving}
+                className="bg-blue-600 hover:bg-blue-500 text-white min-w-[80px]"
               >
-                {editId ? "Update" : "Save"}
+                {isSaving ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : editId ? (
+                  "Update"
+                ) : (
+                  "Save"
+                )}
               </Button>
             </div>
           </div>

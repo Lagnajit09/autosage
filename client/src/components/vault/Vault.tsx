@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   Dialog,
   DialogContent,
@@ -19,58 +19,13 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Trash2, Server as ServerIcon, Key } from "lucide-react";
+import { Trash2, Server as ServerIcon, Key, Loader2 } from "lucide-react";
 import { CredentialsManager } from "./CredentialsManager";
 import { ServersManager } from "./ServersManager";
 import { Vault as VaultType, Credential, Server } from "@/utils/types";
-
-// --- Mock Data ---
-
-const INITIAL_VAULTS: VaultType[] = [
-  {
-    id: 1,
-    name: "Production Vault",
-    description: "Credentials for prod servers",
-  },
-  { id: 2, name: "Dev Vault", description: "Development environment keys" },
-];
-
-const INITIAL_CREDENTIALS: Credential[] = [
-  {
-    id: 1,
-    vaultId: 1,
-    name: "Prod DB Admin",
-    credential_type: "username_password",
-    username: "admin",
-    password: "password123",
-  },
-  {
-    id: 2,
-    vaultId: 2,
-    name: "Dev SSH Key",
-    credential_type: "ssh_key",
-    ssh_key: "-----BEGIN OPENSSH PRIVATE KEY-----...",
-  },
-];
-
-const INITIAL_SERVERS: Server[] = [
-  {
-    id: 1,
-    vaultId: 1,
-    name: "Prod Web 01",
-    host: "192.168.1.10",
-    connection_method: "ssh",
-    credentialId: 1,
-  },
-  {
-    id: 2,
-    vaultId: 2,
-    name: "Dev WinRM",
-    host: "10.0.0.50",
-    connection_method: "winrm",
-    port: 5985,
-  },
-];
+import { apiRequest } from "@/lib/api-client";
+import { toast } from "sonner";
+import { useAuth } from "@clerk/clerk-react";
 
 export function Vault({
   isOpen,
@@ -79,45 +34,106 @@ export function Vault({
   isOpen: boolean;
   setIsOpen: (open: boolean) => void;
 }) {
-  const [vaults, setVaults] = useState<VaultType[]>(INITIAL_VAULTS);
-  const [credentials, setCredentials] =
-    useState<Credential[]>(INITIAL_CREDENTIALS);
-  const [servers, setServers] = useState<Server[]>(INITIAL_SERVERS);
+  const { getToken, isSignedIn } = useAuth();
+  const [vaults, setVaults] = useState<VaultType[]>([]);
+  const [credentials, setCredentials] = useState<Credential[]>([]);
+  const [servers, setServers] = useState<Server[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
 
   const [selectedVaultId, setSelectedVaultId] = useState<string>("");
   const [isCreatingVault, setIsCreatingVault] = useState(false);
   const [newVaultName, setNewVaultName] = useState("");
   const [newVaultDesc, setNewVaultDesc] = useState("");
 
-  const selectedVault = vaults.find((v) => v.id.toString() === selectedVaultId);
-  const currentCredentials = credentials.filter(
-    (c) => c.vaultId.toString() === selectedVaultId,
-  );
-  const currentServers = servers.filter(
-    (s) => s.vaultId.toString() === selectedVaultId,
-  );
+  const selectedVault = vaults.find((v) => v.id === selectedVaultId);
 
-  const handleCreateVault = () => {
+  useEffect(() => {
+    if (isOpen && isSignedIn) {
+      fetchVaults();
+    }
+  }, [isOpen, isSignedIn]);
+
+  const fetchVaults = async () => {
+    setIsLoading(true);
+    try {
+      const token = await getToken();
+      const response = await apiRequest("/api/vault/vaults/", {}, token);
+      if (response.status) {
+        setVaults(response.data);
+      }
+    } catch (error) {
+      console.error("Failed to fetch vaults:", error);
+      toast.error("Failed to load vaults");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleCreateVault = async () => {
     if (!newVaultName.trim()) return;
-    const newVault: VaultType = {
-      id: Date.now(),
-      name: newVaultName,
-      description: newVaultDesc,
-    };
-    setVaults([...vaults, newVault]);
-    setSelectedVaultId(newVault.id.toString());
-    setIsCreatingVault(false);
-    setNewVaultName("");
-    setNewVaultDesc("");
+    try {
+      const token = await getToken();
+      const response = await apiRequest(
+        "/api/vault/vaults/",
+        {
+          method: "POST",
+          body: JSON.stringify({
+            name: newVaultName,
+            description: newVaultDesc,
+          }),
+        },
+        token,
+      );
+      if (response.success) {
+        setVaults([...vaults, response.data]);
+        setSelectedVaultId(response.data.id);
+        setIsCreatingVault(false);
+        setNewVaultName("");
+        setNewVaultDesc("");
+        toast.success("Vault created successfully");
+      }
+    } catch (error) {
+      console.error("Failed to create vault:", error);
+      toast.error("Failed to create vault");
+    }
   };
 
-  const handleDeleteVault = () => {
+  const handleDeleteVault = async () => {
     if (!selectedVault) return;
-    setVaults(vaults.filter((v) => v.id !== selectedVault.id));
-    setCredentials(credentials.filter((c) => c.vaultId !== selectedVault.id));
-    setServers(servers.filter((s) => s.vaultId !== selectedVault.id));
-    setSelectedVaultId("");
+    if (
+      !confirm(`Are you sure you want to delete vault "${selectedVault.name}"?`)
+    )
+      return;
+
+    try {
+      const token = await getToken();
+      const response = await apiRequest(
+        `/api/vault/vaults/${selectedVault.id}/`,
+        {
+          method: "DELETE",
+        },
+        token,
+      );
+      if (response.success) {
+        setVaults(vaults.filter((v) => v.id !== selectedVault.id));
+        setSelectedVaultId("");
+        toast.success("Vault deleted successfully");
+      }
+    } catch (error) {
+      console.error("Failed to delete vault:", error);
+      toast.error("Failed to delete vault");
+    }
   };
+
+  useEffect(() => {
+    if (selectedVault) {
+      setCredentials(selectedVault.credentials || []);
+      setServers(selectedVault.servers || []);
+    } else {
+      setCredentials([]);
+      setServers([]);
+    }
+  }, [selectedVault]);
 
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
@@ -146,15 +162,26 @@ export function Vault({
                   <SelectValue placeholder="Choose a vault..." />
                 </SelectTrigger>
                 <SelectContent className="bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800 text-gray-900 dark:text-gray-100">
-                  {vaults.map((vault) => (
-                    <SelectItem
-                      key={vault.id}
-                      value={vault.id.toString()}
-                      className="hover:bg-slate-100 dark:hover:bg-slate-800 focus:bg-slate-100 dark:focus:bg-slate-800 cursor-pointer dark:hover:text-gray-100 dark:text-gray-300"
-                    >
-                      {vault.name}
-                    </SelectItem>
-                  ))}
+                  {isLoading ? (
+                    <div className="flex items-center justify-center p-4">
+                      <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                      <span className="text-sm">Loading vaults...</span>
+                    </div>
+                  ) : vaults.length === 0 ? (
+                    <div className="p-4 text-center text-sm text-gray-500">
+                      No vaults found.
+                    </div>
+                  ) : (
+                    vaults.map((vault) => (
+                      <SelectItem
+                        key={vault.id}
+                        value={vault.id}
+                        className="hover:bg-slate-100 dark:hover:bg-slate-800 focus:bg-slate-100 dark:focus:bg-slate-800 cursor-pointer dark:hover:text-gray-100 dark:text-gray-300"
+                      >
+                        {vault.name}
+                      </SelectItem>
+                    ))
+                  )}
                   <div className="p-2 border-t border-gray-200 dark:border-gray-800 mt-1">
                     <Button
                       variant="ghost"
@@ -255,13 +282,18 @@ export function Vault({
               <TabsContent value="credentials" className="mt-4">
                 <CredentialsManager
                   vaultId={selectedVault.id}
-                  credentials={currentCredentials}
+                  credentials={credentials}
                   onUpdate={(newCreds) => {
-                    // Merge update into main state
-                    const otherCreds = credentials.filter(
-                      (c) => c.vaultId !== selectedVault.id,
+                    setCredentials(newCreds);
+                    // Also update the vault in the vaults list if needed,
+                    // or just rely on local state for the current view.
+                    setVaults(
+                      vaults.map((v) =>
+                        v.id === selectedVault.id
+                          ? { ...v, credentials: newCreds }
+                          : v,
+                      ),
                     );
-                    setCredentials([...otherCreds, ...newCreds]);
                   }}
                 />
               </TabsContent>
@@ -269,13 +301,17 @@ export function Vault({
               <TabsContent value="servers" className="mt-4">
                 <ServersManager
                   vaultId={selectedVault.id}
-                  servers={currentServers}
-                  availableCredentials={currentCredentials}
+                  servers={servers}
+                  availableCredentials={credentials}
                   onUpdate={(newServers) => {
-                    const otherServers = servers.filter(
-                      (s) => s.vaultId !== selectedVault.id,
+                    setServers(newServers);
+                    setVaults(
+                      vaults.map((v) =>
+                        v.id === selectedVault.id
+                          ? { ...v, servers: newServers }
+                          : v,
+                      ),
                     );
-                    setServers([...otherServers, ...newServers]);
                   }}
                 />
               </TabsContent>
