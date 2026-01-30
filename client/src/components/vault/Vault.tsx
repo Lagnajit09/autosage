@@ -61,7 +61,7 @@ export function Vault({
     try {
       const token = await getToken();
       const response = await apiRequest("/api/vault/vaults/", {}, token);
-      if (response.status) {
+      if (response.success) {
         setVaults(response.data);
       }
     } catch (error) {

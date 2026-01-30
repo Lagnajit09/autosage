@@ -9,8 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Copy, Check, Key, Loader2, Eye, ShieldCheck } from "lucide-react";
-import { Credential } from "@/utils/types";
+import { Copy, Check, Loader2, ShieldCheck } from "lucide-react";
 import { apiRequest } from "@/lib/api-client";
 import { useAuth } from "@clerk/clerk-react";
 import { toast } from "sonner";
@@ -48,7 +47,7 @@ export function CredentialRevealModal({
         {},
         token,
       );
-      if (response.status) {
+      if (response.success) {
         setData(response.data);
       }
     } catch (error) {

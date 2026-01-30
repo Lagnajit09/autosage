@@ -121,7 +121,7 @@ export function CredentialsManager({
     setName(cred.name);
     setType(cred.credential_type);
     setUsername(cred.username || "");
-    setPassword(""); // Don't show old password for security, let them update if they want
+    setPassword(""); // Don't show old password for security
     setSshKey(""); // Don't show old key for security
   };
 

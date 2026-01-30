@@ -6,7 +6,7 @@ def api_response(success=True, message="", data=None, errors=None, status_code=s
     Standardize API response format.
     """
     response_data = {
-        "status": "success" if success else "error",
+        "success": success,
         "message": message,
         "data": data,
         "errors": errors
