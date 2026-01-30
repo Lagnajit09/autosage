@@ -22,6 +22,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Trash2, Server as ServerIcon, Key, Loader2 } from "lucide-react";
 import { CredentialsManager } from "./CredentialsManager";
 import { ServersManager } from "./ServersManager";
+import { DeleteConfirmationModal } from "./DeleteConfirmationModal";
 import { Vault as VaultType, Credential, Server } from "@/utils/types";
 import { apiRequest } from "@/lib/api-client";
 import { toast } from "sonner";
@@ -39,9 +40,11 @@ export function Vault({
   const [credentials, setCredentials] = useState<Credential[]>([]);
   const [servers, setServers] = useState<Server[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const [selectedVaultId, setSelectedVaultId] = useState<string>("");
   const [isCreatingVault, setIsCreatingVault] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [newVaultName, setNewVaultName] = useState("");
   const [newVaultDesc, setNewVaultDesc] = useState("");
 
@@ -98,13 +101,10 @@ export function Vault({
     }
   };
 
-  const handleDeleteVault = async () => {
+  const confirmDeleteVault = async () => {
     if (!selectedVault) return;
-    if (
-      !confirm(`Are you sure you want to delete vault "${selectedVault.name}"?`)
-    )
-      return;
 
+    setIsDeleting(true);
     try {
       const token = await getToken();
       const response = await apiRequest(
@@ -117,11 +117,14 @@ export function Vault({
       if (response.success) {
         setVaults(vaults.filter((v) => v.id !== selectedVault.id));
         setSelectedVaultId("");
+        setShowDeleteConfirm(false);
         toast.success("Vault deleted successfully");
       }
     } catch (error) {
       console.error("Failed to delete vault:", error);
       toast.error("Failed to delete vault");
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -203,7 +206,7 @@ export function Vault({
                 <Button
                   variant="destructive"
                   size="sm"
-                  onClick={handleDeleteVault}
+                  onClick={() => setShowDeleteConfirm(true)}
                 >
                   <Trash2 className="w-4 h-4 mr-2" /> Delete Vault
                 </Button>
@@ -336,6 +339,15 @@ export function Vault({
             Close
           </Button>
         </DialogFooter>
+
+        <DeleteConfirmationModal
+          isOpen={showDeleteConfirm}
+          onClose={() => setShowDeleteConfirm(false)}
+          onConfirm={confirmDeleteVault}
+          isLoading={isDeleting}
+          title="Delete Vault"
+          description={`Are you sure you want to delete vault "${selectedVault?.name}"? All credentials and servers stored in this vault will be permanently removed.`}
+        />
       </DialogContent>
     </Dialog>
   );

@@ -23,6 +23,7 @@ import { Server, Credential } from "@/utils/types";
 import { apiRequest } from "@/lib/api-client";
 import { toast } from "sonner";
 import { useAuth } from "@clerk/clerk-react";
+import { DeleteConfirmationModal } from "./DeleteConfirmationModal";
 
 export function ServersManager({
   vaultId,
@@ -38,12 +39,15 @@ export function ServersManager({
   const { getToken } = useAuth();
   const [isAdding, setIsAdding] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
   const [name, setName] = useState("");
   const [host, setHost] = useState("");
   const [port, setPort] = useState<string>("");
   const [method, setMethod] = useState<Server["connection_method"]>("ssh");
   const [credId, setCredId] = useState<string>("none");
   const [editId, setEditId] = useState<string | null>(null);
+
+  const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
 
   const resetForm = () => {
     setName("");
@@ -111,25 +115,29 @@ export function ServersManager({
     setCredId(server.credential || "none");
   };
 
-  const handleDelete = async (id: string) => {
-    if (!confirm("Are you sure you want to delete this server?")) return;
+  const confirmDelete = async () => {
+    if (!deleteTargetId) return;
 
+    setIsDeleting(true);
     try {
       const token = await getToken();
       const response = await apiRequest(
-        `/api/vault/servers/${id}/`,
+        `/api/vault/servers/${deleteTargetId}/`,
         {
           method: "DELETE",
         },
         token,
       );
       if (response.success) {
-        onUpdate(servers.filter((s) => s.id !== id));
+        onUpdate(servers.filter((s) => s.id !== deleteTargetId));
         toast.success("Server deleted successfully");
+        setDeleteTargetId(null);
       }
     } catch (error) {
       console.error("Failed to delete server:", error);
       toast.error("Failed to delete server");
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -343,7 +351,7 @@ export function ServersManager({
                         <Button
                           variant="ghost"
                           size="icon"
-                          onClick={() => handleDelete(server.id)}
+                          onClick={() => setDeleteTargetId(server.id)}
                           className="hover:bg-gray-100 dark:hover:bg-gray-800"
                         >
                           <Trash2 className="w-4 h-4 text-red-500 dark:text-red-400" />
@@ -357,6 +365,14 @@ export function ServersManager({
           </TableBody>
         </Table>
       </div>
+      <DeleteConfirmationModal
+        isOpen={!!deleteTargetId}
+        onClose={() => setDeleteTargetId(null)}
+        onConfirm={confirmDelete}
+        isLoading={isDeleting}
+        title="Delete Server"
+        description="Are you sure you want to delete this server from the vault?"
+      />
     </div>
   );
 }

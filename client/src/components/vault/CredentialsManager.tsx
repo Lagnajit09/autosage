@@ -19,11 +19,15 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Card } from "@/components/ui/card";
-import { Plus, Trash2, Edit, Loader2 } from "lucide-react";
+import { Plus, Trash2, Edit, Loader2, EyeOff } from "lucide-react";
 import { Credential } from "@/utils/types";
 import { apiRequest } from "@/lib/api-client";
 import { toast } from "sonner";
 import { useAuth } from "@clerk/clerk-react";
+import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
+
+import { DeleteConfirmationModal } from "./DeleteConfirmationModal";
+import { CredentialRevealModal } from "./CredentialRevealModal";
 
 export function CredentialsManager({
   vaultId,
@@ -37,6 +41,7 @@ export function CredentialsManager({
   const { getToken } = useAuth();
   const [isAdding, setIsAdding] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
   const [name, setName] = useState("");
   const [type, setType] =
     useState<Credential["credential_type"]>("username_password");
@@ -44,6 +49,9 @@ export function CredentialsManager({
   const [password, setPassword] = useState("");
   const [sshKey, setSshKey] = useState("");
   const [editId, setEditId] = useState<string | null>(null);
+
+  const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
+  const [revealTargetId, setRevealTargetId] = useState<string | null>(null);
 
   const resetForm = () => {
     setName("");
@@ -117,25 +125,29 @@ export function CredentialsManager({
     setSshKey(""); // Don't show old key for security
   };
 
-  const handleDelete = async (id: string) => {
-    if (!confirm("Are you sure you want to delete this credential?")) return;
+  const confirmDelete = async () => {
+    if (!deleteTargetId) return;
 
+    setIsDeleting(true);
     try {
       const token = await getToken();
       const response = await apiRequest(
-        `/api/vault/credentials/${id}/`,
+        `/api/vault/credentials/${deleteTargetId}/`,
         {
           method: "DELETE",
         },
         token,
       );
       if (response.success) {
-        onUpdate(credentials.filter((c) => c.id !== id));
+        onUpdate(credentials.filter((c) => c.id !== deleteTargetId));
         toast.success("Credential deleted successfully");
+        setDeleteTargetId(null);
       }
     } catch (error) {
       console.error("Failed to delete credential:", error);
       toast.error("Failed to delete credential");
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -301,9 +313,21 @@ export function CredentialsManager({
                     {cred.credential_type.replace("_", " ")}
                   </TableCell>
                   <TableCell className="text-muted-foreground text-sm text-gray-500 dark:text-gray-400">
-                    {cred.credential_type === "username_password"
-                      ? cred.username
-                      : "SSH Key"}
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => setRevealTargetId(cred.id)}
+                          className="hover:bg-gray-100 dark:hover:bg-gray-800 dark:hover:text-gray-100"
+                        >
+                          <EyeOff className="w-5 h-5" />
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p>Show Credential</p>
+                      </TooltipContent>
+                    </Tooltip>
                   </TableCell>
                   <TableCell className="text-right">
                     <div className="flex justify-end gap-2">
@@ -318,7 +342,7 @@ export function CredentialsManager({
                       <Button
                         variant="ghost"
                         size="icon"
-                        onClick={() => handleDelete(cred.id)}
+                        onClick={() => setDeleteTargetId(cred.id)}
                         className="hover:bg-gray-100 dark:hover:bg-gray-800"
                       >
                         <Trash2 className="w-4 h-4 text-red-500 dark:text-red-400" />
@@ -331,6 +355,21 @@ export function CredentialsManager({
           </TableBody>
         </Table>
       </div>
+
+      <DeleteConfirmationModal
+        isOpen={!!deleteTargetId}
+        onClose={() => setDeleteTargetId(null)}
+        onConfirm={confirmDelete}
+        isLoading={isDeleting}
+        title="Delete Credential"
+        description="Are you sure you want to delete this credential? This action cannot be undone and may affect servers using this credential."
+      />
+
+      <CredentialRevealModal
+        isOpen={!!revealTargetId}
+        onClose={() => setRevealTargetId(null)}
+        credentialId={revealTargetId}
+      />
     </div>
   );
 }
