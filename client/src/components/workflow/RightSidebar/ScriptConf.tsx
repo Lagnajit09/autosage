@@ -1,5 +1,11 @@
-import React from "react";
-import { Code, Upload, FileText } from "lucide-react";
+import React, { useState, useEffect } from "react";
+import {
+  Code,
+  Upload,
+  FileText,
+  Server as ServerIcon,
+  Loader2,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -9,14 +15,52 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Link } from "react-router-dom";
-import { BaseConfigProps, Credential, ScriptFile } from "@/utils/types";
+import {
+  BaseConfigProps,
+  Credential,
+  ScriptFile,
+  Vault,
+  Server,
+} from "@/utils/types";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
+import { useAuth } from "@clerk/clerk-react";
+import { apiRequest } from "@/lib/api-client";
+import { toast } from "sonner";
 
 export const ScriptConf: React.FC<BaseConfigProps> = ({
   selectedNode,
   onUpdateNode,
 }) => {
+  const { getToken, isSignedIn } = useAuth();
+  const [vaults, setVaults] = useState<Vault[]>([]);
+  const [isLoadingVaults, setIsLoadingVaults] = useState(false);
+
+  useEffect(() => {
+    if (selectedNode.data?.executionMode === "remote" && isSignedIn) {
+      fetchVaults();
+    }
+  }, [selectedNode.data?.executionMode, isSignedIn]);
+
+  const fetchVaults = async () => {
+    setIsLoadingVaults(true);
+    try {
+      const token = await getToken();
+      const response = await apiRequest("/api/vault/vaults/", {}, token);
+      if (response.success) {
+        setVaults(response.data);
+      }
+    } catch (error) {
+      console.error("Failed to fetch vaults:", error);
+      toast.error("Failed to load vaults");
+    } finally {
+      setIsLoadingVaults(false);
+    }
+  };
+
+  const allServers = vaults.flatMap((v) => v.servers || []);
+  const allCredentials = vaults.flatMap((v) => v.credentials || []);
+
   const handleInputChange = (field: string, value: string) => {
     onUpdateNode(selectedNode.id, { [field]: value });
   };
@@ -41,10 +85,10 @@ export const ScriptConf: React.FC<BaseConfigProps> = ({
             language: file.name.endsWith(".py")
               ? "python"
               : file.name.endsWith(".ps1")
-              ? "powershell"
-              : file.name.endsWith(".sh")
-              ? "shell"
-              : "javascript",
+                ? "powershell"
+                : file.name.endsWith(".sh")
+                  ? "shell"
+                  : "javascript",
             lastModified: new Date(),
             source: "upload",
           };
@@ -76,18 +120,6 @@ export const ScriptConf: React.FC<BaseConfigProps> = ({
     return [];
   };
 
-  const getSavedCredentials = () => {
-    try {
-      const savedCredentials = sessionStorage.getItem("workflowCredentials");
-      if (savedCredentials) {
-        return JSON.parse(savedCredentials);
-      }
-    } catch (error) {
-      console.error("Error loading credentials:", error);
-    }
-    return [];
-  };
-
   const getEditorUrl = () => {
     const scriptType = selectedNode.data?.scriptType || "Python Script";
     const type = scriptType.replace(" Script", "").toLowerCase();
@@ -99,19 +131,47 @@ export const ScriptConf: React.FC<BaseConfigProps> = ({
   };
 
   const handleCredentialSelect = (credentialId: string) => {
-    const selectedCred = getSavedCredentials().find(
-      (cred: Credential) => cred.id === credentialId
+    const selectedCred = allCredentials.find(
+      (cred: Credential) => cred.id === credentialId,
     );
     if (selectedCred) {
       onUpdateNode(selectedNode.id, {
         selectedCredential: {
           id: selectedCred.id,
           name: selectedCred.name,
+          credential_type: selectedCred.credential_type,
           username: selectedCred.username,
           password: selectedCred.password,
-          createdAt: selectedCred.createdAt,
+          vault: selectedCred.vault,
         },
       });
+    }
+  };
+
+  const handleServerSelect = (serverId: string) => {
+    const selectedServer = allServers.find((s) => s.id === serverId);
+    if (selectedServer) {
+      const updates: any = {
+        serverAddress: selectedServer.host,
+      };
+
+      // Auto-populate credential if associated
+      if (selectedServer.credential) {
+        const associatedCred = allCredentials.find(
+          (c) => c.id === selectedServer.credential,
+        );
+        if (associatedCred) {
+          updates.selectedCredential = {
+            id: associatedCred.id,
+            name: associatedCred.name,
+            credential_type: associatedCred.credential_type,
+            username: associatedCred.username,
+            password: associatedCred.password,
+            vault: associatedCred.vault,
+          };
+        }
+      }
+      onUpdateNode(selectedNode.id, updates);
     }
   };
 
@@ -130,21 +190,55 @@ export const ScriptConf: React.FC<BaseConfigProps> = ({
       <h4 className="text-sm font-medium text-gray-900 dark:text-gray-100 border-b border-gray-200 dark:border-gray-800 pb-2">
         Script Configuration
       </h4>
+
+      <div>
+        <Label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+          Execution Mode
+        </Label>
+        <Select
+          value={selectedNode.data?.executionMode || "local"}
+          onValueChange={(value) => handleInputChange("executionMode", value)}
+        >
+          <SelectTrigger className="w-full h-11 text-sm bg-white dark:bg-gray-950 border border-gray-300 dark:border-gray-700 text-gray-900 dark:text-gray-100">
+            <SelectValue placeholder="Select execution mode" />
+          </SelectTrigger>
+          <SelectContent className="bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 border border-gray-200 dark:border-gray-800">
+            <SelectItem value="local">Local</SelectItem>
+            <SelectItem value="remote">Remote</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
       <div>
         <Label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
           Script Type
         </Label>
         <Select
-          value={selectedNode.data?.scriptType || "Python Script"}
+          value={
+            selectedNode.data?.scriptType ||
+            (selectedNode.data?.executionMode === "local"
+              ? "Python Script"
+              : "Powershell Script")
+          }
           onValueChange={(value) => handleInputChange("scriptType", value)}
         >
           <SelectTrigger className="w-full h-11 text-sm bg-white dark:bg-gray-950 border border-gray-300 dark:border-gray-700 text-gray-900 dark:text-gray-100">
             <SelectValue placeholder="Select script type" />
           </SelectTrigger>
           <SelectContent className="bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 border border-gray-200 dark:border-gray-800">
-            <SelectItem value="Python Script">Python Script</SelectItem>
-            <SelectItem value="Powershell Script">Powershell Script</SelectItem>
-            <SelectItem value="Shell Script">Shell Script</SelectItem>
+            {/* Local Execution supports Python Script and Remote Execution supports Powershell Script and Shell Script depends on the OS of the remote server */}
+            {selectedNode.data?.executionMode === "local" ? (
+              <>
+                <SelectItem value="Python Script">Python Script</SelectItem>
+              </>
+            ) : (
+              <>
+                <SelectItem value="Powershell Script">
+                  Powershell Script
+                </SelectItem>
+                <SelectItem value="Shell Script">Shell Script</SelectItem>
+              </>
+            )}
           </SelectContent>
         </Select>
       </div>
@@ -222,39 +316,63 @@ export const ScriptConf: React.FC<BaseConfigProps> = ({
         </div>
       </div>
 
-      <div>
-        <Label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-          Execution Mode
-        </Label>
-        <Select
-          value={selectedNode.data?.executionMode || "local"}
-          onValueChange={(value) => handleInputChange("executionMode", value)}
-        >
-          <SelectTrigger className="w-full h-11 text-sm bg-white dark:bg-gray-950 border border-gray-300 dark:border-gray-700 text-gray-900 dark:text-gray-100">
-            <SelectValue placeholder="Select execution mode" />
-          </SelectTrigger>
-          <SelectContent className="bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 border border-gray-200 dark:border-gray-800">
-            <SelectItem value="local">Local</SelectItem>
-            <SelectItem value="remote">Remote</SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
-
       {selectedNode.data?.executionMode === "remote" && (
         <>
+          <div className="space-y-2 mt-4">
+            <p className="text-sm font-medium text-gray-700 dark:text-gray-300">
+              Server Configuration
+            </p>
+            <p className="text-xs text-gray-500 dark:text-gray-500">
+              Add Server and Credential from the Vault
+            </p>
+          </div>
           <div>
             <Label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-              Server Address
+              Server
             </Label>
-            <Input
-              type="text"
-              value={String(selectedNode.data?.serverAddress || "")}
-              onChange={(e) =>
-                handleInputChange("serverAddress", e.target.value)
+            <Select
+              onValueChange={handleServerSelect}
+              value={
+                allServers.find(
+                  (s) => s.host === selectedNode.data?.serverAddress,
+                )?.id || ""
               }
-              className="w-full px-3 py-2.5 text-sm bg-white dark:bg-gray-950 border border-gray-300 dark:border-gray-700 rounded-md text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none"
-              placeholder="Enter server address"
-            />
+            >
+              <SelectTrigger className="w-full h-11 text-sm bg-white dark:bg-gray-950 border border-gray-300 dark:border-gray-700 text-gray-900 dark:text-gray-100">
+                <SelectValue placeholder="Select server from vault..." />
+              </SelectTrigger>
+              <SelectContent className="bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 border border-gray-200 dark:border-gray-800">
+                {isLoadingVaults ? (
+                  <div className="flex items-center justify-center p-4">
+                    <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                    <span className="text-sm">Loading servers...</span>
+                  </div>
+                ) : (
+                  <>
+                    {allServers.map((server: Server) => (
+                      <SelectItem
+                        key={server.id}
+                        value={server.id}
+                        className="text-sm"
+                      >
+                        <div className="flex items-center space-x-2">
+                          <ServerIcon size={14} />
+                          <span>{server.name}</span>
+                          <span className="text-xs text-gray-500">
+                            ({server.host})
+                          </span>
+                        </div>
+                      </SelectItem>
+                    ))}
+                    {allServers.length === 0 && (
+                      <SelectItem value="none" disabled className="text-sm">
+                        No servers found in vault
+                      </SelectItem>
+                    )}
+                  </>
+                )}
+              </SelectContent>
+            </Select>
           </div>
 
           <div>
@@ -269,44 +387,50 @@ export const ScriptConf: React.FC<BaseConfigProps> = ({
                 <SelectValue placeholder="Select credentials..." />
               </SelectTrigger>
               <SelectContent className="bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 border border-gray-200 dark:border-gray-800">
-                {getSavedCredentials().map((credential: Credential) => (
-                  <SelectItem
-                    key={credential.id}
-                    value={credential.id}
-                    className="text-sm"
-                  >
-                    <div className="flex items-center space-x-2">
-                      <svg
-                        className="w-3 h-3"
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
+                {isLoadingVaults ? (
+                  <div className="flex items-center justify-center p-4">
+                    <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                    <span className="text-sm">Loading credentials...</span>
+                  </div>
+                ) : (
+                  <>
+                    {allCredentials.map((credential: Credential) => (
+                      <SelectItem
+                        key={credential.id}
+                        value={credential.id}
+                        className="text-sm"
                       >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"
-                        />
-                      </svg>
-                      <span>{credential.name}</span>
-                    </div>
-                  </SelectItem>
-                ))}
-                {getSavedCredentials().length === 0 && (
-                  <SelectItem
-                    value="none"
-                    disabled
-                    className="text-sm text-gray-500 dark:text-gray-500"
-                  >
-                    No credentials available
-                  </SelectItem>
+                        <div className="flex items-center space-x-2">
+                          <svg
+                            className="w-3 h-3"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                              d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"
+                            />
+                          </svg>
+                          <span>{credential.name}</span>
+                        </div>
+                      </SelectItem>
+                    ))}
+                    {allCredentials.length === 0 && (
+                      <SelectItem
+                        value="none"
+                        disabled
+                        className="text-sm text-gray-500 dark:text-gray-500"
+                      >
+                        No credentials available
+                      </SelectItem>
+                    )}
+                  </>
                 )}
               </SelectContent>
             </Select>
-            <p className="text-xs text-gray-500 dark:text-gray-500 mt-2">
-              Add credentials via the hamburger menu
-            </p>
           </div>
         </>
       )}
