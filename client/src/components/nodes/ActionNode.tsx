@@ -9,6 +9,7 @@ interface ActionNodeData {
   serverAddress?: string;
   userID?: string;
   password?: string;
+  outputFormat?: "text" | "json";
 }
 
 // Helper function to get the appropriate icon based on action type
@@ -63,15 +64,22 @@ export const ActionNode = ({
         </div>
 
         {/* Enhanced footer */}
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between gap-4">
           <div className="inline-flex items-center px-2.5 py-1 bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 text-xs font-semibold rounded-lg border border-blue-100 dark:border-blue-800">
-            🔧 Action
+            Action
           </div>
-          {data.executionMode && (
-            <div className="text-xs text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded-lg border border-gray-200 dark:border-gray-700">
-              {data.executionMode}
-            </div>
-          )}
+          <div className="flex gap-2">
+            {
+              <div className="text-[10px] text-purple-600 dark:text-purple-400 bg-purple-50 dark:bg-purple-900/20 px-1.5 py-0.5 rounded border border-purple-100 dark:border-purple-800 font-bold uppercase">
+                {data.outputFormat === "json" ? "JSON" : "Text"}
+              </div>
+            }
+            {data.executionMode && (
+              <div className="text-[10px] text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-800 px-1.5 py-0.5 rounded border border-gray-200 dark:border-gray-700 capitalize font-medium">
+                {data.executionMode}
+              </div>
+            )}
+          </div>
         </div>
       </div>
 

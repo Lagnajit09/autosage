@@ -37,7 +37,7 @@ interface RightSidebarProps {
   onCreateEdge?: (
     sourceId: string,
     targetId: string,
-    sourceHandle?: string
+    sourceHandle?: string,
   ) => void;
 }
 
@@ -157,8 +157,8 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({
                       selectedNode.type === "trigger"
                         ? "bg-node-success"
                         : selectedNode.type === "action"
-                        ? "bg-workflow-nebula"
-                        : "bg-status-pending"
+                          ? "bg-workflow-nebula"
+                          : "bg-status-pending"
                     }`}
                   ></div>
                   {selectedNode.type}
@@ -171,7 +171,7 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({
               {/* Basic Settings */}
               <div className="space-y-5">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
+                  <label className="block text-sm font-medium text-text-secondary dark:text-text-secondary mb-3">
                     Label
                   </label>
                   <input

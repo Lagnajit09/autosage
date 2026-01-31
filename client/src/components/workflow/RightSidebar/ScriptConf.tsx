@@ -21,12 +21,14 @@ import {
   ScriptFile,
   Vault,
   Server,
+  OutputField,
 } from "@/utils/types";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { useAuth } from "@clerk/clerk-react";
 import { apiRequest } from "@/lib/api-client";
 import { toast } from "sonner";
+import { JSONSchemaModal } from "./JSONSchemaModal";
 
 export const ScriptConf: React.FC<BaseConfigProps> = ({
   selectedNode,
@@ -35,6 +37,7 @@ export const ScriptConf: React.FC<BaseConfigProps> = ({
   const { getToken, isSignedIn } = useAuth();
   const [vaults, setVaults] = useState<Vault[]>([]);
   const [isLoadingVaults, setIsLoadingVaults] = useState(false);
+  const [isSchemaModalOpen, setIsSchemaModalOpen] = useState(false);
 
   useEffect(() => {
     if (selectedNode.data?.executionMode === "remote" && isSignedIn) {
@@ -173,6 +176,10 @@ export const ScriptConf: React.FC<BaseConfigProps> = ({
       }
       onUpdateNode(selectedNode.id, updates);
     }
+  };
+
+  const handleSchemaSave = (schema: OutputField[]) => {
+    onUpdateNode(selectedNode.id, { jsonSchema: schema });
   };
 
   const getSelectedCredentialId = () => {
@@ -319,7 +326,7 @@ export const ScriptConf: React.FC<BaseConfigProps> = ({
       {selectedNode.data?.executionMode === "remote" && (
         <>
           <div className="space-y-2 mt-4">
-            <p className="text-sm font-medium text-gray-700 dark:text-gray-300">
+            <p className="text-sm font-medium text-gray-700 dark:text-gray-300 border-b border-gray-200 dark:border-gray-800 pb-2">
               Server Configuration
             </p>
             <p className="text-xs text-gray-500 dark:text-gray-500">
@@ -434,6 +441,76 @@ export const ScriptConf: React.FC<BaseConfigProps> = ({
           </div>
         </>
       )}
+
+      <div className="space-y-4 mt-4">
+        <p className="text-sm font-medium text-gray-700 dark:text-gray-300 border-b border-gray-200 dark:border-gray-800 pb-2">
+          Output Formatting
+        </p>
+
+        <div className="space-y-4">
+          <div>
+            <Label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              Select Output Format
+            </Label>
+            <Select
+              value={selectedNode.data?.outputFormat || "text"}
+              onValueChange={(value: "text" | "json") =>
+                handleInputChange("outputFormat", value)
+              }
+            >
+              <SelectTrigger className="w-full h-11 text-sm bg-white dark:bg-gray-950 border border-gray-300 dark:border-gray-700 text-gray-900 dark:text-gray-100">
+                <SelectValue placeholder="Select output format" />
+              </SelectTrigger>
+              <SelectContent className="bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 border border-gray-200 dark:border-gray-800">
+                <SelectItem value="text">Plain Text</SelectItem>
+                <SelectItem value="json">Structured JSON</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          {selectedNode.data?.outputFormat === "json" && (
+            <div className="pt-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setIsSchemaModalOpen(true)}
+                className="w-full text-sm py-2.5 bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700 border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white transition-all duration-200"
+              >
+                <Code size={14} className="mr-2" />
+                {selectedNode.data?.jsonSchema &&
+                selectedNode.data.jsonSchema.length > 0
+                  ? "Edit JSON Schema"
+                  : "Design JSON Schema"}
+              </Button>
+              {selectedNode.data?.jsonSchema &&
+                selectedNode.data.jsonSchema.length > 0 && (
+                  <div className="mt-2 border-2 border-blue-300 dark:border-blue-500 bg-blue-600/10 rounded-lg p-4 flex flex-col gap-2">
+                    {selectedNode.data.jsonSchema.map((field) => (
+                      <div
+                        key={field.name}
+                        className="flex items-center justify-between"
+                      >
+                        <p className="text-xs text-gray-700 dark:text-gray-300">
+                          {field.name}
+                        </p>
+                        <p className="text-xs text-gray-700 dark:text-gray-300">
+                          {field.type}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+            </div>
+          )}
+        </div>
+      </div>
+
+      <JSONSchemaModal
+        isOpen={isSchemaModalOpen}
+        onClose={() => setIsSchemaModalOpen(false)}
+        schema={selectedNode.data?.jsonSchema || []}
+        onSave={handleSchemaSave}
+      />
     </div>
   );
 };

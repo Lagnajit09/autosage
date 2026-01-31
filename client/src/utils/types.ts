@@ -16,6 +16,11 @@ export interface Parameter {
   description?: string;
 }
 
+export interface OutputField {
+  name: string;
+  type: "string" | "number" | "boolean" | "array" | "object";
+}
+
 export interface Attachment {
   id: string;
   name: string;
@@ -36,6 +41,8 @@ export interface NodeData {
   serverAddress?: string;
   selectedCredential?: Credential;
   selectedScript?: string;
+  outputFormat?: "text" | "json";
+  jsonSchema?: OutputField[];
 
   // Decision specific fields
   condition?: string;
