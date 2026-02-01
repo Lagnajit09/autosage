@@ -38,7 +38,7 @@ export const DecisionNode = ({
         </h4>
         {data.condition && (
           <div className="text-sm text-gray-800 dark:text-gray-200 mt-1 w-full px-2 whitespace-normal break-words bg-amber-50 dark:bg-amber-900/20 py-0.5 rounded border border-amber-100 dark:border-amber-800">
-            {data.condition}
+            {data.condition.replace(/{{[^.]+\.output\.([^}]+)}}/g, "{{$1}}")}
           </div>
         )}
       </div>

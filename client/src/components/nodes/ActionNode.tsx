@@ -69,11 +69,6 @@ export const ActionNode = ({
             Action
           </div>
           <div className="flex gap-2">
-            {
-              <div className="text-[10px] text-purple-600 dark:text-purple-400 bg-purple-50 dark:bg-purple-900/20 px-1.5 py-0.5 rounded border border-purple-100 dark:border-purple-800 font-bold uppercase">
-                {data.outputFormat === "json" ? "JSON" : "Text"}
-              </div>
-            }
             {data.executionMode && (
               <div className="text-[10px] text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-800 px-1.5 py-0.5 rounded border border-gray-200 dark:border-gray-700 capitalize font-medium">
                 {data.executionMode}

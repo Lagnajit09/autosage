@@ -14,6 +14,8 @@ export interface Parameter {
   name: string;
   type: "string" | "number" | "boolean" | "file";
   description?: string;
+  value?: string;
+  sourceType?: "manual" | "output";
 }
 
 export interface OutputField {

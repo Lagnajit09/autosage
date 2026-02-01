@@ -203,7 +203,7 @@ export const ScriptConf: React.FC<BaseConfigProps> = ({
           Execution Mode
         </Label>
         <Select
-          value={selectedNode.data?.executionMode || "local"}
+          value={selectedNode.data?.executionMode}
           onValueChange={(value) => handleInputChange("executionMode", value)}
         >
           <SelectTrigger className="w-full h-11 text-sm bg-white dark:bg-gray-950 border border-gray-300 dark:border-gray-700 text-gray-900 dark:text-gray-100">
@@ -221,12 +221,7 @@ export const ScriptConf: React.FC<BaseConfigProps> = ({
           Script Type
         </Label>
         <Select
-          value={
-            selectedNode.data?.scriptType ||
-            (selectedNode.data?.executionMode === "local"
-              ? "Python Script"
-              : "Powershell Script")
-          }
+          value={selectedNode.data?.scriptType}
           onValueChange={(value) => handleInputChange("scriptType", value)}
         >
           <SelectTrigger className="w-full h-11 text-sm bg-white dark:bg-gray-950 border border-gray-300 dark:border-gray-700 text-gray-900 dark:text-gray-100">

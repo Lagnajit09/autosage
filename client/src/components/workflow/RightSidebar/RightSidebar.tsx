@@ -34,6 +34,7 @@ interface RightSidebarProps {
   onOpenChange: (open: boolean) => void;
   onSaveWorkflow: () => void;
   nodes?: Node[];
+  edges?: Edge[];
   onCreateEdge?: (
     sourceId: string,
     targetId: string,
@@ -51,6 +52,7 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({
   open,
   onOpenChange,
   nodes = [],
+  edges = [],
   onCreateEdge,
 }) => {
   const [showParametersModal, setShowParametersModal] = useState(false);
@@ -285,6 +287,8 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({
             parameters={selectedNode.data?.parameters || []}
             onUpdateParameters={handleUpdateParameters}
             nodeId={selectedNode.id}
+            nodes={nodes}
+            edges={edges}
           />
         )}
       </SheetContent>

@@ -548,6 +548,7 @@ const WorkflowBuilderContent = ({
             onSaveWorkflow={saveWorkflow}
             onCreateEdge={handleCreateEdge}
             nodes={nodes}
+            edges={edges}
             open={sidebarOpen}
             onOpenChange={(open) => {
               setSidebarOpen(open);
