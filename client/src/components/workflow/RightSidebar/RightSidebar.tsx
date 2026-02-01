@@ -91,6 +91,7 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({
             selectedNode={selectedNode}
             onUpdateNode={onUpdateNode}
             nodes={nodes}
+            edges={edges}
             onCreateEdge={onCreateEdge}
           />
         );

@@ -9,6 +9,27 @@ export interface ScriptFile {
   source: "upload" | "editor";
 }
 
+export type ComparisonOperator =
+  | "=="
+  | "!="
+  | ">"
+  | "<"
+  | ">="
+  | "<="
+  | "contains"
+  | "matches";
+export type LogicalOperator = "&&" | "||";
+
+export interface ConditionItem {
+  id: string;
+  field: string;
+  fieldSource: "manual" | "output";
+  operator: ComparisonOperator;
+  value: string;
+  valueSource: "manual" | "output";
+  logicalOperator?: LogicalOperator; // Applied before this condition (except for the first one)
+}
+
 export interface Parameter {
   id: string;
   name: string;
@@ -47,7 +68,7 @@ export interface NodeData {
   jsonSchema?: OutputField[];
 
   // Decision specific fields
-  condition?: string;
+  conditions?: ConditionItem[];
   trueLabel?: string[];
   falseLabel?: string[];
 
@@ -121,6 +142,7 @@ export interface EdgeConfigProps {
 
 export interface DecisionConfigProps extends BaseConfigProps {
   nodes: Node[];
+  edges: Edge[];
   onCreateEdge?: (
     sourceId: string,
     targetId: string,

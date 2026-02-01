@@ -1,12 +1,13 @@
 import { Handle, Position } from "@xyflow/react";
 import { GitBranch } from "lucide-react";
+import { ConditionItem } from "@/utils/types";
 
 interface DecisionNodeData {
   label?: string;
   conditionType?: "output-eval" | "condition" | "custom";
-  condition?: string;
-  trueLabel?: string;
-  falseLabel?: string;
+  conditions?: ConditionItem[];
+  trueLabel?: string[];
+  falseLabel?: string[];
   description?: string;
 }
 
@@ -36,9 +37,30 @@ export const DecisionNode = ({
         <h4 className="font-bold text-gray-900 dark:text-gray-100 text-xs w-full px-4 whitespace-normal break-words leading-tight">
           {data.label || "Decision"}
         </h4>
-        {data.condition && (
-          <div className="text-sm text-gray-800 dark:text-gray-200 mt-1 w-full px-2 whitespace-normal break-words bg-amber-50 dark:bg-amber-900/20 py-0.5 rounded border border-amber-100 dark:border-amber-800">
-            {data.condition.replace(/{{[^.]+\.output\.([^}]+)}}/g, "{{$1}}")}
+        {data.conditions && data.conditions.length > 0 && (
+          <div className="text-[10px] text-gray-800 dark:text-gray-200 mt-2 w-full px-2 py-1.5 whitespace-normal break-words bg-amber-50/50 dark:bg-amber-900/10 rounded-lg border border-amber-100/50 dark:border-amber-800/50">
+            {data.conditions.map((c, i) => (
+              <span key={c.id}>
+                {i > 0 && (
+                  <span className="text-amber-600 dark:text-amber-400 font-bold mx-1">
+                    {c.logicalOperator}
+                  </span>
+                )}
+                <span className="opacity-70">
+                  {c.fieldSource === "output"
+                    ? c.field.replace(/{{[^.]+\.output\.([^}]+)}}/g, "{{$1}}")
+                    : c.field}
+                </span>{" "}
+                <span className="font-mono font-bold text-amber-700 dark:text-amber-500">
+                  {c.operator}
+                </span>{" "}
+                <span className="opacity-70">
+                  {c.valueSource === "output"
+                    ? c.value.replace(/{{[^.]+\.output\.([^}]+)}}/g, "{{$1}}")
+                    : c.value}
+                </span>
+              </span>
+            ))}
           </div>
         )}
       </div>
