@@ -51,7 +51,6 @@ const WorkflowBuilderContent = ({
 }) => {
   const { isDark } = useTheme();
   const { getToken, isSignedIn } = useAuth();
-  const [token, setToken] = useState<string | null>(null);
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
   const [workflowName, setWorkflowName] = useState("");
@@ -64,21 +63,6 @@ const WorkflowBuilderContent = ({
   const [reactFlowInstance, setReactFlowInstance] =
     useState<ReactFlowInstance | null>(null);
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (isSignedIn) {
-      getClerkToken();
-    }
-  }, [isSignedIn, getToken]);
-
-  const getClerkToken = async () => {
-    try {
-      const clerkToken = await getToken();
-      setToken(clerkToken);
-    } catch (error) {
-      console.error("Failed to get token:", error);
-    }
-  };
 
   // Load workflow from localStorage on component mount
   useEffect(() => {
@@ -316,15 +300,6 @@ const WorkflowBuilderContent = ({
       return;
     }
 
-    if (!token) {
-      toast({
-        title: "Error",
-        description: "Authentication required. Please sign in.",
-        variant: "destructive",
-      });
-      return;
-    }
-
     // Enhanced workflow logging with detailed node information
     const workflow = {
       name: workflowName,
@@ -391,18 +366,26 @@ const WorkflowBuilderContent = ({
     };
 
     try {
-      await getClerkToken();
-      let response;
+      if (!isSignedIn) {
+        toast({
+          title: "Error",
+          description: "Authentication required. Please sign in.",
+          variant: "destructive",
+        });
+        return;
+      }
+      const clerkToken = await getToken();
+      let response: any;
       if (workflowId) {
         // Update existing workflow
-        response = await updateWorkflow(workflowId, workflow, token);
+        response = await updateWorkflow(workflowId, workflow, clerkToken);
         toast({
           title: "Workflow Updated",
           description: "Your workflow has been updated successfully.",
         });
       } else {
         // Create new workflow
-        response = await createWorkflow(workflow, token);
+        response = await createWorkflow(workflow, clerkToken);
         toast({
           title: "Workflow Created",
           description: "Your workflow has been created successfully.",
