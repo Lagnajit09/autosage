@@ -76,7 +76,7 @@ const App = () => {
                     <Route path="/workflows" element={<Workflows />} />
                     <Route path="/templates" element={<Templates />} />
                     <Route path="/dashboard" element={<Dashboard />} />
-                    <Route path="/code-editor" element={<CodeEditor />} />
+                    <Route path="/script-editor" element={<CodeEditor />} />
                     <Route path="/raw/:id" element={<ScriptViewer />} />
                     <Route path="/ai/autobot" element={<AutobotChat />} />
                     <Route path="/ai/autobot/:id" element={<AutobotChat />} />

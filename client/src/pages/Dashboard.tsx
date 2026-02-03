@@ -276,7 +276,7 @@ const Dashboard = () => {
                               <Button
                                 variant="link"
                                 className="text-blue-600 dark:text-blue-400 p-0 h-auto"
-                                onClick={() => navigate("/code-editor/")}
+                                onClick={() => navigate("/script-editor/")}
                               >
                                 View All
                               </Button>

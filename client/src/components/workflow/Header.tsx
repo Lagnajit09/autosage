@@ -56,7 +56,7 @@ const Header = ({
 
           <div className="flex gap-2">
             <Tooltip>
-              <TooltipTrigger>
+              <TooltipTrigger onClick={() => navigate("/workflow/new")}>
                 <PlusSquare className="text-gray-900 dark:text-gray-900 bg-purple-100 dark:bg-gray-300 w-8 h-8 p-2 transition-transform duration-200 ease-in-out hover:scale-125 rounded-full" />
               </TooltipTrigger>
               <TooltipContent className="text-xs p-1 rounded-md bg-gray-200 dark:bg-gray-800 dark:text-gray-200">

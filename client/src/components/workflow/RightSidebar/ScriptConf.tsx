@@ -126,7 +126,7 @@ export const ScriptConf: React.FC<BaseConfigProps> = ({
   const getEditorUrl = () => {
     const scriptType = selectedNode.data?.scriptType || "Python Script";
     const type = scriptType.replace(" Script", "").toLowerCase();
-    return `/code-editor?type=${type}&nodeId=${selectedNode.id}`;
+    return `/script-editor?type=${type}&nodeId=${selectedNode.id}`;
   };
 
   const handleScriptSelect = (scriptId: string) => {

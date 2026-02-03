@@ -479,7 +479,7 @@ const WorkflowBuilderContent = ({
             >
               <Controls className="border border-gray-200 dark:border-gray-800 rounded-lg shadow-sm [&>button]:bg-gray-200 dark:[&>button]:bg-gray-800 [&>button]:text-gray-900 dark:[&>button]:text-gray-100" />
               <Background
-                color={isDark ? "#666666" : "#3b3b3b"}
+                color={isDark ? "#363636" : "#b3b3b3"}
                 gap={30}
                 size={2}
                 className=""

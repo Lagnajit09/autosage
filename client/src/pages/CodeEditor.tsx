@@ -34,7 +34,7 @@ const CodeEditor = () => {
   const [renamingFileId, setRenamingFileId] = useState<string | null>(null);
 
   const getLanguageInfo = (
-    type: string
+    type: string,
   ): { language: ScriptLanguage; extension: string; template: string } => {
     switch (type.toLowerCase()) {
       case "python":
@@ -89,11 +89,11 @@ const CodeEditor = () => {
     if (savedFiles) {
       loadedFiles = JSON.parse(savedFiles).map(
         (
-          file: Omit<ScriptFile, "lastModified"> & { lastModified: string }
+          file: Omit<ScriptFile, "lastModified"> & { lastModified: string },
         ) => ({
           ...file,
           lastModified: new Date(file.lastModified),
-        })
+        }),
       );
       setFiles(loadedFiles);
     }
@@ -140,7 +140,7 @@ const CodeEditor = () => {
     localStorage.setItem("scriptFiles", JSON.stringify(updatedFiles));
     localStorage.setItem(
       "openTabs",
-      JSON.stringify(updatedTabs.map((t) => t.id))
+      JSON.stringify(updatedTabs.map((t) => t.id)),
     );
     localStorage.setItem("currentFileId", newFile.id);
 
@@ -189,7 +189,7 @@ const CodeEditor = () => {
                 insertTextRules:
                   monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
                 documentation: "For loop",
-              }
+              },
             );
           } else if (currentFile?.language === "javascript") {
             suggestions.push(
@@ -216,7 +216,7 @@ const CodeEditor = () => {
                 insertTextRules:
                   monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
                 documentation: "Const declaration",
-              }
+              },
             );
           } else if (currentFile?.language === "powershell") {
             suggestions.push(
@@ -235,13 +235,13 @@ const CodeEditor = () => {
                 insertTextRules:
                   monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
                 documentation: "Function declaration",
-              }
+              },
             );
           }
 
           return { suggestions };
         },
-      }
+      },
     );
 
     // Configure editor settings
@@ -272,7 +272,7 @@ const CodeEditor = () => {
       : [...files, updatedFile];
 
     const updatedTabs = openTabs.map((tab) =>
-      tab.id === currentFile.id ? updatedFile : tab
+      tab.id === currentFile.id ? updatedFile : tab,
     );
 
     setFiles(updatedFiles);
@@ -292,7 +292,7 @@ const CodeEditor = () => {
     setOpenTabs(updatedTabs);
     localStorage.setItem(
       "openTabs",
-      JSON.stringify(updatedTabs.map((t) => t.id))
+      JSON.stringify(updatedTabs.map((t) => t.id)),
     );
 
     if (currentFile?.id === fileId) {
@@ -300,7 +300,7 @@ const CodeEditor = () => {
       setCurrentFile(newActiveTab);
       localStorage.setItem(
         "currentFileId",
-        newActiveTab ? newActiveTab.id : ""
+        newActiveTab ? newActiveTab.id : "",
       );
       setHasUnsavedChanges(false);
     }
@@ -375,7 +375,7 @@ const CodeEditor = () => {
     localStorage.setItem("scriptFiles", JSON.stringify(updatedFiles));
     localStorage.setItem(
       "openTabs",
-      JSON.stringify(updatedTabs.map((t) => t.id))
+      JSON.stringify(updatedTabs.map((t) => t.id)),
     );
     localStorage.setItem("currentFileId", newFile.id);
 
@@ -409,7 +409,8 @@ const CodeEditor = () => {
 
     if (
       files.some(
-        (f) => f.id !== id && f.name.toLowerCase() === trimmedName.toLowerCase()
+        (f) =>
+          f.id !== id && f.name.toLowerCase() === trimmedName.toLowerCase(),
       )
     ) {
       toast({
@@ -421,13 +422,13 @@ const CodeEditor = () => {
     }
 
     const updatedFiles = files.map((f) =>
-      f.id === id ? { ...f, name: trimmedName } : f
+      f.id === id ? { ...f, name: trimmedName } : f,
     );
     setFiles(updatedFiles);
     localStorage.setItem("scriptFiles", JSON.stringify(updatedFiles));
 
     const updatedTabs = openTabs.map((tab) =>
-      tab.id === id ? { ...tab, name: trimmedName } : tab
+      tab.id === id ? { ...tab, name: trimmedName } : tab,
     );
     setOpenTabs(updatedTabs);
 
@@ -468,7 +469,7 @@ const CodeEditor = () => {
 
     localStorage.setItem(
       "openTabs",
-      JSON.stringify(updatedTabs.map((t) => t.id))
+      JSON.stringify(updatedTabs.map((t) => t.id)),
     );
     localStorage.setItem("currentFileId", file.id);
 
@@ -482,7 +483,7 @@ const CodeEditor = () => {
     setOpenTabs(updatedTabs);
     localStorage.setItem(
       "openTabs",
-      JSON.stringify(updatedTabs.map((t) => t.id))
+      JSON.stringify(updatedTabs.map((t) => t.id)),
     );
 
     if (currentFile?.id === fileId) {
@@ -494,7 +495,7 @@ const CodeEditor = () => {
       setCurrentFile(newActiveTab);
       localStorage.setItem(
         "currentFileId",
-        newActiveTab ? newActiveTab.id : ""
+        newActiveTab ? newActiveTab.id : "",
       );
       setHasUnsavedChanges(false);
     }
@@ -556,7 +557,7 @@ const CodeEditor = () => {
                   <SidebarTrigger className="md:hidden" />
                   <div>
                     <h1 className="text-lg font-semibold text-gray-900 dark:text-white tracking-tight">
-                      Code Editor
+                      Script Editor
                     </h1>
                   </div>
                 </div>
@@ -571,7 +572,7 @@ const CodeEditor = () => {
                       "flex items-center space-x-1",
                       hasUnsavedChanges
                         ? "text-purple-600 dark:text-purple-400 hover:text-purple-700 dark:hover:text-purple-300 hover:bg-gray-700/10 dark:hover:bg-gray-500/20"
-                        : "text-gray-700 dark:text-gray-300"
+                        : "text-gray-700 dark:text-gray-300",
                     )}
                   >
                     <Save size={16} />
@@ -595,7 +596,7 @@ const CodeEditor = () => {
                       "flex items-center space-x-2 px-4 py-2.5 border-r border-gray-200 dark:border-gray-800 transition-colors min-w-[120px] max-w-[200px] group relative",
                       currentFile?.id === tab.id
                         ? "bg-white dark:bg-gray-900 text-gray-900 dark:text-white border-t-2 border-t-purple-500"
-                        : "bg-gray-50 dark:bg-gray-900/50 text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"
+                        : "bg-gray-50 dark:bg-gray-900/50 text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800",
                     )}
                   >
                     {getFileIcon(tab.name)}

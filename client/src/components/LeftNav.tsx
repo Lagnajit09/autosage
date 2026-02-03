@@ -51,7 +51,7 @@ export const NavItems = ({ mobile = false }: { mobile?: boolean }) => {
         <CodeXml className={cn("w-10 h-10", mobile ? "w-5 h-5 mr-2" : "")} />
       ),
       label: "Editor",
-      onClick: () => navigate("/code-editor"),
+      onClick: () => navigate("/script-editor"),
     },
     {
       icon: (
