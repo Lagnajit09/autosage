@@ -34,6 +34,9 @@ CLERK_SECRET_KEY = config('CLERK_SECRET_KEY', default='')
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = config('DEBUG', default=True, cast=bool)
 
+# Vercel Blob Token
+VERCEL_BLOB_TOKEN = config('BLOB_READ_WRITE_TOKEN', default='')
+
 ALLOWED_HOSTS = ["http://localhost:5173", "http://127.0.0.1:5173", "localhost", "127.0.0.1"]
 
 
