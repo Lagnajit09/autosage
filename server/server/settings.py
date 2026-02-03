@@ -53,6 +53,7 @@ INSTALLED_APPS = [
     'rest_framework',
     'workflows.apps.WorkflowsConfig',
     'vault.apps.VaultConfig',
+    'scripts.apps.ScriptsConfig',
 ]
 
 REST_FRAMEWORK = {
