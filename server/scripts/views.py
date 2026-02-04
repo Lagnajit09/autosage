@@ -15,6 +15,7 @@ from .serializers import (
 from server.utils import api_response
 import requests
 import json
+from urllib.parse import urlparse, quote
 
 
 class ScriptListCreateView(generics.ListCreateAPIView):
@@ -66,11 +67,13 @@ class ScriptListCreateView(generics.ListCreateAPIView):
         extension = lang_info['ext']
         content_type = lang_info['content_type']
 
-        # Create pathname
-        pathname = f"scripts/{name}.{extension}"
+        name = f"{name}.{extension}"
 
-        # Check if script with same pathname already exists for this user
-        if Script.objects.filter(owner=request.user, pathname=pathname).exists():
+        # Create pathname
+        pathname = f"scripts/{name}"
+
+        # Check if script with same name already exists for this user
+        if Script.objects.filter(owner=request.user, name=name).exists():
             return api_response(
                 success=False,
                 message=f"A script with the name '{name}' already exists.",
@@ -92,7 +95,7 @@ class ScriptListCreateView(generics.ListCreateAPIView):
             # Upload file to Vercel Blob using PUT request
             # Vercel Blob API expects: PUT to base_url with pathname and content
             base_url = "https://blob.vercel-storage.com"  # API host
-            pathname = f"scripts/{name}.{extension}"
+            pathname = f"scripts/{name}"
             upload_url = f"{base_url}/{pathname}"
             headers = {
                 "Authorization": f"Bearer {blob_token}",
@@ -118,6 +121,9 @@ class ScriptListCreateView(generics.ListCreateAPIView):
             blob_data = response.json()
             blob_url = blob_data['url']
             download_url = blob_data['url']
+
+            parsed_url = urlparse(blob_url)
+            pathname = parsed_url.path.lstrip('/')
 
             # Create Script record in database
             script = Script.objects.create(
@@ -184,103 +190,96 @@ class ScriptDetailView(generics.RetrieveDestroyAPIView):
         Delete script from both database and Vercel Blob storage.
         """
         script = self.get_object()
-        blob_url = script.blob_url
 
         try:
             # Delete from Vercel Blob
             blob_token = settings.VERCEL_BLOB_TOKEN
-            if blob_token and blob_url:
+            if blob_token and script.blob_url:
                 headers = {
                     "Authorization": f"Bearer {blob_token}",
                 }
+
+                # FIXED: Correct Vercel Blob delete endpoint format
+                # The delete endpoint expects the full blob URL as a query parameter
+                delete_url = f"https://blob.vercel-storage.com/delete?url={quote(script.blob_url, safe='')}"
                 
-                # Vercel Blob delete endpoint - DELETE to the blob URL
                 delete_response = requests.delete(
-                    blob_url,
+                    delete_url,
                     headers=headers,
                     timeout=30
                 )
-                
-                # Log if deletion from blob failed, but continue with DB deletion
+
+                # Log if deletion fails but continue with database deletion
                 if delete_response.status_code not in [200, 204]:
                     print(f"Warning: Failed to delete blob: {delete_response.text}")
 
             # Delete from database
-            script_name = script.name
             script.delete()
 
             return api_response(
                 success=True,
-                message=f"Script '{script_name}' deleted successfully.",
-                status_code=status.HTTP_200_OK
+                message="Script deleted successfully.",
+                data=None,
+                status_code=status.HTTP_204_NO_CONTENT
             )
 
         except requests.exceptions.RequestException as e:
-            # Even if blob deletion fails, delete from database
-            script_name = script.name
-            script.delete()
             return api_response(
-                success=True,
-                message=f"Script '{script_name}' deleted from database. Blob deletion may have failed.",
+                success=False,
+                message="Failed to delete script from blob storage.",
                 errors={"blob": [str(e)]},
-                status_code=status.HTTP_200_OK
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
         except Exception as e:
             return api_response(
                 success=False,
-                message="Failed to delete script.",
+                message="An unexpected error occurred.",
                 errors={"server": [str(e)]},
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
 
-class ScriptContentView(APIView):
+class ScriptContentView(generics.GenericAPIView):
     """
-    Retrieve the actual content of a script from Vercel Blob.
-    GET: Fetch and return script content
+    Retrieve script content.
+    GET: Fetch the actual script content from Vercel Blob
     """
+    serializer_class = ScriptContentSerializer
     permission_classes = [IsAuthenticated]
 
+    def get_queryset(self):
+        """Return only scripts owned by the authenticated user."""
+        return Script.objects.filter(owner=self.request.user)
+
     def get(self, request, pk):
-        """Fetch script content from Vercel Blob."""
-        # Get the script (must be owned by user)
-        script = get_object_or_404(Script, pk=pk, owner=request.user)
+        """Fetch and return script content."""
+        script = get_object_or_404(self.get_queryset(), pk=pk)
 
         try:
             # Fetch content from Vercel Blob
-            response = requests.get(script.download_url or script.blob_url, timeout=30)
-            
-            if response.status_code != 200:
+            content_response = requests.get(script.download_url or script.blob_url, timeout=30)
+
+            if content_response.status_code != 200:
                 return api_response(
                     success=False,
                     message="Failed to fetch script content from blob storage.",
-                    errors={"blob": [f"Fetch failed with status {response.status_code}"]},
+                    errors={"blob": ["Could not retrieve content."]},
                     status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
                 )
 
-            content = response.text
+            content = content_response.text
 
-            # Extract language from pathname
-            extension = script.pathname.split('.')[-1]
-            language_map_reverse = {
-                v['ext']: k for k, v in ScriptCreateSerializer.LANGUAGE_MAP.items()
-            }
-            language = language_map_reverse.get(extension, 'text')
-
-            # Prepare response data
-            content_data = {
+            serializer = ScriptContentSerializer({
+                'id': script.id,
                 'name': script.name,
-                'pathname': script.pathname,
                 'content': content,
-                'language': language,
                 'content_type': script.content_type,
                 'file_size': script.file_size,
                 'version': script.version,
-                'uploaded_at': script.uploaded_at,
-                'updated_at': script.updated_at,
-            }
+                'created_at': script.created_at,
+                'updated_at': script.updated_at
+            })
 
-            serializer = ScriptContentSerializer(content_data)
             return api_response(
                 success=True,
                 message="Script content retrieved successfully.",
@@ -291,7 +290,7 @@ class ScriptContentView(APIView):
         except requests.exceptions.RequestException as e:
             return api_response(
                 success=False,
-                message="Failed to fetch script content.",
+                message="Failed to connect to blob storage.",
                 errors={"blob": [str(e)]},
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
@@ -306,13 +305,13 @@ class ScriptContentView(APIView):
 
 class ScriptUpdateView(APIView):
     """
-    Update the content of an existing script.
-    PUT: Update script content in Vercel Blob and increment version
+    Update a script's content.
+    PUT: Update script content in Vercel Blob
     """
     permission_classes = [IsAuthenticated]
 
     def put(self, request, pk):
-        """Update script content and increment version."""
+        """Update script content."""
         # Get the script (must be owned by user)
         script = get_object_or_404(Script, pk=pk, owner=request.user)
 
@@ -338,10 +337,12 @@ class ScriptUpdateView(APIView):
                     status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
                 )
 
-            # Delete old blob
+            # FIXED: Delete old blob using correct Vercel Blob delete API format
             if script.blob_url:
+                # Vercel Blob delete endpoint - use query parameter with blob URL
+                delete_url = f"https://blob.vercel-storage.com/delete?url={quote(script.blob_url, safe='')}"
                 delete_response = requests.delete(
-                    script.blob_url,
+                    delete_url,
                     headers={"Authorization": f"Bearer {blob_token}"},
                     timeout=30
                 )
@@ -351,7 +352,7 @@ class ScriptUpdateView(APIView):
 
             # Upload new content using PUT request
             base_url = "https://blob.vercel-storage.com"  # API host
-            pathname = f"/{script.pathname}"
+            pathname = f"scripts/{script.name}"
             upload_url = f"{base_url}/{pathname}"
             headers = {
                 "Authorization": f"Bearer {blob_token}",
@@ -377,6 +378,9 @@ class ScriptUpdateView(APIView):
             blob_data = response.json()
             blob_url = blob_data['url']
             download_url = blob_data['url']
+            
+            parsed_url = urlparse(blob_url)
+            script.pathname = parsed_url.path.lstrip('/')
 
             # Update script record
             script.blob_url = blob_url
@@ -434,14 +438,15 @@ class ScriptRenameView(APIView):
         new_name = rename_serializer.validated_data['new_name']
         
         # Extract extension from current pathname
-        extension = script.pathname.split('.')[-1]
-        new_pathname = f"scripts/{new_name}.{extension}"
+        extension = script.name.split('.')[-1]
+        new_name_with_ext = new_name + "." + extension
+        new_pathname = f"scripts/{new_name_with_ext}"
 
         # Check if a script with the new name already exists
-        if Script.objects.filter(owner=request.user, pathname=new_pathname).exclude(pk=pk).exists():
+        if Script.objects.filter(owner=request.user, name=new_name_with_ext).exclude(pk=pk).exists():
             return api_response(
                 success=False,
-                message=f"A script with the name '{new_name}' already exists.",
+                message=f"A script with the name '{new_name_with_ext}' already exists.",
                 errors={"new_name": ["Script with this name already exists."]},
                 status_code=status.HTTP_400_BAD_REQUEST
             )
@@ -468,16 +473,18 @@ class ScriptRenameView(APIView):
 
             content = content_response.text
 
-            # Delete old blob
+            # FIXED: Delete old blob using correct Vercel Blob delete API format
+            # Vercel Blob delete endpoint - use query parameter with blob URL
+            delete_url = f"https://blob.vercel-storage.com/delete?url={quote(script.blob_url, safe='')}"
             delete_response = requests.delete(
-                script.blob_url,
+                delete_url,
                 headers={"Authorization": f"Bearer {blob_token}"},
                 timeout=30
             )
             
             # Upload with new pathname using PUT request
             base_url = "https://blob.vercel-storage.com"  # API host
-            pathname = f"scripts/{new_name}.{extension}"
+            pathname = f"scripts/{new_name_with_ext}"
             upload_url = f"{base_url}/{pathname}"
             headers = {
                 "Authorization": f"Bearer {blob_token}",
@@ -506,7 +513,7 @@ class ScriptRenameView(APIView):
 
             # Update script record
             old_name = script.name
-            script.name = new_name
+            script.name = new_name_with_ext
             script.pathname = new_pathname
             script.blob_url = blob_url
             script.download_url = download_url
@@ -515,7 +522,7 @@ class ScriptRenameView(APIView):
             serializer = ScriptSerializer(script)
             return api_response(
                 success=True,
-                message=f"Script renamed from '{old_name}' to '{new_name}' successfully.",
+                message=f"Script renamed from '{old_name}' to '{new_name_with_ext}' successfully.",
                 data=serializer.data,
                 status_code=status.HTTP_200_OK
             )
