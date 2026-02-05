@@ -16,6 +16,7 @@ from server.utils import api_response
 import requests
 import json
 from urllib.parse import urlparse, quote
+import vercel_blob
 
 
 class ScriptListCreateView(generics.ListCreateAPIView):
@@ -195,22 +196,10 @@ class ScriptDetailView(generics.RetrieveDestroyAPIView):
             # Delete from Vercel Blob
             blob_token = settings.VERCEL_BLOB_TOKEN
             if blob_token and script.blob_url:
-                headers = {
-                    "Authorization": f"Bearer {blob_token}",
-                }
-
-                # FIXED: Correct Vercel Blob delete endpoint format
-                # The delete endpoint expects the full blob URL as a query parameter
-                delete_url = f"https://blob.vercel-storage.com/delete?url={quote(script.blob_url, safe='')}"
-                
-                delete_response = requests.delete(
-                    delete_url,
-                    headers=headers,
-                    timeout=30
-                )
+                delete_response = vercel_blob.delete(script.blob_url, options={"token": blob_token})
 
                 # Log if deletion fails but continue with database deletion
-                if delete_response.status_code not in [200, 204]:
+                if delete_response and delete_response.status_code not in [200, 204]:
                     print(f"Warning: Failed to delete blob: {delete_response.text}")
 
             # Delete from database
@@ -272,11 +261,13 @@ class ScriptContentView(generics.GenericAPIView):
             serializer = ScriptContentSerializer({
                 'id': script.id,
                 'name': script.name,
+                'pathname': script.pathname,
                 'content': content,
                 'content_type': script.content_type,
+                'language': script.content_type.split('/')[-1].split('-')[-1] if 'x-' in script.content_type.split('/')[-1] else script.content_type.split('/')[-1],
                 'file_size': script.file_size,
                 'version': script.version,
-                'created_at': script.created_at,
+                'uploaded_at': script.uploaded_at,
                 'updated_at': script.updated_at
             })
 
@@ -337,17 +328,12 @@ class ScriptUpdateView(APIView):
                     status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
                 )
 
-            # FIXED: Delete old blob using correct Vercel Blob delete API format
+            # Delete old blob using correct Vercel Blob delete API format
             if script.blob_url:
                 # Vercel Blob delete endpoint - use query parameter with blob URL
-                delete_url = f"https://blob.vercel-storage.com/delete?url={quote(script.blob_url, safe='')}"
-                delete_response = requests.delete(
-                    delete_url,
-                    headers={"Authorization": f"Bearer {blob_token}"},
-                    timeout=30
-                )
+                delete_response = vercel_blob.delete(script.blob_url, options={"token": blob_token})
                 # Log if deletion fails but continue
-                if delete_response.status_code not in [200, 204]:
+                if delete_response and delete_response.status_code not in [200, 204]:
                     print(f"Warning: Failed to delete old blob: {delete_response.text}")
 
             # Upload new content using PUT request
@@ -473,14 +459,11 @@ class ScriptRenameView(APIView):
 
             content = content_response.text
 
-            # FIXED: Delete old blob using correct Vercel Blob delete API format
-            # Vercel Blob delete endpoint - use query parameter with blob URL
-            delete_url = f"https://blob.vercel-storage.com/delete?url={quote(script.blob_url, safe='')}"
-            delete_response = requests.delete(
-                delete_url,
-                headers={"Authorization": f"Bearer {blob_token}"},
-                timeout=30
-            )
+            # Delete old blob using correct Vercel Blob delete API format
+            delete_response = vercel_blob.delete(script.blob_url, options={"token": blob_token})
+
+            if delete_response and delete_response.status_code not in [200, 204]:
+                print(f"Warning: Failed to delete old blob: {delete_response.text}")
             
             # Upload with new pathname using PUT request
             base_url = "https://blob.vercel-storage.com"  # API host
@@ -510,11 +493,12 @@ class ScriptRenameView(APIView):
             blob_data = response.json()
             blob_url = blob_data['url']
             download_url = blob_data['url']
+            parsed_url = urlparse(blob_url)
 
             # Update script record
             old_name = script.name
             script.name = new_name_with_ext
-            script.pathname = new_pathname
+            script.pathname = parsed_url.path.lstrip('/')
             script.blob_url = blob_url
             script.download_url = download_url
             script.save()
