@@ -61,6 +61,7 @@ class ScriptCreateSerializer(serializers.Serializer):
         'php': {'ext': 'php', 'content_type': 'text/x-php'},
         'swift': {'ext': 'swift', 'content_type': 'text/x-swift'},
         'kotlin': {'ext': 'kt', 'content_type': 'text/x-kotlin'},
+        'powershell': {'ext': 'ps1', 'content_type': 'text/x-powershell'},
         'shell': {'ext': 'sh', 'content_type': 'text/x-shellscript'},
         'bash': {'ext': 'sh', 'content_type': 'text/x-shellscript'},
         'sql': {'ext': 'sql', 'content_type': 'text/x-sql'},
