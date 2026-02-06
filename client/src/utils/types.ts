@@ -202,3 +202,24 @@ export interface Server {
   connection_method: "winrm" | "ssh";
   credential?: string;
 }
+
+export interface ScriptResponse {
+  id: number;
+  name: string;
+  pathname: string;
+  blob_url: string;
+  download_url: string;
+  content_type: string;
+  file_size: number;
+  uploaded_at: string;
+  updated_at: string;
+  version: number;
+}
+
+export interface ScriptContentResponse {
+  id: number;
+  name: string;
+  content: string;
+  content_type: string;
+  version: number;
+}

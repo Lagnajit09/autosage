@@ -35,6 +35,7 @@ import {
   Copy as CopyIcon,
   Download,
   ChevronRight,
+  Loader2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -43,6 +44,7 @@ import { ScriptFile } from "@/utils/types";
 interface FileExplorerSidebarProps {
   files: ScriptFile[];
   currentFile: ScriptFile | null;
+  isLoadingScripts?: boolean;
   onSelectFile: (file: ScriptFile) => void;
   onCreateFile: () => void;
   onDeleteFile: (id: string) => void;
@@ -63,6 +65,7 @@ interface FileExplorerSidebarProps {
 export const FileExplorerSidebar: React.FC<FileExplorerSidebarProps> = ({
   files,
   currentFile,
+  isLoadingScripts,
   onSelectFile,
   onCreateFile,
   onDeleteFile,
@@ -101,7 +104,7 @@ export const FileExplorerSidebar: React.FC<FileExplorerSidebarProps> = ({
   const handleKeyDown = (
     e: React.KeyboardEvent,
     isCreate: boolean,
-    fileId?: string
+    fileId?: string,
   ) => {
     if (e.key === "Enter") {
       if (isCreate) {
@@ -172,7 +175,11 @@ export const FileExplorerSidebar: React.FC<FileExplorerSidebarProps> = ({
               {isCreatingFile && (
                 <SidebarMenuItem>
                   <div className="flex items-center gap-2 px-2 py-1.5 w-full">
-                    <File className="w-4 h-4 text-gray-400" />
+                    {isLoadingScripts ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <File className="w-4 h-4 text-gray-400" />
+                    )}
                     <Input
                       ref={inputRef}
                       value={inputValue}
@@ -186,11 +193,27 @@ export const FileExplorerSidebar: React.FC<FileExplorerSidebarProps> = ({
                 </SidebarMenuItem>
               )}
 
+              {isLoadingScripts &&
+                !isCreatingFile &&
+                !renamingFileId &&
+                files.length === 0 && (
+                  <SidebarMenuItem>
+                    <div className="flex items-center gap-2 px-2 py-1.5 w-full">
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span className="text-sm">Fetching scripts...</span>
+                    </div>
+                  </SidebarMenuItem>
+                )}
+
               {files.map((file) => (
                 <SidebarMenuItem key={file.id}>
                   {renamingFileId === file.id ? (
                     <div className="flex items-center gap-2 px-2 py-1.5 w-full">
-                      {getFileIcon(file.name)}
+                      {isLoadingScripts ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      ) : (
+                        getFileIcon(file.name)
+                      )}
                       <Input
                         ref={inputRef}
                         value={inputValue}
@@ -267,6 +290,7 @@ export const FileExplorerSidebar: React.FC<FileExplorerSidebarProps> = ({
               ))}
 
               {files.length === 0 &&
+                !isLoadingScripts &&
                 !isCreatingFile &&
                 state === "expanded" && (
                   <div className="px-4 py-8 text-center">

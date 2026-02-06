@@ -16,22 +16,99 @@ import {
 import { FileExplorerSidebar } from "@/components/CodeEditor/FileExplorerSidebar";
 import { AIScriptGeneratorSidebar } from "@/components/CodeEditor/AIScriptGeneratorSidebar";
 import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
+import { useAuth } from "@clerk/clerk-react";
+import { scriptService, mapScriptToScriptFile } from "@/lib/api/scripts";
 
 const CodeEditor = () => {
   const [searchParams] = useSearchParams();
   const scriptType = searchParams.get("type") || "python";
   const { isDark } = useTheme();
-  const { toast } = useToast();
+  const { toast: clientToast } = useToast();
+  const { getToken, isSignedIn } = useAuth();
+  const [token, setToken] = useState<string | null>(null);
 
   const [currentFile, setCurrentFile] = useState<ScriptFile | null>(null);
   const [files, setFiles] = useState<ScriptFile[]>([]);
   const [openTabs, setOpenTabs] = useState<ScriptFile[]>([]);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [isAISidebarOpen, setIsAISidebarOpen] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
 
   // Inline File Operation State
   const [isCreatingFile, setIsCreatingFile] = useState(false);
   const [renamingFileId, setRenamingFileId] = useState<string | null>(null);
+
+  // Get token on auth change
+  useEffect(() => {
+    if (isSignedIn) {
+      const fetchToken = async () => {
+        try {
+          const t = await getToken();
+          setToken(t);
+        } catch (e) {
+          console.error("Failed to get token", e);
+        }
+      };
+      fetchToken();
+    }
+  }, [isSignedIn, getToken]);
+
+  const fetchFiles = async () => {
+    setIsLoading(true);
+    toast.loading("Fetching scripts...");
+    try {
+      const clerkToken = await getToken();
+      const scripts = await scriptService.getAll(clerkToken);
+      const scriptFiles = scripts.map((s) => mapScriptToScriptFile(s));
+      setFiles(scriptFiles);
+
+      // Restore open tabs by ID only (content will be fetched on select)
+      const savedOpenTabIds = localStorage.getItem("openTabs");
+      if (savedOpenTabIds) {
+        try {
+          const tabIds = JSON.parse(savedOpenTabIds);
+          const tabs = scriptFiles.filter((f) => tabIds.includes(f.id));
+          setOpenTabs(tabs);
+        } catch (e) {
+          console.error("Error parsing open tabs", e);
+        }
+      }
+    } catch (error) {
+      console.error("Failed to fetch scripts:", error);
+      clientToast({
+        variant: "destructive",
+        title: "Error",
+        description: "Failed to load scripts.",
+      });
+    } finally {
+      setIsLoading(false);
+      toast.dismiss();
+    }
+  };
+
+  // Load files when token is available
+  useEffect(() => {
+    if (token) {
+      fetchFiles();
+    }
+  }, [token]);
+
+  const getLanguageFromExtension = (filename: string): ScriptLanguage => {
+    const ext = filename.split(".").pop()?.toLowerCase() || "";
+    switch (ext) {
+      case "py":
+        return "python";
+      case "ps1":
+        return "powershell";
+      case "sh":
+        return "shell";
+      case "js":
+        return "javascript";
+      default:
+        return "javascript";
+    }
+  };
 
   const getLanguageInfo = (
     type: string,
@@ -82,70 +159,59 @@ const CodeEditor = () => {
     }
   };
 
-  useEffect(() => {
-    // Load saved files from localStorage
-    const savedFiles = localStorage.getItem("scriptFiles");
-    let loadedFiles: ScriptFile[] = [];
-    if (savedFiles) {
-      loadedFiles = JSON.parse(savedFiles).map(
-        (
-          file: Omit<ScriptFile, "lastModified"> & { lastModified: string },
-        ) => ({
-          ...file,
-          lastModified: new Date(file.lastModified),
-        }),
+  const handleGeneratedScript = async (script: string, filename: string) => {
+    if (!token) {
+      clientToast({
+        variant: "destructive",
+        title: "Authentication Error",
+        description: "You must be signed in to save scripts.",
+      });
+      return;
+    }
+
+    try {
+      const language = getLanguageFromExtension(filename);
+      const basename = filename.split(".")[0];
+
+      const createdScript = await scriptService.create(
+        basename,
+        language,
+        script,
+        token,
       );
-      setFiles(loadedFiles);
-    }
 
-    // Load open tabs and current file
-    const savedOpenTabs = localStorage.getItem("openTabs");
-    const savedCurrentFileId = localStorage.getItem("currentFileId");
+      const newFile = mapScriptToScriptFile(createdScript, script);
 
-    if (savedOpenTabs) {
-      const tabIds = JSON.parse(savedOpenTabs);
-      const tabs = loadedFiles.filter((f) => tabIds.includes(f.id));
-      setOpenTabs(tabs);
+      setFiles((prev) => [...prev, newFile]);
+      setCurrentFile(newFile);
 
-      if (savedCurrentFileId) {
-        const activeFile = tabs.find((f) => f.id === savedCurrentFileId);
-        if (activeFile) {
-          setCurrentFile(activeFile);
+      setOpenTabs((prev) => {
+        if (!prev.find((t) => t.id === newFile.id)) {
+          const newTabs = [...prev, newFile];
+          localStorage.setItem(
+            "openTabs",
+            JSON.stringify(newTabs.map((t) => t.id)),
+          );
+          return newTabs;
         }
-      }
+        return prev;
+      });
+
+      setHasUnsavedChanges(false);
+      setIsAISidebarOpen(false);
+
+      clientToast({
+        title: "Success",
+        description: "Script generated and saved successfully.",
+      });
+    } catch (error: any) {
+      console.error("Failed to save generated script:", error);
+      clientToast({
+        variant: "destructive",
+        title: "Error",
+        description: error.message || "Failed to save generated script.",
+      });
     }
-  }, []);
-
-  const handleGeneratedScript = (script: string, filename: string) => {
-    const newFile: ScriptFile = {
-      id: `${Date.now()}-${Math.random()}`,
-      name: filename,
-      content: script,
-      language: getLanguageFromExtension(filename),
-      lastModified: new Date(),
-      source: "editor",
-    };
-
-    const updatedFiles = [...files, newFile];
-    setFiles(updatedFiles);
-    setCurrentFile(newFile);
-
-    // Add to open tabs if not already open
-    let updatedTabs = openTabs;
-    if (!openTabs.find((tab) => tab.id === newFile.id)) {
-      updatedTabs = [...openTabs, newFile];
-      setOpenTabs(updatedTabs);
-    }
-
-    localStorage.setItem("scriptFiles", JSON.stringify(updatedFiles));
-    localStorage.setItem(
-      "openTabs",
-      JSON.stringify(updatedTabs.map((t) => t.id)),
-    );
-    localStorage.setItem("currentFileId", newFile.id);
-
-    setHasUnsavedChanges(false);
-    setIsAISidebarOpen(false);
   };
 
   const configureMonacoEditor: OnMount = (editor, monaco) => {
@@ -259,50 +325,90 @@ const CodeEditor = () => {
     });
   };
 
-  const saveFile = () => {
+  const saveFile = async () => {
+    setIsLoading(true);
     if (!currentFile) return;
 
-    const updatedFile = {
-      ...currentFile,
-      lastModified: new Date(),
-    };
+    toast.loading("Saving file...");
 
-    const updatedFiles = files.some((f) => f.id === currentFile.id)
-      ? files.map((f) => (f.id === currentFile.id ? updatedFile : f))
-      : [...files, updatedFile];
+    try {
+      const clerkToken = await getToken();
 
-    const updatedTabs = openTabs.map((tab) =>
-      tab.id === currentFile.id ? updatedFile : tab,
-    );
+      const updatedScript = await scriptService.update(
+        currentFile.id,
+        currentFile.content,
+        clerkToken,
+      );
 
-    setFiles(updatedFiles);
-    setCurrentFile(updatedFile);
-    setOpenTabs(updatedTabs);
-    localStorage.setItem("scriptFiles", JSON.stringify(updatedFiles));
-    setHasUnsavedChanges(false);
+      const updatedFile = {
+        ...currentFile,
+        lastModified: new Date(updatedScript.updated_at),
+      };
+
+      setFiles((prev) =>
+        prev.map((f) => (f.id === currentFile.id ? updatedFile : f)),
+      );
+      setOpenTabs((prev) =>
+        prev.map((f) => (f.id === currentFile.id ? updatedFile : f)),
+      );
+      setCurrentFile(updatedFile);
+      setHasUnsavedChanges(false);
+
+      clientToast({
+        title: "Saved",
+        description: "Script saved successfully.",
+      });
+    } catch (error: any) {
+      console.error("Failed to save file:", error);
+      clientToast({
+        variant: "destructive",
+        title: "Save Failed",
+        description: error.message || "Failed to save script.",
+      });
+    } finally {
+      setIsLoading(false);
+      toast.dismiss();
+    }
   };
 
-  const deleteScript = (fileId: string) => {
-    const updatedFiles = files.filter((f) => f.id !== fileId);
-    setFiles(updatedFiles);
-    localStorage.setItem("scriptFiles", JSON.stringify(updatedFiles));
+  const deleteScript = async (fileId: string) => {
+    setIsLoading(true);
+    toast.loading("Deleting file...");
+    try {
+      const clerkToken = await getToken();
 
-    // Remove from tabs if open
-    const updatedTabs = openTabs.filter((tab) => tab.id !== fileId);
-    setOpenTabs(updatedTabs);
-    localStorage.setItem(
-      "openTabs",
-      JSON.stringify(updatedTabs.map((t) => t.id)),
-    );
+      await scriptService.delete(fileId, clerkToken);
 
-    if (currentFile?.id === fileId) {
-      const newActiveTab = updatedTabs.length > 0 ? updatedTabs[0] : null;
-      setCurrentFile(newActiveTab);
+      const updatedFiles = files.filter((f) => f.id !== fileId);
+      setFiles(updatedFiles);
+
+      const updatedTabs = openTabs.filter((tab) => tab.id !== fileId);
+      setOpenTabs(updatedTabs);
       localStorage.setItem(
-        "currentFileId",
-        newActiveTab ? newActiveTab.id : "",
+        "openTabs",
+        JSON.stringify(updatedTabs.map((t) => t.id)),
       );
-      setHasUnsavedChanges(false);
+
+      if (currentFile?.id === fileId) {
+        const newActiveTab = updatedTabs.length > 0 ? updatedTabs[0] : null;
+        setCurrentFile(newActiveTab);
+        setHasUnsavedChanges(false);
+      }
+
+      clientToast({
+        title: "Deleted",
+        description: "Script deleted successfully.",
+      });
+    } catch (error: any) {
+      console.error("Failed to delete file:", error);
+      clientToast({
+        variant: "destructive",
+        title: "Delete Failed",
+        description: error.message || "Failed to delete script.",
+      });
+    } finally {
+      setIsLoading(false);
+      toast.dismiss();
     }
   };
 
@@ -317,11 +423,13 @@ const CodeEditor = () => {
     setIsCreatingFile(true);
   };
 
-  const handleCreateSubmit = (name: string) => {
+  const handleCreateSubmit = async (name: string) => {
+    setIsLoading(true);
     const trimmedName = name.trim();
+    toast.loading(`Creating file: ${trimmedName}...`);
 
     if (!trimmedName) {
-      toast({
+      clientToast({
         variant: "destructive",
         title: "Invalid Filename",
         description: "Filename cannot be empty.",
@@ -333,7 +441,7 @@ const CodeEditor = () => {
     const validExtensions = ["py", "js", "sh", "ps1"];
 
     if (!ext || !validExtensions.includes(ext)) {
-      toast({
+      clientToast({
         variant: "destructive",
         title: "Invalid Extension",
         description: "Supported extensions: .py, .js, .sh, .ps1",
@@ -342,7 +450,7 @@ const CodeEditor = () => {
     }
 
     if (files.some((f) => f.name.toLowerCase() === trimmedName.toLowerCase())) {
-      toast({
+      clientToast({
         variant: "destructive",
         title: "Duplicate Filename",
         description: "A file with this name already exists.",
@@ -350,44 +458,63 @@ const CodeEditor = () => {
       return;
     }
 
-    // Validation passed, create file
-    const langInfo = getLanguageInfo(getLanguageFromExtension(trimmedName));
-    const newFile: ScriptFile = {
-      id: `${Date.now()}-${Math.random()}`,
-      name: trimmedName,
-      content: langInfo.template,
-      language: langInfo.language,
-      lastModified: new Date(),
-      source: "editor",
-    };
+    try {
+      const language = getLanguageFromExtension(trimmedName);
+      const langInfo = getLanguageInfo(language);
 
-    const updatedFiles = [...files, newFile];
-    setFiles(updatedFiles);
-    setCurrentFile(newFile);
+      const basename = trimmedName.replace(/\.[^/.]+$/, "");
 
-    // Add to tabs
-    let updatedTabs = openTabs;
-    if (!openTabs.find((tab) => tab.id === newFile.id)) {
-      updatedTabs = [...openTabs, newFile];
-      setOpenTabs(updatedTabs);
+      const clerkToken = await getToken();
+
+      const createdScript = await scriptService.create(
+        basename,
+        language,
+        langInfo.template,
+        clerkToken,
+      );
+
+      const newFile = mapScriptToScriptFile(createdScript, langInfo.template);
+
+      setFiles((prev) => [...prev, newFile]);
+      setCurrentFile(newFile);
+
+      setOpenTabs((prev) => {
+        const newTabs = [...prev, newFile];
+        localStorage.setItem(
+          "openTabs",
+          JSON.stringify(newTabs.map((t) => t.id)),
+        );
+        return newTabs;
+      });
+
+      setHasUnsavedChanges(false);
+      setIsCreatingFile(false);
+
+      clientToast({
+        title: "Created",
+        description: "Script created successfully.",
+      });
+    } catch (error: any) {
+      console.error("Failed to create file:", error);
+      clientToast({
+        variant: "destructive",
+        title: "Create Failed",
+        description: error.message || "Failed to create script.",
+      });
+    } finally {
+      setIsLoading(false);
+      toast.dismiss();
     }
-
-    localStorage.setItem("scriptFiles", JSON.stringify(updatedFiles));
-    localStorage.setItem(
-      "openTabs",
-      JSON.stringify(updatedTabs.map((t) => t.id)),
-    );
-    localStorage.setItem("currentFileId", newFile.id);
-
-    setHasUnsavedChanges(true);
-    setIsCreatingFile(false);
   };
 
-  const handleRenameSubmit = (id: string, name: string) => {
+  const handleRenameSubmit = async (id: string, name: string) => {
+    setIsLoading(true);
     const trimmedName = name.trim();
 
+    toast.loading(`Renaming file: ${trimmedName}...`);
+
     if (!trimmedName) {
-      toast({
+      clientToast({
         variant: "destructive",
         title: "Invalid Filename",
         description: "Filename cannot be empty.",
@@ -399,7 +526,7 @@ const CodeEditor = () => {
     const validExtensions = ["py", "js", "sh", "ps1"];
 
     if (!ext || !validExtensions.includes(ext)) {
-      toast({
+      clientToast({
         variant: "destructive",
         title: "Invalid Extension",
         description: "Supported extensions: .py, .js, .sh, .ps1",
@@ -413,7 +540,7 @@ const CodeEditor = () => {
           f.id !== id && f.name.toLowerCase() === trimmedName.toLowerCase(),
       )
     ) {
-      toast({
+      clientToast({
         variant: "destructive",
         title: "Duplicate Filename",
         description: "A file with this name already exists.",
@@ -421,57 +548,92 @@ const CodeEditor = () => {
       return;
     }
 
-    const updatedFiles = files.map((f) =>
-      f.id === id ? { ...f, name: trimmedName } : f,
-    );
-    setFiles(updatedFiles);
-    localStorage.setItem("scriptFiles", JSON.stringify(updatedFiles));
+    try {
+      const clerkToken = await getToken();
 
-    const updatedTabs = openTabs.map((tab) =>
-      tab.id === id ? { ...tab, name: trimmedName } : tab,
-    );
-    setOpenTabs(updatedTabs);
+      const basename = trimmedName.replace(/\.[^/.]+$/, "");
+      await scriptService.rename(id, basename, clerkToken);
 
-    if (currentFile?.id === id) {
-      setCurrentFile({ ...currentFile, name: trimmedName });
+      // Update local state
+      const updatedFiles = files.map((f) =>
+        f.id === id ? { ...f, name: trimmedName } : f,
+      );
+      setFiles(updatedFiles);
+
+      const updatedTabs = openTabs.map((tab) =>
+        tab.id === id ? { ...tab, name: trimmedName } : tab,
+      );
+      setOpenTabs(updatedTabs);
+
+      if (currentFile?.id === id) {
+        setCurrentFile({ ...currentFile, name: trimmedName });
+      }
+
+      setRenamingFileId(null);
+
+      clientToast({
+        title: "Renamed",
+        description: "Script renamed successfully.",
+      });
+    } catch (error: any) {
+      console.error("Failed to rename file:", error);
+      clientToast({
+        variant: "destructive",
+        title: "Rename Failed",
+        description: error.message || "Failed to rename script.",
+      });
+    } finally {
+      setIsLoading(false);
+      toast.dismiss();
     }
-
-    setRenamingFileId(null);
   };
 
-  const getLanguageFromExtension = (filename: string): ScriptLanguage => {
-    const ext = filename.split(".").pop()?.toLowerCase() || "";
-    switch (ext) {
-      case "py":
-        return "python";
-      case "ps1":
-        return "powershell";
-      case "sh":
-        return "shell";
-      case "js":
-        return "javascript";
-      default:
-        return "javascript";
-    }
-  };
+  const selectFile = async (file: ScriptFile) => {
+    setIsLoading(true);
+    let fileToSet = file;
 
-  const selectFile = (file: ScriptFile) => {
-    const language = getLanguageFromExtension(file.name);
-    const fileWithLanguage = { ...file, language };
-    setCurrentFile(fileWithLanguage);
+    if (!file.content) {
+      try {
+        const clerkToken = await getToken();
+
+        const scriptContent = await scriptService.getContent(
+          file.id,
+          clerkToken,
+        );
+        fileToSet = { ...file, content: scriptContent.content };
+
+        // Update files state cache with content
+        setFiles((prev) => prev.map((f) => (f.id === file.id ? fileToSet : f)));
+        // Update tabs
+        setOpenTabs((prev) =>
+          prev.map((f) => (f.id === file.id ? fileToSet : f)),
+        );
+      } catch (error) {
+        console.error("Failed to load content", error);
+        clientToast({
+          variant: "destructive",
+          title: "Load Failed",
+          description: "Failed to load script content.",
+        });
+        return;
+      } finally {
+        setIsLoading(false);
+      }
+    }
+
+    setCurrentFile(fileToSet);
 
     // Add to tabs if not already open
-    let updatedTabs = openTabs;
     if (!openTabs.find((tab) => tab.id === file.id)) {
-      updatedTabs = [...openTabs, fileWithLanguage];
-      setOpenTabs(updatedTabs);
+      setOpenTabs((prev) => {
+        const newTabs = [...prev, fileToSet];
+        localStorage.setItem(
+          "openTabs",
+          JSON.stringify(newTabs.map((t) => t.id)),
+        );
+        return newTabs;
+      });
     }
-
-    localStorage.setItem(
-      "openTabs",
-      JSON.stringify(updatedTabs.map((t) => t.id)),
-    );
-    localStorage.setItem("currentFileId", file.id);
 
     setHasUnsavedChanges(false);
   };
@@ -493,29 +655,57 @@ const CodeEditor = () => {
           ? updatedTabs[Math.max(0, currentIndex - 1)]
           : null;
       setCurrentFile(newActiveTab);
-      localStorage.setItem(
-        "currentFileId",
-        newActiveTab ? newActiveTab.id : "",
-      );
       setHasUnsavedChanges(false);
     }
   };
 
-  const duplicateFile = (file: ScriptFile) => {
-    const newFile: ScriptFile = {
-      ...file,
-      id: `${Date.now()}-${Math.random()}`,
-      name: `${file.name.replace(/\.[^/.]+$/, "")}_copy.${file.name
-        .split(".")
-        .pop()}`,
-      lastModified: new Date(),
-    };
-    const updatedFiles = [...files, newFile];
-    setFiles(updatedFiles);
-    localStorage.setItem("scriptFiles", JSON.stringify(updatedFiles));
+  const duplicateFile = async (file: ScriptFile) => {
+    setIsLoading(true);
+    toast.loading(`Creating file: ${file.name}_copy...`);
+    // Read content -> Create new
+    const newNameBase = `${file.name.replace(/\.[^/.]+$/, "")}_copy`;
+    const originalExt = file.name.split(".").pop();
+    const newName = `${newNameBase}.${originalExt}`;
+
+    try {
+      const clerkToken = await getToken();
+
+      // ensure content is available
+      let content = file.content;
+      if (!content) {
+        const data = await scriptService.getContent(file.id, clerkToken);
+        content = data.content;
+      }
+
+      const created = await scriptService.create(
+        newNameBase,
+        file.language,
+        content,
+        clerkToken,
+      );
+
+      const newFile = mapScriptToScriptFile(created, content);
+      setFiles((prev) => [...prev, newFile]);
+
+      clientToast({
+        title: "Duplicated",
+        description: "Script duplicated successfully.",
+      });
+    } catch (e: any) {
+      console.error("Duplicate failed", e);
+      clientToast({
+        variant: "destructive",
+        title: "Error",
+        description: e.message || "Failed to duplicate script.",
+      });
+    } finally {
+      setIsLoading(false);
+      toast.dismiss();
+    }
   };
 
   const downloadFile = (file: ScriptFile) => {
+    toast.loading(`Downloading file: ${file.name}...`);
     const blob = new Blob([file.content], { type: "text/plain" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -523,6 +713,7 @@ const CodeEditor = () => {
     a.download = file.name;
     a.click();
     URL.revokeObjectURL(url);
+    toast.dismiss();
   };
 
   return (
@@ -532,6 +723,7 @@ const CodeEditor = () => {
 
         <FileExplorerSidebar
           files={files}
+          isLoadingScripts={isLoading}
           currentFile={currentFile}
           onSelectFile={selectFile}
           onCreateFile={startCreateFile}
