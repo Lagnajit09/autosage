@@ -58,12 +58,14 @@ export interface NodeData {
   description?: string;
   parameters?: Parameter[];
 
-  // Script specific fields
-  scriptType?: "Python Script" | "Powershell Script" | "Shell Script";
+  // Execution specific fields
   executionMode?: "local" | "remote";
-  serverAddress?: string;
   selectedCredential?: Credential;
-  selectedScript?: string;
+  selectedServer?: Server;
+  selectedScript?: {
+    type: "Python Script" | "Powershell Script" | "Shell Script";
+    script_id: string;
+  };
   outputFormat?: "text" | "json";
   jsonSchema?: OutputField[];
 

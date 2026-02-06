@@ -29,6 +29,7 @@ import { useAuth } from "@clerk/clerk-react";
 import { apiRequest } from "@/lib/api-client";
 import { toast } from "sonner";
 import { JSONSchemaModal } from "./JSONSchemaModal";
+import { scriptService, mapScriptToScriptFile } from "@/lib/api/scripts";
 
 export const ScriptConf: React.FC<BaseConfigProps> = ({
   selectedNode,
@@ -38,12 +39,34 @@ export const ScriptConf: React.FC<BaseConfigProps> = ({
   const [vaults, setVaults] = useState<Vault[]>([]);
   const [isLoadingVaults, setIsLoadingVaults] = useState(false);
   const [isSchemaModalOpen, setIsSchemaModalOpen] = useState(false);
+  const [savedScripts, setSavedScripts] = useState<ScriptFile[]>([]);
+  const [isLoadingScripts, setIsLoadingScripts] = useState(false);
 
   useEffect(() => {
-    if (selectedNode.data?.executionMode === "remote" && isSignedIn) {
-      fetchVaults();
+    if (isSignedIn) {
+      if (selectedNode.data?.executionMode === "remote") {
+        fetchVaults();
+      }
+      fetchScripts();
     }
   }, [selectedNode.data?.executionMode, isSignedIn]);
+
+  const fetchScripts = async () => {
+    setIsLoadingScripts(true);
+    try {
+      const token = await getToken();
+      if (token) {
+        const scripts = await scriptService.getAll(token);
+        const scriptFiles = scripts.map((s) => mapScriptToScriptFile(s));
+        setSavedScripts(scriptFiles);
+      }
+    } catch (error) {
+      console.error("Failed to fetch scripts:", error);
+      toast.error("Failed to load scripts");
+    } finally {
+      setIsLoadingScripts(false);
+    }
+  };
 
   const fetchVaults = async () => {
     setIsLoadingVaults(true);
@@ -64,39 +87,67 @@ export const ScriptConf: React.FC<BaseConfigProps> = ({
   const allServers = vaults.flatMap((v) => v.servers || []);
   const allCredentials = vaults.flatMap((v) => v.credentials || []);
 
-  const handleInputChange = (field: string, value: string) => {
+  const handleInputChange = (field: string, value: any) => {
     onUpdateNode(selectedNode.id, { [field]: value });
   };
+
+  // Helper to get current script type, defaulting to Python if nothing selected
+  const currentScriptType =
+    selectedNode.data?.selectedScript?.type || "Python Script";
 
   const handleUploadScript = () => {
     const input = document.createElement("input");
     input.type = "file";
     input.accept = ".py,.ps1,.sh,.js";
-    input.onchange = (e) => {
+    input.onchange = async (e) => {
       const file = (e.target as HTMLInputElement).files?.[0];
       if (file) {
         const reader = new FileReader();
-        reader.onload = (e) => {
+        reader.onload = async (e) => {
           const content = e.target?.result as string;
+          const token = await getToken();
 
-          const savedFiles = localStorage.getItem("scriptFiles");
-          const files = savedFiles ? JSON.parse(savedFiles) : [];
-          const newFile = {
-            id: `${Date.now()}-${Math.random()}`,
-            name: file.name,
-            content: content,
-            language: file.name.endsWith(".py")
-              ? "python"
-              : file.name.endsWith(".ps1")
-                ? "powershell"
-                : file.name.endsWith(".sh")
-                  ? "shell"
-                  : "javascript",
-            lastModified: new Date(),
-            source: "upload",
-          };
-          files.push(newFile);
-          localStorage.setItem("scriptFiles", JSON.stringify(files));
+          if (!token) {
+            toast.error("Please sign in to upload scripts");
+            return;
+          }
+
+          try {
+            // Determine language
+            let language = "javascript";
+            if (file.name.endsWith(".py")) language = "python";
+            else if (file.name.endsWith(".ps1")) language = "powershell";
+            else if (file.name.endsWith(".sh")) language = "shell";
+
+            const basename = file.name.replace(/\.[^/.]+$/, "");
+
+            const createdScript = await scriptService.create(
+              basename,
+              language,
+              content,
+              token,
+            );
+            const newFile = mapScriptToScriptFile(createdScript, content);
+
+            setSavedScripts((prev) => [...prev, newFile]);
+            toast.success("Script uploaded successfully");
+
+            // Auto-select the uploaded script
+            onUpdateNode(selectedNode.id, {
+              selectedScript: {
+                type:
+                  language === "python"
+                    ? "Python Script"
+                    : language === "powershell"
+                      ? "Powershell Script"
+                      : "Shell Script",
+                script_id: createdScript.id.toString(),
+              },
+            });
+          } catch (error: any) {
+            console.error("Upload failed", error);
+            toast.error(error.message || "Failed to upload script");
+          }
         };
         reader.readAsText(file);
       }
@@ -106,31 +157,34 @@ export const ScriptConf: React.FC<BaseConfigProps> = ({
 
   const getSavedScripts = () => {
     try {
-      const savedFiles = localStorage.getItem("scriptFiles");
-      if (savedFiles) {
-        const files = JSON.parse(savedFiles);
-        return files.filter((file: ScriptFile) => {
-          const scriptType = selectedNode.data?.scriptType || "Python Script";
-          const expectedLanguage = scriptType
-            .replace(" Script", "")
-            .toLowerCase();
-          return file.language === expectedLanguage;
-        });
-      }
+      return savedScripts.filter((file: ScriptFile) => {
+        const expectedLanguage = currentScriptType
+          .replace(" Script", "")
+          .toLowerCase();
+        return file.language === expectedLanguage;
+      });
     } catch (error) {
       console.error("Error loading scripts:", error);
     }
     return [];
   };
 
-  const getEditorUrl = () => {
-    const scriptType = selectedNode.data?.scriptType || "Python Script";
-    const type = scriptType.replace(" Script", "").toLowerCase();
-    return `/script-editor?type=${type}&nodeId=${selectedNode.id}`;
+  const handleScriptSelect = (scriptId: string) => {
+    onUpdateNode(selectedNode.id, {
+      selectedScript: {
+        type: currentScriptType,
+        script_id: scriptId,
+      },
+    });
   };
 
-  const handleScriptSelect = (scriptId: string) => {
-    onUpdateNode(selectedNode.id, { selectedScript: scriptId });
+  const handleScriptTypeChange = (type: string) => {
+    onUpdateNode(selectedNode.id, {
+      selectedScript: {
+        type: type as any,
+        script_id: "", // Reset selection on type change
+      },
+    });
   };
 
   const handleCredentialSelect = (credentialId: string) => {
@@ -155,7 +209,7 @@ export const ScriptConf: React.FC<BaseConfigProps> = ({
     const selectedServer = allServers.find((s) => s.id === serverId);
     if (selectedServer) {
       const updates: any = {
-        serverAddress: selectedServer.host,
+        selectedServer: selectedServer,
       };
 
       // Auto-populate credential if associated
@@ -164,14 +218,7 @@ export const ScriptConf: React.FC<BaseConfigProps> = ({
           (c) => c.id === selectedServer.credential,
         );
         if (associatedCred) {
-          updates.selectedCredential = {
-            id: associatedCred.id,
-            name: associatedCred.name,
-            credential_type: associatedCred.credential_type,
-            username: associatedCred.username,
-            password: associatedCred.password,
-            vault: associatedCred.vault,
-          };
+          updates.selectedCredential = associatedCred;
         }
       }
       onUpdateNode(selectedNode.id, updates);
@@ -221,8 +268,8 @@ export const ScriptConf: React.FC<BaseConfigProps> = ({
           Script Type
         </Label>
         <Select
-          value={selectedNode.data?.scriptType}
-          onValueChange={(value) => handleInputChange("scriptType", value)}
+          value={currentScriptType}
+          onValueChange={(value) => handleScriptTypeChange(value)}
         >
           <SelectTrigger className="w-full h-11 text-sm bg-white dark:bg-gray-950 border border-gray-300 dark:border-gray-700 text-gray-900 dark:text-gray-100">
             <SelectValue placeholder="Select script type" />
@@ -252,7 +299,7 @@ export const ScriptConf: React.FC<BaseConfigProps> = ({
 
         <div className="grid grid-cols-1 gap-3">
           <Link
-            to={getEditorUrl()}
+            to={"/script-editor"}
             target="_blank"
             rel="noopener noreferrer"
             className="w-full"
@@ -283,27 +330,34 @@ export const ScriptConf: React.FC<BaseConfigProps> = ({
           </label>
           <Select
             onValueChange={handleScriptSelect}
-            value={selectedNode.data?.selectedScript || ""}
+            value={selectedNode.data?.selectedScript?.script_id || ""}
           >
             <SelectTrigger className="w-full h-11 text-sm bg-white dark:bg-gray-950 border border-gray-300 dark:border-gray-700 text-gray-900 dark:text-gray-100">
               <SelectValue placeholder="Choose a script..." />
             </SelectTrigger>
             <SelectContent className="bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 border border-gray-200 dark:border-gray-800">
-              {getSavedScripts().map((script: ScriptFile) => (
-                <SelectItem
-                  key={script.id}
-                  value={script.id}
-                  className="text-sm"
-                >
-                  <div className="flex items-center space-x-2">
-                    <FileText size={14} />
-                    <span>{script.name}</span>
-                    <span className="text-xs text-gray-500 dark:text-gray-400">
-                      {script.source === "upload" ? "↑" : "✏️"}
-                    </span>
-                  </div>
-                </SelectItem>
-              ))}
+              {isLoadingScripts ? (
+                <div className="flex items-center justify-center p-4">
+                  <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                  <span className="text-sm">Loading scripts...</span>
+                </div>
+              ) : (
+                getSavedScripts().map((script: ScriptFile) => (
+                  <SelectItem
+                    key={script.id}
+                    value={script.id}
+                    className="text-sm"
+                  >
+                    <div className="flex items-center space-x-2">
+                      <FileText size={14} />
+                      <span>{script.name}</span>
+                      <span className="text-xs text-gray-500 dark:text-gray-400">
+                        {script.source === "upload" ? "↑" : "✏️"}
+                      </span>
+                    </div>
+                  </SelectItem>
+                ))
+              )}
               {getSavedScripts().length === 0 && (
                 <SelectItem
                   value="none"
@@ -334,11 +388,7 @@ export const ScriptConf: React.FC<BaseConfigProps> = ({
             </Label>
             <Select
               onValueChange={handleServerSelect}
-              value={
-                allServers.find(
-                  (s) => s.host === selectedNode.data?.serverAddress,
-                )?.id || ""
-              }
+              value={selectedNode.data?.selectedServer?.id || ""}
             >
               <SelectTrigger className="w-full h-11 text-sm bg-white dark:bg-gray-950 border border-gray-300 dark:border-gray-700 text-gray-900 dark:text-gray-100">
                 <SelectValue placeholder="Select server from vault..." />

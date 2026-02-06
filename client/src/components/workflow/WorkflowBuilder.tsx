@@ -26,11 +26,7 @@ import { Vault } from "../vault/Vault";
 import { useTheme } from "@/provider/theme-provider";
 import Header from "./Header";
 import { toast } from "@/hooks/use-toast";
-import {
-  createWorkflow,
-  updateWorkflow,
-  deleteWorkflow,
-} from "@/lib/actions/workflow";
+import { createWorkflow, updateWorkflow } from "@/lib/actions/workflow";
 import { useAuth } from "@clerk/clerk-react";
 
 const nodeTypes = {
@@ -86,6 +82,7 @@ const WorkflowBuilderContent = ({
         edges: savedEdges = [],
         name = "",
       } = dataToLoad;
+
       setNodes(savedNodes);
       setEdges(savedEdges);
       setWorkflowName(name);
@@ -112,7 +109,9 @@ const WorkflowBuilderContent = ({
       const { name, nodes: importedNodes, edges: importedEdges } = workflowData;
 
       if (importedNodes && Array.isArray(importedNodes)) {
-        setNodes(importedNodes);
+        if (importedNodes && Array.isArray(importedNodes)) {
+          setNodes(importedNodes);
+        }
       }
 
       if (importedEdges && Array.isArray(importedEdges)) {
@@ -300,7 +299,6 @@ const WorkflowBuilderContent = ({
       return;
     }
 
-    // Enhanced workflow logging with detailed node information
     const workflow = {
       name: workflowName,
       nodes: nodes.map((node) => {
@@ -308,48 +306,8 @@ const WorkflowBuilderContent = ({
           id: node.id,
           type: node.type,
           position: node.position,
-          data: node.data,
+          data: { ...node.data },
         };
-
-        // Add script file information for action nodes
-        if (node.type === "action" && node.data?.selectedScript) {
-          try {
-            const savedFiles = localStorage.getItem("scriptFiles");
-            if (savedFiles) {
-              const files = JSON.parse(savedFiles);
-              const selectedScript = files.find(
-                (file: ScriptFile) => file.id === node.data.selectedScript,
-              );
-              if (selectedScript) {
-                // Generate blob URL for the script content
-
-                const codeLink = `${window.location.origin}/raw/${selectedScript.id}`;
-
-                nodeDetails.data = {
-                  ...nodeDetails.data,
-                  scriptFile: {
-                    id: selectedScript.id,
-                    name: selectedScript.name,
-                    language: selectedScript.language,
-                    source:
-                      selectedScript.source === "upload"
-                        ? "Uploaded File"
-                        : "Written in Editor",
-                    lastModified: selectedScript.lastModified,
-                    codeLink: codeLink,
-                  },
-                };
-
-                // Clean up blob URL after delay
-                setTimeout(() => {
-                  URL.revokeObjectURL(codeLink);
-                }, 300000);
-              }
-            }
-          } catch (error) {
-            console.error("Error loading script file details:", error);
-          }
-        }
 
         return nodeDetails;
       }),
