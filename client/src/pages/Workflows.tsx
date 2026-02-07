@@ -20,7 +20,7 @@ import Loader from "@/components/Loader";
 import { toast } from "@/hooks/use-toast";
 import { toast as toast2 } from "sonner";
 import { deleteWorkflow } from "@/lib/actions/workflow";
-import { DeleteWorkflowDialog } from "@/components/workflow/DeleteWorkflowDialog";
+import { DeleteConfirmationModal } from "@/components/DeleteConfirmationModal";
 
 const Workflows = () => {
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
@@ -113,7 +113,7 @@ const Workflows = () => {
 
   const handleDeleteClick = (workflowId: string) => {
     setWorkflowToDelete(workflowId);
-    setDeleteModalOpen(true);
+    setTimeout(() => setDeleteModalOpen(true), 0);
   };
 
   const confirmDeleteWorkflow = async () => {
@@ -152,6 +152,7 @@ const Workflows = () => {
     } finally {
       toast2.dismiss();
       setWorkflowToDelete(null);
+      setDeleteModalOpen(false);
     }
   };
 
@@ -319,10 +320,13 @@ const Workflows = () => {
           </div>
         </main>
       </div>
-      <DeleteWorkflowDialog
-        open={deleteModalOpen}
-        onOpenChange={setDeleteModalOpen}
+      <DeleteConfirmationModal
+        isOpen={deleteModalOpen}
+        onClose={() => setDeleteModalOpen(false)}
         onConfirm={confirmDeleteWorkflow}
+        title="Delete Workflow?"
+        description={`Are you sure you want to delete this workflow? This action cannot be undone.`}
+        isLoading={loading}
       />
     </div>
   );

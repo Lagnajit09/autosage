@@ -225,15 +225,22 @@ export const FileExplorerSidebar: React.FC<FileExplorerSidebarProps> = ({
                     </div>
                   ) : (
                     <>
-                      <SidebarMenuButton
-                        onClick={() => onSelectFile(file)}
-                        isActive={currentFile?.id === file.id}
-                        tooltip={file.name}
-                        className="group/item"
-                      >
-                        {getFileIcon(file.name)}
-                        <span>{file.name}</span>
-                      </SidebarMenuButton>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <SidebarMenuButton
+                            onClick={() => onSelectFile(file)}
+                            isActive={currentFile?.id === file.id}
+                            tooltip={file.name}
+                            className="group/item"
+                          >
+                            {getFileIcon(file.name)}
+                            <span>{file.name}</span>
+                          </SidebarMenuButton>
+                        </TooltipTrigger>
+                        <TooltipContent side="right">
+                          {file.name}
+                        </TooltipContent>
+                      </Tooltip>
 
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>

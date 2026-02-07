@@ -1,6 +1,16 @@
 import { useState, useEffect } from "react";
 import { useSearchParams } from "react-router-dom";
-import { Save, File, X, Menu, AlertCircle } from "lucide-react";
+import {
+  Save,
+  File,
+  X,
+  Menu,
+  AlertCircle,
+  Braces,
+  Code,
+  Terminal,
+  SquareTerminal,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ScriptFile, ScriptLanguage } from "@/utils/types";
 import Editor, { OnMount } from "@monaco-editor/react";
@@ -19,6 +29,7 @@ import { useToast } from "@/hooks/use-toast";
 import { toast } from "sonner";
 import { useAuth } from "@clerk/clerk-react";
 import { scriptService, mapScriptToScriptFile } from "@/lib/api/scripts";
+import { DeleteConfirmationModal } from "@/components/DeleteConfirmationModal";
 
 const CodeEditor = () => {
   const [searchParams] = useSearchParams();
@@ -38,6 +49,10 @@ const CodeEditor = () => {
   // Inline File Operation State
   const [isCreatingFile, setIsCreatingFile] = useState(false);
   const [renamingFileId, setRenamingFileId] = useState<string | null>(null);
+
+  // Delete Confirmation State
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [scriptToDeleteId, setScriptToDeleteId] = useState<string | null>(null);
 
   // Get token on auth change
   useEffect(() => {
@@ -147,13 +162,13 @@ const CodeEditor = () => {
     const iconClass = "w-4 h-4";
     switch (ext) {
       case "py":
-        return <File className={cn(iconClass, "text-blue-500")} />;
+        return <Braces className={cn(iconClass, "text-blue-500")} />;
       case "js":
-        return <File className={cn(iconClass, "text-yellow-500")} />;
+        return <Code className={cn(iconClass, "text-yellow-500")} />;
       case "sh":
-        return <File className={cn(iconClass, "text-green-500")} />;
+        return <Terminal className={cn(iconClass, "text-green-500")} />;
       case "ps1":
-        return <File className={cn(iconClass, "text-cyan-500")} />;
+        return <SquareTerminal className={cn(iconClass, "text-orange-500")} />;
       default:
         return <File className={cn(iconClass, "text-gray-500")} />;
     }
@@ -371,25 +386,27 @@ const CodeEditor = () => {
     }
   };
 
-  const deleteScript = async (fileId: string) => {
+  const confirmDeleteScript = async () => {
+    if (!scriptToDeleteId) return;
+
     setIsLoading(true);
     toast.loading("Deleting file...");
     try {
       const clerkToken = await getToken();
 
-      await scriptService.delete(fileId, clerkToken);
+      await scriptService.delete(scriptToDeleteId, clerkToken);
 
-      const updatedFiles = files.filter((f) => f.id !== fileId);
+      const updatedFiles = files.filter((f) => f.id !== scriptToDeleteId);
       setFiles(updatedFiles);
 
-      const updatedTabs = openTabs.filter((tab) => tab.id !== fileId);
+      const updatedTabs = openTabs.filter((tab) => tab.id !== scriptToDeleteId);
       setOpenTabs(updatedTabs);
       localStorage.setItem(
         "openTabs",
         JSON.stringify(updatedTabs.map((t) => t.id)),
       );
 
-      if (currentFile?.id === fileId) {
+      if (currentFile?.id === scriptToDeleteId) {
         const newActiveTab = updatedTabs.length > 0 ? updatedTabs[0] : null;
         setCurrentFile(newActiveTab);
         setHasUnsavedChanges(false);
@@ -409,7 +426,14 @@ const CodeEditor = () => {
     } finally {
       setIsLoading(false);
       toast.dismiss();
+      setDeleteModalOpen(false);
+      setScriptToDeleteId(null);
     }
+  };
+
+  const handleDeleteScriptClick = (fileId: string) => {
+    setScriptToDeleteId(fileId);
+    setTimeout(() => setDeleteModalOpen(true), 0);
   };
 
   const handleEditorChange = (value: string | undefined) => {
@@ -727,7 +751,7 @@ const CodeEditor = () => {
           currentFile={currentFile}
           onSelectFile={selectFile}
           onCreateFile={startCreateFile}
-          onDeleteFile={deleteScript}
+          onDeleteFile={handleDeleteScriptClick}
           onRenameFile={(file) => setRenamingFileId(file.id)}
           onDuplicateFile={duplicateFile}
           onDownloadFile={downloadFile}
@@ -863,6 +887,14 @@ const CodeEditor = () => {
             onToggle={() => setIsAISidebarOpen(!isAISidebarOpen)}
           />
         </SidebarInset>
+        <DeleteConfirmationModal
+          isOpen={deleteModalOpen}
+          onClose={() => setDeleteModalOpen(false)}
+          onConfirm={confirmDeleteScript}
+          title="Delete Script?"
+          description="Are you sure you want to delete this script? This action cannot be undone."
+          isLoading={isLoading}
+        />
       </div>
     </SidebarProvider>
   );

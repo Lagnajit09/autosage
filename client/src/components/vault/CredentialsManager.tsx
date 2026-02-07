@@ -26,7 +26,7 @@ import { toast } from "sonner";
 import { useAuth } from "@clerk/clerk-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
 
-import { DeleteConfirmationModal } from "./DeleteConfirmationModal";
+import { DeleteConfirmationModal } from "../DeleteConfirmationModal";
 import { CredentialRevealModal } from "./CredentialRevealModal";
 
 export function CredentialsManager({

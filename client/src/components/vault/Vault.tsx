@@ -22,7 +22,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Trash2, Server as ServerIcon, Key, Loader2 } from "lucide-react";
 import { CredentialsManager } from "./CredentialsManager";
 import { ServersManager } from "./ServersManager";
-import { DeleteConfirmationModal } from "./DeleteConfirmationModal";
+import { DeleteConfirmationModal } from "../DeleteConfirmationModal";
 import { Vault as VaultType, Credential, Server } from "@/utils/types";
 import { apiRequest } from "@/lib/api-client";
 import { toast } from "sonner";

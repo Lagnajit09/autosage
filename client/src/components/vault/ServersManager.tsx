@@ -23,7 +23,7 @@ import { Server, Credential } from "@/utils/types";
 import { apiRequest } from "@/lib/api-client";
 import { toast } from "sonner";
 import { useAuth } from "@clerk/clerk-react";
-import { DeleteConfirmationModal } from "./DeleteConfirmationModal";
+import { DeleteConfirmationModal } from "../DeleteConfirmationModal";
 
 export function ServersManager({
   vaultId,

@@ -18,9 +18,9 @@ import { RightSidebar } from "./RightSidebar/RightSidebar";
 import { TriggerNode } from "./nodes/TriggerNode";
 import { ActionNode } from "./nodes/ActionNode";
 import { LeftSidebar } from "./LeftSidebar";
-import { Edge, NodeData, ScriptFile, WorkflowData } from "@/utils/types";
+import { Edge, NodeData, WorkflowData } from "@/utils/types";
 import { ImportWorkflowDialog } from "./ImportWorkflowDialog";
-import { DeleteWorkflowDialog } from "./DeleteWorkflowDialog";
+import { DeleteConfirmationModal } from "@/components/DeleteConfirmationModal";
 import { DecisionNode } from "./nodes/DecisionNode";
 import { AIWorkflowGenerator } from "./AIWorkflowGenerator";
 import GenieButton from "../GenieButton";
@@ -355,6 +355,7 @@ const WorkflowBuilderContent = ({
         title: "Workflow Cleared",
         description: "The canvas has been cleared.",
       });
+      setDeleteModalOpen(false);
       return;
     }
 
@@ -384,11 +385,12 @@ const WorkflowBuilderContent = ({
       });
     } finally {
       toast2.dismiss();
+      setDeleteModalOpen(false);
     }
   };
 
   const handleDeleteWorkflow = () => {
-    setDeleteModalOpen(true);
+    setTimeout(() => setDeleteModalOpen(true), 0);
   };
 
   const saveWorkflow = async () => {
@@ -627,11 +629,12 @@ const WorkflowBuilderContent = ({
         onGenerate={importWorkflow}
       />
 
-      <DeleteWorkflowDialog
-        open={deleteModalOpen}
-        onOpenChange={setDeleteModalOpen}
+      <DeleteConfirmationModal
+        isOpen={deleteModalOpen}
+        onClose={() => setDeleteModalOpen(false)}
         onConfirm={performDeleteWorkflow}
-        workflowName={workflowName}
+        title="Delete Workflow?"
+        description={`Are you sure you want to delete "${workflowName || "this workflow"}"? This action cannot be undone.`}
       />
     </div>
   );
