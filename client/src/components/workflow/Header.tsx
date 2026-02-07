@@ -14,6 +14,7 @@ import {
   Plus,
   Trash2,
   Code2,
+  Eraser,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -31,6 +32,7 @@ const Header = ({
   setShowImportDialog,
   setShowVault,
   showVault,
+  onClearCanvas,
   onDeleteWorkflow,
 }: {
   nodes: number;
@@ -38,6 +40,7 @@ const Header = ({
   setShowImportDialog: (value: boolean) => void;
   setShowVault: (value: boolean) => void;
   showVault: boolean;
+  onClearCanvas?: () => void;
   onDeleteWorkflow?: () => void;
 }) => {
   const { isDark, toggleTheme } = useTheme();
@@ -120,6 +123,15 @@ const Header = ({
                 >
                   <Plus className="mr-2 h-4 w-4" />
                   <span>New Workflow</span>
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={() => {
+                    if (onClearCanvas) onClearCanvas();
+                  }}
+                  className="cursor-pointer text-gray-700 dark:text-gray-300 focus:bg-gray-100 dark:focus:bg-gray-800"
+                >
+                  <Eraser className="mr-2 h-4 w-4" />
+                  <span>Clear Canvas</span>
                 </DropdownMenuItem>
                 <DropdownMenuItem
                   onClick={() => {

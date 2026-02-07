@@ -17,6 +17,10 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "@clerk/clerk-react";
 import { apiRequest } from "@/lib/api-client";
 import Loader from "@/components/Loader";
+import { toast } from "@/hooks/use-toast";
+import { toast as toast2 } from "sonner";
+import { deleteWorkflow } from "@/lib/actions/workflow";
+import { DeleteWorkflowDialog } from "@/components/workflow/DeleteWorkflowDialog";
 
 const Workflows = () => {
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
@@ -25,6 +29,8 @@ const Workflows = () => {
   const [workflows, setWorkflows] = useState<Workflow[]>([]);
   const [loading, setLoading] = useState(true);
   const [token, setToken] = useState<string | null>(null);
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [workflowToDelete, setWorkflowToDelete] = useState<string | null>(null);
 
   const navigate = useNavigate();
   const { getToken, isSignedIn } = useAuth();
@@ -50,6 +56,7 @@ const Workflows = () => {
   useEffect(() => {
     if (token) {
       const fetchWorkflows = async () => {
+        toast2.loading("Fetching workflows...");
         setLoading(true);
         try {
           const response = await apiRequest("/api/workflows/", {}, token);
@@ -71,11 +78,14 @@ const Workflows = () => {
             : [];
 
           setWorkflows(mappedWorkflows);
+          toast2.success("Workflows fetched successfully!");
         } catch (error) {
           console.error("Failed to fetch workflows:", error);
+          toast2.error("Failed to fetch workflows!");
           setWorkflows([]); // Fallback to empty list on error
         } finally {
           setLoading(false);
+          toast2.dismiss();
         }
       };
       fetchWorkflows();
@@ -100,6 +110,50 @@ const Workflows = () => {
         .toLowerCase()
         .includes(debouncedSearchQuery.toLowerCase()),
   );
+
+  const handleDeleteClick = (workflowId: string) => {
+    setWorkflowToDelete(workflowId);
+    setDeleteModalOpen(true);
+  };
+
+  const confirmDeleteWorkflow = async () => {
+    if (!workflowToDelete) return;
+
+    toast2.loading("Deleting workflow...");
+    if (!isSignedIn) {
+      toast({
+        title: "Unauthorized",
+        description: "You must be signed in to delete a workflow.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      const clerkToken = await getToken();
+      const response = await deleteWorkflow(workflowToDelete, clerkToken);
+      if (response.success) {
+        toast({
+          title: "Workflow Deleted",
+          description: "Workflow successfully deleted.",
+        });
+      }
+
+      setWorkflows((prevWorkflows) =>
+        prevWorkflows.filter((workflow) => workflow.id !== workflowToDelete),
+      );
+    } catch (error) {
+      console.error("Failed to delete workflow:", error);
+      toast({
+        title: "Error",
+        description: "Failed to delete workflow.",
+        variant: "destructive",
+      });
+    } finally {
+      toast2.dismiss();
+      setWorkflowToDelete(null);
+    }
+  };
 
   if (loading) {
     return (
@@ -234,9 +288,17 @@ const Workflows = () => {
               {filteredWorkflows.length > 0 ? (
                 filteredWorkflows.map((workflow) =>
                   viewMode === "grid" ? (
-                    <WorkflowCard key={workflow.id} workflow={workflow} />
+                    <WorkflowCard
+                      key={workflow.id}
+                      workflow={workflow}
+                      onDelete={handleDeleteClick}
+                    />
                   ) : (
-                    <WorkflowListItem key={workflow.id} workflow={workflow} />
+                    <WorkflowListItem
+                      key={workflow.id}
+                      workflow={workflow}
+                      onDelete={handleDeleteClick}
+                    />
                   ),
                 )
               ) : (
@@ -257,6 +319,11 @@ const Workflows = () => {
           </div>
         </main>
       </div>
+      <DeleteWorkflowDialog
+        open={deleteModalOpen}
+        onOpenChange={setDeleteModalOpen}
+        onConfirm={confirmDeleteWorkflow}
+      />
     </div>
   );
 };

@@ -1,16 +1,6 @@
+import { ActionNodeData } from "@/utils/types";
 import { Handle, Position } from "@xyflow/react";
 import { Terminal, Mail } from "lucide-react";
-
-interface ActionNodeData {
-  type: string;
-  label: string;
-  description?: string;
-  executionMode?: "local" | "remote";
-  serverAddress?: string;
-  userID?: string;
-  password?: string;
-  outputFormat?: "text" | "json";
-}
 
 // Helper function to get the appropriate icon based on action type
 const getIcon = (type: string) => {

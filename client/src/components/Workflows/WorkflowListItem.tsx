@@ -5,7 +5,13 @@ import { cn } from "@/lib/utils";
 import { Workflow } from "./types";
 import { useNavigate } from "react-router-dom";
 
-export const WorkflowListItem = ({ workflow }: { workflow: Workflow }) => {
+export const WorkflowListItem = ({
+  workflow,
+  onDelete,
+}: {
+  workflow: Workflow;
+  onDelete: (workflowId: string) => void;
+}) => {
   const navigate = useNavigate();
   return (
     <div className="group flex flex-col md:flex-row items-start md:items-center justify-between p-4 bg-white dark:bg-gray-800/40 border border-gray-200 dark:border-gray-700/50 rounded-xl hover:shadow-md hover:border-purple-500/30 dark:hover:border-purple-500/30 transition-all duration-300 gap-4 md:gap-0">
@@ -80,6 +86,7 @@ export const WorkflowListItem = ({ workflow }: { workflow: Workflow }) => {
         <Button
           variant="ghost"
           size="icon"
+          onClick={() => onDelete(workflow.id)}
           className="text-gray-500 hover:text-red-600 dark:hover:text-red-400"
         >
           <Trash2 className="w-4 h-4" />

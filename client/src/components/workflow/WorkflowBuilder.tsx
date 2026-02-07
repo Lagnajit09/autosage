@@ -15,18 +15,20 @@ import {
 import "@xyflow/react/dist/style.css";
 
 import { RightSidebar } from "./RightSidebar/RightSidebar";
-import { TriggerNode } from "../nodes/TriggerNode";
-import { ActionNode } from "../nodes/ActionNode";
+import { TriggerNode } from "./nodes/TriggerNode";
+import { ActionNode } from "./nodes/ActionNode";
 import { LeftSidebar } from "./LeftSidebar";
 import { Edge, NodeData, ScriptFile, WorkflowData } from "@/utils/types";
 import { ImportWorkflowDialog } from "./ImportWorkflowDialog";
-import { DecisionNode } from "../nodes/DecisionNode";
+import { DeleteWorkflowDialog } from "./DeleteWorkflowDialog";
+import { DecisionNode } from "./nodes/DecisionNode";
 import { AIWorkflowGenerator } from "./AIWorkflowGenerator";
 import GenieButton from "../GenieButton";
 import { Vault } from "../vault/Vault";
 import { useTheme } from "@/provider/theme-provider";
 import Header from "./Header";
 import { toast } from "@/hooks/use-toast";
+import { toast as toast2 } from "sonner";
 import {
   createWorkflow,
   updateWorkflow,
@@ -62,6 +64,7 @@ const WorkflowBuilderContent = ({
   const [showImportDialog, setShowImportDialog] = useState(false);
   const [showVault, setShowVault] = useState(false);
   const [showAIGenerator, setShowAIGenerator] = useState(false);
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [reactFlowInstance, setReactFlowInstance] =
     useState<ReactFlowInstance | null>(null);
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
@@ -111,6 +114,7 @@ const WorkflowBuilderContent = ({
   }, [selectedNode, selectedEdge]);
 
   const importWorkflow = (workflowData: WorkflowData) => {
+    toast2.loading("Importing workflow...");
     try {
       const { name, nodes: importedNodes, edges: importedEdges } = workflowData;
 
@@ -134,13 +138,36 @@ const WorkflowBuilderContent = ({
           reactFlowInstance.fitView();
         }, 100);
       }
+      toast2.success("Workflow imported successfully");
     } catch (error) {
       console.error("Error importing workflow:", error);
+      toast2.error("Error importing workflow");
+    } finally {
+      toast2.dismiss();
     }
   };
 
   const onConnect = useCallback(
-    (params: Connection) => setEdges((eds) => addEdge(params, eds)),
+    (params: Connection) => {
+      const { sourceHandle } = params;
+      let edgeOptions = {};
+
+      if (sourceHandle === "true") {
+        edgeOptions = {
+          style: { stroke: "#10b981", strokeWidth: 2 },
+          label: "True",
+          type: "smoothstep",
+        };
+      } else if (sourceHandle === "false") {
+        edgeOptions = {
+          style: { stroke: "#ef4444", strokeWidth: 2 },
+          label: "False",
+          type: "smoothstep",
+        };
+      }
+
+      setEdges((eds) => addEdge({ ...params, ...edgeOptions }, eds));
+    },
     [setEdges],
   );
 
@@ -295,7 +322,18 @@ const WorkflowBuilderContent = ({
     [setEdges],
   );
 
-  const handleDeleteWorkflow = async () => {
+  const handleClearCanvas = () => {
+    setNodes([]);
+    setEdges([]);
+    setWorkflowName("");
+    localStorage.removeItem("currentWorkflow");
+    toast({
+      title: "Workflow Cleared",
+      description: "The canvas has been cleared.",
+    });
+  };
+
+  const performDeleteWorkflow = async () => {
     if (!isSignedIn) {
       toast({
         title: "Error",
@@ -304,6 +342,8 @@ const WorkflowBuilderContent = ({
       });
       return;
     }
+
+    toast2.loading("Deleting workflow...");
 
     // If it's a new workflow (no ID), just clear the canvas
     if (!workflowId) {
@@ -342,7 +382,13 @@ const WorkflowBuilderContent = ({
         description: "Failed to delete workflow.",
         variant: "destructive",
       });
+    } finally {
+      toast2.dismiss();
     }
+  };
+
+  const handleDeleteWorkflow = () => {
+    setDeleteModalOpen(true);
   };
 
   const saveWorkflow = async () => {
@@ -354,6 +400,8 @@ const WorkflowBuilderContent = ({
       });
       return;
     }
+
+    toast2.loading("Saving workflow...");
 
     const workflow = {
       name: workflowName,
@@ -442,6 +490,8 @@ const WorkflowBuilderContent = ({
             : "Failed to save workflow. Please try again.",
         variant: "destructive",
       });
+    } finally {
+      toast2.dismiss();
     }
   };
 
@@ -455,6 +505,7 @@ const WorkflowBuilderContent = ({
           setShowVault={setShowVault}
           showVault={showVault}
           setShowImportDialog={setShowImportDialog}
+          onClearCanvas={handleClearCanvas}
           onDeleteWorkflow={handleDeleteWorkflow}
         />
 
@@ -574,6 +625,13 @@ const WorkflowBuilderContent = ({
         isOpen={showAIGenerator}
         onClose={() => setShowAIGenerator(false)}
         onGenerate={importWorkflow}
+      />
+
+      <DeleteWorkflowDialog
+        open={deleteModalOpen}
+        onOpenChange={setDeleteModalOpen}
+        onConfirm={performDeleteWorkflow}
+        workflowName={workflowName}
       />
     </div>
   );

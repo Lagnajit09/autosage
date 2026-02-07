@@ -1,15 +1,6 @@
 import { Handle, Position } from "@xyflow/react";
 import { GitBranch } from "lucide-react";
-import { ConditionItem } from "@/utils/types";
-
-interface DecisionNodeData {
-  label?: string;
-  conditionType?: "output-eval" | "condition" | "custom";
-  conditions?: ConditionItem[];
-  trueLabel?: string[];
-  falseLabel?: string[];
-  description?: string;
-}
+import { DecisionNodeData } from "@/utils/types";
 
 export const DecisionNode = ({
   data,

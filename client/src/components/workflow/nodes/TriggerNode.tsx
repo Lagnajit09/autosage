@@ -1,11 +1,6 @@
+import { TriggerNodeData } from "@/utils/types";
 import { Handle, Position } from "@xyflow/react";
 import { Globe, Play, Zap } from "lucide-react";
-
-interface TriggerNodeData {
-  type: string;
-  label: string;
-  description?: string;
-}
 
 // Helper function to get the appropriate icon based on trigger type
 const getIcon = (type: string) => {

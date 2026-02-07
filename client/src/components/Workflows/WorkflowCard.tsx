@@ -11,7 +11,13 @@ import { cn } from "@/lib/utils";
 import { Workflow } from "./types";
 import { useNavigate } from "react-router-dom";
 
-export const WorkflowCard = ({ workflow }: { workflow: Workflow }) => {
+export const WorkflowCard = ({
+  workflow,
+  onDelete,
+}: {
+  workflow: Workflow;
+  onDelete: (workflowId: string) => void;
+}) => {
   const navigate = useNavigate();
   return (
     <div className="group flex flex-col bg-white dark:bg-gray-800/40 border border-gray-200 dark:border-gray-700/50 rounded-xl overflow-hidden hover:shadow-lg hover:border-purple-500/30 dark:hover:border-purple-500/30 transition-all duration-300">
@@ -40,7 +46,10 @@ export const WorkflowCard = ({ workflow }: { workflow: Workflow }) => {
               <DropdownMenuItem className="dark:text-gray-200 dark:hover:bg-gray-800 cursor-pointer">
                 View Logs
               </DropdownMenuItem>
-              <DropdownMenuItem className="text-red-600 dark:text-red-400 dark:hover:bg-gray-800 cursor-pointer">
+              <DropdownMenuItem
+                onClick={() => onDelete(workflow.id)}
+                className="text-red-600 dark:text-red-400 dark:hover:bg-gray-800 cursor-pointer"
+              >
                 Delete
               </DropdownMenuItem>
             </DropdownMenuContent>

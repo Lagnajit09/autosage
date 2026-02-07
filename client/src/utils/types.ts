@@ -234,3 +234,29 @@ export interface ScriptContentResponse {
   content_type: string;
   version: number;
 }
+
+export interface TriggerNodeData {
+  type: string;
+  label: string;
+  description?: string;
+}
+
+export interface ActionNodeData {
+  type: string;
+  label: string;
+  description?: string;
+  executionMode?: "local" | "remote";
+  serverAddress?: string;
+  userID?: string;
+  password?: string;
+  outputFormat?: "text" | "json";
+}
+
+export interface DecisionNodeData {
+  label?: string;
+  conditionType?: "output-eval" | "condition" | "custom";
+  conditions?: ConditionItem[];
+  trueLabel?: string[];
+  falseLabel?: string[];
+  description?: string;
+}
