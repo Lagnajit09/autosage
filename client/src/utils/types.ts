@@ -58,23 +58,32 @@ export interface NodeData {
   description?: string;
   parameters?: Parameter[];
 
-  // Execution specific fields
+  // Execution Specific
   executionMode?: "local" | "remote";
-  selectedCredential?: Credential;
-  selectedServer?: Server;
+
+  // Vault Specific
+  vaultDetails?: {
+    vaultId?: string;
+    serverId?: string;
+    credentialId?: string;
+  };
+
+  // Script Specific
   selectedScript?: {
     type: "Python Script" | "Powershell Script" | "Shell Script";
-    script_id: string;
+    scriptId: string;
   };
+
+  // Output Specific
   outputFormat?: "text" | "json";
   jsonSchema?: OutputField[];
 
-  // Decision specific fields
+  // Decision Specific
   conditions?: ConditionItem[];
   trueLabel?: string[];
   falseLabel?: string[];
 
-  // Trigger specific fields
+  // Trigger Specific
   schedule?: string;
   watchPath?: string;
   webhookUrl?: string;
@@ -82,7 +91,7 @@ export interface NodeData {
   webhookHeaders?: Record<string, string>;
   webhookBody?: string;
 
-  // Email specific fields
+  // Email Specific
   from?: string;
   to?: string[];
   cc?: string[];

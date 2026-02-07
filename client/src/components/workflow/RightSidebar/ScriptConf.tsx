@@ -141,7 +141,7 @@ export const ScriptConf: React.FC<BaseConfigProps> = ({
                     : language === "powershell"
                       ? "Powershell Script"
                       : "Shell Script",
-                script_id: createdScript.id.toString(),
+                scriptId: createdScript.id.toString(),
               },
             });
           } catch (error: any) {
@@ -173,7 +173,7 @@ export const ScriptConf: React.FC<BaseConfigProps> = ({
     onUpdateNode(selectedNode.id, {
       selectedScript: {
         type: currentScriptType,
-        script_id: scriptId,
+        scriptId: scriptId,
       },
     });
   };
@@ -182,46 +182,37 @@ export const ScriptConf: React.FC<BaseConfigProps> = ({
     onUpdateNode(selectedNode.id, {
       selectedScript: {
         type: type as any,
-        script_id: "", // Reset selection on type change
+        scriptId: "", // Reset selection on type change
       },
     });
   };
 
   const handleCredentialSelect = (credentialId: string) => {
-    const selectedCred = allCredentials.find(
-      (cred: Credential) => cred.id === credentialId,
-    );
-    if (selectedCred) {
-      onUpdateNode(selectedNode.id, {
-        selectedCredential: {
-          id: selectedCred.id,
-          name: selectedCred.name,
-          credential_type: selectedCred.credential_type,
-          username: selectedCred.username,
-          password: selectedCred.password,
-          vault: selectedCred.vault,
-        },
-      });
-    }
+    onUpdateNode(selectedNode.id, {
+      vaultDetails: {
+        ...selectedNode.data?.vaultDetails,
+        credentialId: credentialId,
+      },
+    });
   };
 
   const handleServerSelect = (serverId: string) => {
     const selectedServer = allServers.find((s) => s.id === serverId);
     if (selectedServer) {
-      const updates: any = {
-        selectedServer: selectedServer,
-      };
-
-      // Auto-populate credential if associated
+      // Find associated credential if it exists on the server to auto-select it
+      let credentialId = selectedNode.data?.vaultDetails?.credentialId;
       if (selectedServer.credential) {
-        const associatedCred = allCredentials.find(
-          (c) => c.id === selectedServer.credential,
-        );
-        if (associatedCred) {
-          updates.selectedCredential = associatedCred;
-        }
+        credentialId = selectedServer.credential;
       }
-      onUpdateNode(selectedNode.id, updates);
+
+      onUpdateNode(selectedNode.id, {
+        vaultDetails: {
+          ...selectedNode.data?.vaultDetails,
+          serverId: serverId,
+          vaultId: selectedServer.vault,
+          credentialId: credentialId,
+        },
+      });
     }
   };
 
@@ -230,13 +221,7 @@ export const ScriptConf: React.FC<BaseConfigProps> = ({
   };
 
   const getSelectedCredentialId = () => {
-    const selectedCred = selectedNode.data?.selectedCredential;
-    if (typeof selectedCred === "string") {
-      return selectedCred;
-    } else if (selectedCred && typeof selectedCred === "object") {
-      return selectedCred.id;
-    }
-    return "";
+    return selectedNode.data?.vaultDetails?.credentialId || "";
   };
 
   return (
@@ -330,7 +315,7 @@ export const ScriptConf: React.FC<BaseConfigProps> = ({
           </label>
           <Select
             onValueChange={handleScriptSelect}
-            value={selectedNode.data?.selectedScript?.script_id || ""}
+            value={selectedNode.data?.selectedScript?.scriptId || ""}
           >
             <SelectTrigger className="w-full h-11 text-sm bg-white dark:bg-gray-950 border border-gray-300 dark:border-gray-700 text-gray-900 dark:text-gray-100">
               <SelectValue placeholder="Choose a script..." />
@@ -388,7 +373,7 @@ export const ScriptConf: React.FC<BaseConfigProps> = ({
             </Label>
             <Select
               onValueChange={handleServerSelect}
-              value={selectedNode.data?.selectedServer?.id || ""}
+              value={selectedNode.data?.vaultDetails?.serverId || ""}
             >
               <SelectTrigger className="w-full h-11 text-sm bg-white dark:bg-gray-950 border border-gray-300 dark:border-gray-700 text-gray-900 dark:text-gray-100">
                 <SelectValue placeholder="Select server from vault..." />
