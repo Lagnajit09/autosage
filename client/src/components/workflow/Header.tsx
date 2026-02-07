@@ -8,10 +8,19 @@ import {
   DatabaseZap,
   FileInput,
   Moon,
+  MoreVertical,
   PlayCircle,
-  PlusSquare,
   Sun,
+  Plus,
+  Trash2,
+  Code2,
 } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { useTheme } from "@/provider/theme-provider";
 import { Button } from "../ui/button";
 import { useNavigate } from "react-router-dom";
@@ -22,12 +31,14 @@ const Header = ({
   setShowImportDialog,
   setShowVault,
   showVault,
+  onDeleteWorkflow,
 }: {
   nodes: number;
   edges: number;
   setShowImportDialog: (value: boolean) => void;
   setShowVault: (value: boolean) => void;
   showVault: boolean;
+  onDeleteWorkflow?: () => void;
 }) => {
   const { isDark, toggleTheme } = useTheme();
   const navigate = useNavigate();
@@ -55,15 +66,6 @@ const Header = ({
           </div>
 
           <div className="flex gap-2">
-            <Tooltip>
-              <TooltipTrigger onClick={() => navigate("/workflow/new")}>
-                <PlusSquare className="text-gray-900 dark:text-gray-900 bg-purple-100 dark:bg-gray-300 w-8 h-8 p-2 transition-transform duration-200 ease-in-out hover:scale-125 rounded-full" />
-              </TooltipTrigger>
-              <TooltipContent className="text-xs p-1 rounded-md bg-gray-200 dark:bg-gray-800 dark:text-gray-200">
-                <p>New Workflow</p>
-              </TooltipContent>
-            </Tooltip>
-
             <Tooltip>
               <TooltipTrigger onClick={() => setShowImportDialog(true)}>
                 <FileInput className="text-gray-900 dark:text-gray-900 bg-purple-100 dark:bg-gray-300 w-8 h-8 p-2 transition-transform duration-200 ease-in-out hover:scale-125 rounded-full" />
@@ -103,6 +105,40 @@ const Header = ({
                 <p>{isDark ? "Light Mode" : "Dark Mode"}</p>
               </TooltipContent>
             </Tooltip>
+
+            <DropdownMenu>
+              <DropdownMenuTrigger>
+                <MoreVertical className="text-gray-900 dark:text-gray-900 bg-purple-100 dark:bg-gray-300 w-8 h-8 p-2 transition-transform duration-200 ease-in-out hover:scale-125 rounded-full" />
+              </DropdownMenuTrigger>
+              <DropdownMenuContent
+                align="end"
+                className="bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800"
+              >
+                <DropdownMenuItem
+                  onClick={() => navigate("/workflow/new")}
+                  className="cursor-pointer text-gray-700 dark:text-gray-300 focus:bg-gray-100 dark:focus:bg-gray-800"
+                >
+                  <Plus className="mr-2 h-4 w-4" />
+                  <span>New Workflow</span>
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={() => {
+                    if (onDeleteWorkflow) onDeleteWorkflow();
+                  }}
+                  className="cursor-pointer text-red-600 dark:text-red-400 focus:bg-red-50 dark:focus:bg-red-700/10"
+                >
+                  <Trash2 className="mr-2 h-4 w-4" />
+                  <span>Delete Workflow</span>
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={() => navigate("/script-editor")}
+                  className="cursor-pointer text-gray-700 dark:text-gray-300 focus:bg-gray-100 dark:focus:bg-gray-800"
+                >
+                  <Code2 className="mr-2 h-4 w-4" />
+                  <span>Script Editor</span>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </div>
       </div>

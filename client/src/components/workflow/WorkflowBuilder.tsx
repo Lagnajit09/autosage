@@ -1,4 +1,5 @@
 import React, { useState, useCallback, useRef, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   ReactFlow,
   addEdge,
@@ -26,7 +27,11 @@ import { Vault } from "../vault/Vault";
 import { useTheme } from "@/provider/theme-provider";
 import Header from "./Header";
 import { toast } from "@/hooks/use-toast";
-import { createWorkflow, updateWorkflow } from "@/lib/actions/workflow";
+import {
+  createWorkflow,
+  updateWorkflow,
+  deleteWorkflow,
+} from "@/lib/actions/workflow";
 import { useAuth } from "@clerk/clerk-react";
 
 const nodeTypes = {
@@ -47,6 +52,7 @@ const WorkflowBuilderContent = ({
 }) => {
   const { isDark } = useTheme();
   const { getToken, isSignedIn } = useAuth();
+  const navigate = useNavigate();
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
   const [workflowName, setWorkflowName] = useState("");
@@ -289,6 +295,56 @@ const WorkflowBuilderContent = ({
     [setEdges],
   );
 
+  const handleDeleteWorkflow = async () => {
+    if (!isSignedIn) {
+      toast({
+        title: "Error",
+        description: "Authentication required to delete workflow.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // If it's a new workflow (no ID), just clear the canvas
+    if (!workflowId) {
+      setNodes([]);
+      setEdges([]);
+      setWorkflowName("");
+      localStorage.removeItem("currentWorkflow");
+      toast({
+        title: "Workflow Cleared",
+        description: "The canvas has been cleared.",
+      });
+      return;
+    }
+
+    try {
+      const token = await getToken();
+      const response = await deleteWorkflow(workflowId, token);
+
+      if (response && response.success) {
+        setNodes([]);
+        setEdges([]);
+        setWorkflowName("");
+        localStorage.removeItem("currentWorkflow");
+        toast({
+          title: "Workflow Deleted",
+          description: "Attributes successfully deleted.",
+        });
+        navigate("/workflow/new");
+      } else {
+        throw new Error(response?.message || "Failed to delete workflow");
+      }
+    } catch (error) {
+      console.error("Delete error:", error);
+      toast({
+        title: "Error",
+        description: "Failed to delete workflow.",
+        variant: "destructive",
+      });
+    }
+  };
+
   const saveWorkflow = async () => {
     if (!workflowName.trim()) {
       toast({
@@ -399,6 +455,7 @@ const WorkflowBuilderContent = ({
           setShowVault={setShowVault}
           showVault={showVault}
           setShowImportDialog={setShowImportDialog}
+          onDeleteWorkflow={handleDeleteWorkflow}
         />
 
         {/* Main Content */}
