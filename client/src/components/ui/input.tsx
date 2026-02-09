@@ -1,9 +1,18 @@
 import * as React from "react";
+import { sanitizeString } from "@/sanitizers";
 
 import { cn } from "@/lib/utils";
 
 const Input = React.forwardRef<HTMLInputElement, React.ComponentProps<"input">>(
-  ({ className, type, ...props }, ref) => {
+  ({ className, type, onBlur, ...props }, ref) => {
+    const handleBlur = (e: React.FocusEvent<HTMLInputElement>) => {
+      // Auto-sanitize on blur to avoid disrupting typing
+      if (e.target.value && type !== "password" && type !== "file") {
+        e.target.value = sanitizeString(e.target.value);
+      }
+      if (onBlur) onBlur(e);
+    };
+
     return (
       <input
         type={type}
@@ -12,6 +21,7 @@ const Input = React.forwardRef<HTMLInputElement, React.ComponentProps<"input">>(
           className,
         )}
         ref={ref}
+        onBlur={handleBlur}
         {...props}
       />
     );

@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { sanitizeInput } from "@/sanitizers";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -34,7 +35,7 @@ const AIScriptGenerator: React.FC<AIScriptGeneratorProps> = ({
 }) => {
   const [prompt, setPrompt] = useState("");
   const [selectedLanguage, setSelectedLanguage] = useState(
-    scriptType.toLowerCase()
+    scriptType.toLowerCase(),
   );
   const [selectedScriptType, setSelectedScriptType] = useState("automation");
   const [isGenerating, setIsGenerating] = useState(false);
@@ -70,16 +71,18 @@ const AIScriptGenerator: React.FC<AIScriptGeneratorProps> = ({
     setIsFallback(false);
 
     try {
+      const sanitizedPayload = sanitizeInput({
+        prompt: prompt.trim(),
+        scriptType: selectedScriptType,
+        language: selectedLanguage,
+      });
+
       const response = await fetch(`${API_BASE_URL}/api/generate-script`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({
-          prompt: prompt.trim(),
-          scriptType: selectedScriptType,
-          language: selectedLanguage,
-        }),
+        body: JSON.stringify(sanitizedPayload),
       });
 
       if (!response.ok) {
@@ -98,7 +101,7 @@ const AIScriptGenerator: React.FC<AIScriptGeneratorProps> = ({
     } catch (err) {
       console.error("Error generating script:", err);
       setError(
-        err instanceof Error ? err.message : "Failed to generate script"
+        err instanceof Error ? err.message : "Failed to generate script",
       );
 
       // Generate a basic fallback script locally as last resort
