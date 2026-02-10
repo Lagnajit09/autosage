@@ -23,10 +23,14 @@ def custom_exception_handler(exc, context):
             message = "You do not have permission to perform this action."
         elif response.status_code == 404:
             message = "The requested resource was not found."
+        elif response.status_code == 429:
+            message = "Rate limit exceeded. Please try again later."
 
         # Structured response for DRF-handled exceptions
         response.data = {
+            "success": False,
             "status": "error",
+            "status_code": response.status_code,
             "message": message,
             "data": None,
             "errors": response.data # This contains the system/technical errors
@@ -36,7 +40,9 @@ def custom_exception_handler(exc, context):
         logger.error(f"Unhandled exception: {str(exc)}", exc_info=True)
         
         response = Response({
+            "success": False,
             "status": "error",
+            "status_code": status.HTTP_500_INTERNAL_SERVER_ERROR,
             "message": "A system error occurred. Our team has been notified.",
             "data": None,
             "errors": str(exc) # The raw error for debugging

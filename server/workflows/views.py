@@ -3,6 +3,7 @@ from rest_framework.permissions import IsAuthenticated
 from .models import Workflow
 from .serializers import WorkflowSerializer
 from server.utils import api_response
+from server.rate_limiters import WorkflowBurstThrottle, WorkflowSustainedThrottle, WorkflowCreateThrottle
 
 class WorkflowListCreateView(generics.ListCreateAPIView):
     """
@@ -10,6 +11,11 @@ class WorkflowListCreateView(generics.ListCreateAPIView):
     """
     serializer_class = WorkflowSerializer
     permission_classes = [IsAuthenticated]
+    
+    def get_throttles(self):
+        if self.request.method == 'POST':
+            return [WorkflowBurstThrottle(), WorkflowSustainedThrottle(), WorkflowCreateThrottle()]
+        return [WorkflowBurstThrottle(), WorkflowSustainedThrottle()]
 
     def get_queryset(self):
         return Workflow.objects.filter(user=self.request.user)
@@ -41,6 +47,7 @@ class WorkflowDetailView(generics.RetrieveUpdateDestroyAPIView):
     """
     serializer_class = WorkflowSerializer
     permission_classes = [IsAuthenticated]
+    throttle_classes = [WorkflowBurstThrottle, WorkflowSustainedThrottle]
 
     def get_queryset(self):
         return Workflow.objects.filter(user=self.request.user)

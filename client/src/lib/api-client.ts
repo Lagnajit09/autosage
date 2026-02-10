@@ -52,6 +52,10 @@ export const apiRequest = async (
         window.dispatchEvent(new CustomEvent("server-error"));
       }
 
+      if (response.status === 429) {
+        window.dispatchEvent(new CustomEvent("limit-exceeded"));
+      }
+
       const errorData = await response.json().catch(() => ({}));
       throw new Error(
         errorData.detail || errorData.message || "An error occurred",

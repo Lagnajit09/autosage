@@ -27,6 +27,7 @@ import Billing from "./pages/Billing";
 import { SSOCallback } from "./components/auth/SSOCallback";
 import { ClerkProvider } from "@clerk/clerk-react";
 import PublicRoute from "./components/auth/PublicRoute";
+import LimitExceed from "./pages/LimitExceed";
 
 const queryClient = new QueryClient();
 
@@ -38,9 +39,15 @@ const ServerErrorListener = () => {
       navigate("/server-error");
     };
 
+    const handleLimitExceeded = () => {
+      navigate("/limit-exceeded");
+    };
+
     window.addEventListener("server-error", handleServerError);
+    window.addEventListener("limit-exceeded", handleLimitExceeded);
     return () => {
       window.removeEventListener("server-error", handleServerError);
+      window.removeEventListener("limit-exceeded", handleLimitExceeded);
     };
   }, [navigate]);
 
@@ -104,6 +111,16 @@ const App = () => {
                         header="Server Issue"
                         userMessage="Our servers are currently experiencing difficulties or are down for maintenance. Please try again in a few moments."
                         errorCode="500"
+                      />
+                    }
+                  />
+                  <Route
+                    path="/limit-exceeded"
+                    element={
+                      <LimitExceed
+                        header="Limit Exceeded"
+                        userMessage="Too many requests. Please try again later."
+                        errorCode="429"
                       />
                     }
                   />
