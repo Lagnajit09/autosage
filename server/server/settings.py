@@ -74,6 +74,9 @@ REST_FRAMEWORK = {
         'workflow_burst': '30/minute',
         'workflow_sustained': '500/day',
         'workflow_create': '5/minute',
+        'script_burst': '30/minute',
+        'script_sustained': '500/day',
+        'script_create': '5/minute',
     }
 }
 

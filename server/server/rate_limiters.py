@@ -8,3 +8,12 @@ class WorkflowSustainedThrottle(UserRateThrottle):
 
 class WorkflowCreateThrottle(UserRateThrottle):
     scope = 'workflow_create'
+
+class ScriptBurstThrottle(UserRateThrottle):
+    scope = 'script_burst'
+
+class ScriptSustainedThrottle(UserRateThrottle):
+    scope = 'script_sustained'
+
+class ScriptCreateThrottle(UserRateThrottle):
+    scope = 'script_create'

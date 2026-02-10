@@ -14,6 +14,7 @@ from .serializers import (
     ScriptContentSerializer
 )
 from server.utils import api_response
+from server.rate_limiters import ScriptBurstThrottle, ScriptSustainedThrottle, ScriptCreateThrottle
 import requests
 import json
 import vercel_blob
@@ -31,6 +32,11 @@ class ScriptListCreateView(generics.ListCreateAPIView):
     """
     serializer_class = ScriptSerializer
     permission_classes = [IsAuthenticated]
+
+    def get_throttles(self):
+        if self.request.method == 'POST':
+            return [ScriptBurstThrottle(), ScriptSustainedThrottle(), ScriptCreateThrottle()]
+        return [ScriptBurstThrottle(), ScriptSustainedThrottle()]
 
     def get_queryset(self):
         """Return only scripts owned by the authenticated user."""
@@ -165,6 +171,7 @@ class ScriptDetailView(generics.RetrieveDestroyAPIView):
     """
     serializer_class = ScriptSerializer
     permission_classes = [IsAuthenticated]
+    throttle_classes = [ScriptBurstThrottle, ScriptSustainedThrottle]
 
     def get_queryset(self):
         """Return only scripts owned by the authenticated user."""
@@ -234,6 +241,7 @@ class ScriptContentView(APIView):
     GET: Fetch and return the actual script content
     """
     permission_classes = [IsAuthenticated]
+    throttle_classes = [ScriptBurstThrottle, ScriptSustainedThrottle]
 
     def get(self, request, pk):
         """Fetch script content from Vercel Blob."""
@@ -300,6 +308,7 @@ class ScriptUpdateView(APIView):
     POST: Update script content in Vercel Blob
     """
     permission_classes = [IsAuthenticated]
+    throttle_classes = [ScriptBurstThrottle, ScriptSustainedThrottle]
 
     def post(self, request, pk):
         """Update script content."""
@@ -396,6 +405,7 @@ class ScriptRenameView(APIView):
     POST: Rename script and update pathname in Vercel Blob
     """
     permission_classes = [IsAuthenticated]
+    throttle_classes = [ScriptBurstThrottle, ScriptSustainedThrottle]
 
     def post(self, request, pk):
         """Rename a script."""
