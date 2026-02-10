@@ -5,6 +5,7 @@ from rest_framework.permissions import IsAuthenticated
 from .models import Vault, Credential, Server
 from .serializers import VaultSerializer, CredentialSerializer, CredentialRevealSerializer, ServerSerializer
 from server.utils import api_response
+from server.rate_limiters import VaultBurstThrottle, VaultSustainedThrottle, VaultCreateThrottle
 
 class VaultListCreateView(generics.ListCreateAPIView):
     """
@@ -12,6 +13,11 @@ class VaultListCreateView(generics.ListCreateAPIView):
     """
     serializer_class = VaultSerializer
     permission_classes = [IsAuthenticated]
+
+    def get_throttles(self):
+        if self.request.method == 'POST':
+            return [VaultBurstThrottle(), VaultSustainedThrottle(), VaultCreateThrottle()]
+        return [VaultBurstThrottle(), VaultSustainedThrottle()]
 
     def get_queryset(self):
         return Vault.objects.filter(owner=self.request.user)
@@ -43,6 +49,7 @@ class VaultDetailView(generics.RetrieveUpdateDestroyAPIView):
     """
     serializer_class = VaultSerializer
     permission_classes = [IsAuthenticated]
+    throttle_classes = [VaultBurstThrottle, VaultSustainedThrottle]
 
     def get_queryset(self):
         return Vault.objects.filter(owner=self.request.user)
@@ -81,6 +88,11 @@ class CredentialListCreateView(generics.ListCreateAPIView):
     """
     serializer_class = CredentialSerializer
     permission_classes = [IsAuthenticated]
+
+    def get_throttles(self):
+        if self.request.method == 'POST':
+            return [VaultBurstThrottle(), VaultSustainedThrottle(), VaultCreateThrottle()]
+        return [VaultBurstThrottle(), VaultSustainedThrottle()]
 
     def get_queryset(self):
         # Only return credentials if the user owns the vault they belong to
@@ -127,6 +139,7 @@ class CredentialDetailView(generics.RetrieveUpdateDestroyAPIView):
     """
     serializer_class = CredentialSerializer
     permission_classes = [IsAuthenticated]
+    throttle_classes = [VaultBurstThrottle, VaultSustainedThrottle]
 
     def get_queryset(self):
         return Credential.objects.filter(vault__owner=self.request.user)
@@ -174,6 +187,7 @@ class CredentialRevealView(generics.RetrieveAPIView):
     """
     serializer_class = CredentialRevealSerializer
     permission_classes = [IsAuthenticated]
+    throttle_classes = [VaultBurstThrottle, VaultSustainedThrottle]
 
     def get_queryset(self):
         return Credential.objects.filter(vault__owner=self.request.user)
@@ -193,6 +207,11 @@ class ServerListCreateView(generics.ListCreateAPIView):
     """
     serializer_class = ServerSerializer
     permission_classes = [IsAuthenticated]
+
+    def get_throttles(self):
+        if self.request.method == 'POST':
+            return [VaultBurstThrottle(), VaultSustainedThrottle(), VaultCreateThrottle()]
+        return [VaultBurstThrottle(), VaultSustainedThrottle()]
 
     def get_queryset(self):
         # Only return servers if the user owns the vault they belong to
@@ -252,6 +271,7 @@ class ServerDetailView(generics.RetrieveUpdateDestroyAPIView):
     """
     serializer_class = ServerSerializer
     permission_classes = [IsAuthenticated]
+    throttle_classes = [VaultBurstThrottle, VaultSustainedThrottle]
 
     def get_queryset(self):
         return Server.objects.filter(vault__owner=self.request.user)
@@ -315,6 +335,7 @@ class CredentialMoveToVaultView(APIView):
     Body: {"vault_id": <new_vault_uuid>}
     """
     permission_classes = [IsAuthenticated]
+    throttle_classes = [VaultBurstThrottle, VaultSustainedThrottle]
 
     def post(self, request, pk):
         # Get the credential (must be owned by user)
@@ -351,6 +372,7 @@ class ServerLinkCredentialView(APIView):
     Body: {"credential_id": <credential_uuid>}  # or null to unlink
     """
     permission_classes = [IsAuthenticated]
+    throttle_classes = [VaultBurstThrottle, VaultSustainedThrottle]
 
     def post(self, request, pk):
         # Get the server (must be owned by user)
@@ -396,6 +418,7 @@ class ServerUnlinkCredentialView(APIView):
     POST /api/vault/servers/<uuid:pk>/unlink-credential/
     """
     permission_classes = [IsAuthenticated]
+    throttle_classes = [VaultBurstThrottle, VaultSustainedThrottle]
 
     def post(self, request, pk):
         # Get the server (must be owned by user)

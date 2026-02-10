@@ -77,6 +77,9 @@ REST_FRAMEWORK = {
         'script_burst': '30/minute',
         'script_sustained': '500/day',
         'script_create': '5/minute',
+        'vault_burst': '30/minute',
+        'vault_sustained': '500/day',
+        'vault_create': '10/minute',
     }
 }
 
