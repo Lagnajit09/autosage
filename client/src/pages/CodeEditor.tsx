@@ -1,11 +1,8 @@
 import { useState, useEffect } from "react";
-import { useSearchParams } from "react-router-dom";
 import {
   Save,
   File,
   X,
-  Menu,
-  AlertCircle,
   Braces,
   Code,
   Terminal,
@@ -30,10 +27,11 @@ import { toast } from "sonner";
 import { useAuth } from "@clerk/clerk-react";
 import { scriptService, mapScriptToScriptFile } from "@/lib/api/scripts";
 import { DeleteConfirmationModal } from "@/components/DeleteConfirmationModal";
+import { useParams, useNavigate } from "react-router-dom";
 
 const CodeEditor = () => {
-  const [searchParams] = useSearchParams();
-  const scriptType = searchParams.get("type") || "python";
+  const { name } = useParams();
+  const navigate = useNavigate();
   const { isDark } = useTheme();
   const { toast: clientToast } = useToast();
   const { getToken, isSignedIn } = useAuth();
@@ -108,6 +106,16 @@ const CodeEditor = () => {
       fetchFiles();
     }
   }, [token]);
+
+  // Open File Fetched By Name
+  useEffect(() => {
+    if (name) {
+      const script = files.find((f) => f.name === name);
+      if (script) {
+        selectFile(script);
+      }
+    }
+  }, [name, files]);
 
   const getLanguageFromExtension = (filename: string): ScriptLanguage => {
     const ext = filename.split(".").pop()?.toLowerCase() || "";
@@ -198,7 +206,7 @@ const CodeEditor = () => {
       const newFile = mapScriptToScriptFile(createdScript, script);
 
       setFiles((prev) => [...prev, newFile]);
-      setCurrentFile(newFile);
+      navigate(`/script-editor/${newFile.name}`);
 
       setOpenTabs((prev) => {
         if (!prev.find((t) => t.id === newFile.id)) {
@@ -407,8 +415,12 @@ const CodeEditor = () => {
       );
 
       if (currentFile?.id === scriptToDeleteId) {
-        const newActiveTab = updatedTabs.length > 0 ? updatedTabs[0] : null;
-        setCurrentFile(newActiveTab);
+        if (updatedTabs.length > 0) {
+          navigate(`/script-editor/${updatedTabs[0].name}`);
+        } else {
+          setCurrentFile(null);
+          navigate("/script-editor");
+        }
         setHasUnsavedChanges(false);
       }
 
@@ -500,7 +512,7 @@ const CodeEditor = () => {
       const newFile = mapScriptToScriptFile(createdScript, langInfo.template);
 
       setFiles((prev) => [...prev, newFile]);
-      setCurrentFile(newFile);
+      navigate(`/script-editor/${newFile.name}`);
 
       setOpenTabs((prev) => {
         const newTabs = [...prev, newFile];
@@ -590,7 +602,7 @@ const CodeEditor = () => {
       setOpenTabs(updatedTabs);
 
       if (currentFile?.id === id) {
-        setCurrentFile({ ...currentFile, name: trimmedName });
+        navigate(`/script-editor/${trimmedName}`);
       }
 
       setRenamingFileId(null);
@@ -613,10 +625,10 @@ const CodeEditor = () => {
   };
 
   const selectFile = async (file: ScriptFile) => {
-    setIsLoading(true);
     let fileToSet = file;
 
     if (!file.content) {
+      setIsLoading(true);
       try {
         const clerkToken = await getToken();
 
@@ -639,7 +651,6 @@ const CodeEditor = () => {
           title: "Load Failed",
           description: "Failed to load script content.",
         });
-        return;
       } finally {
         setIsLoading(false);
       }
@@ -673,12 +684,14 @@ const CodeEditor = () => {
     );
 
     if (currentFile?.id === fileId) {
-      const currentIndex = openTabs.findIndex((tab) => tab.id === fileId);
-      const newActiveTab =
-        updatedTabs.length > 0
-          ? updatedTabs[Math.max(0, currentIndex - 1)]
-          : null;
-      setCurrentFile(newActiveTab);
+      if (updatedTabs.length > 0) {
+        const currentIndex = openTabs.findIndex((tab) => tab.id === fileId);
+        const newActiveTab = updatedTabs[Math.max(0, currentIndex - 1)];
+        navigate(`/script-editor/${newActiveTab.name}`);
+      } else {
+        setCurrentFile(null);
+        navigate("/script-editor");
+      }
       setHasUnsavedChanges(false);
     }
   };
@@ -749,7 +762,9 @@ const CodeEditor = () => {
           files={files}
           isLoadingScripts={isLoading}
           currentFile={currentFile}
-          onSelectFile={selectFile}
+          onSelectFile={(file) => {
+            navigate(`/script-editor/${file.name}`);
+          }}
           onCreateFile={startCreateFile}
           onDeleteFile={handleDeleteScriptClick}
           onRenameFile={(file) => setRenamingFileId(file.id)}
@@ -807,7 +822,7 @@ const CodeEditor = () => {
                 {openTabs.map((tab) => (
                   <button
                     key={tab.id}
-                    onClick={() => selectFile(tab)}
+                    onClick={() => navigate(`/script-editor/${tab.name}`)}
                     className={cn(
                       "flex items-center space-x-2 px-4 py-2.5 border-r border-gray-200 dark:border-gray-800 transition-colors min-w-[120px] max-w-[200px] group relative",
                       currentFile?.id === tab.id
@@ -881,7 +896,7 @@ const CodeEditor = () => {
           </div>
 
           <AIScriptGeneratorSidebar
-            scriptType={scriptType}
+            scriptType={"python"}
             onGeneratedScript={handleGeneratedScript}
             isOpen={isAISidebarOpen}
             onToggle={() => setIsAISidebarOpen(!isAISidebarOpen)}

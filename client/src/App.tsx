@@ -84,6 +84,10 @@ const App = () => {
                     <Route path="/templates" element={<Templates />} />
                     <Route path="/dashboard" element={<Dashboard />} />
                     <Route path="/script-editor" element={<CodeEditor />} />
+                    <Route
+                      path="/script-editor/:name"
+                      element={<CodeEditor />}
+                    />
                     <Route path="/raw/:id" element={<ScriptViewer />} />
                     <Route path="/ai/autobot" element={<AutobotChat />} />
                     <Route path="/ai/autobot/:id" element={<AutobotChat />} />
