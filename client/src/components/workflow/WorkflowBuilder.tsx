@@ -44,6 +44,7 @@ const nodeTypes = {
 
 import { MobileRestrictedMessage } from "./MobileRestrictedMessage";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { AppContextMenu } from "../AppContextMenu";
 
 const WorkflowBuilderContent = ({
   initialData = null,
@@ -393,6 +394,7 @@ const WorkflowBuilderContent = ({
     setTimeout(() => setDeleteModalOpen(true), 0);
   };
 
+  // CREATE OR UPDATE WORKFLOW
   const saveWorkflow = async () => {
     if (!workflowName.trim()) {
       toast({
@@ -454,14 +456,8 @@ const WorkflowBuilderContent = ({
           title: "Workflow Created",
           description: "Your workflow has been created successfully.",
         });
-        // If we get a workflow ID back, we could update the URL or store it
         if (response?.data?.id) {
-          // Optionally update the browser URL to reflect the new workflow ID
-          window.history.replaceState(
-            null,
-            "",
-            `/workflow/${response.data.id}`,
-          );
+          navigate(`/workflow/${response.data.id}`);
         }
       }
 
@@ -497,6 +493,29 @@ const WorkflowBuilderContent = ({
     }
   };
 
+  const handleExportJson = () => {
+    const workflow = {
+      nodes,
+      edges,
+      name: workflowName,
+      id: workflowId,
+    };
+    const workflowWithMetadata = {
+      ...workflow,
+      timestamp: new Date().toISOString(),
+      totalNodes: nodes.length,
+      totalEdges: edges.length,
+    };
+    const json = JSON.stringify(workflowWithMetadata, null, 2);
+    const blob = new Blob([json], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `${workflowName || "workflow"}.json`;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-workflow-void overflow-hidden">
       <div className="w-full h-screen bg-transparent">
@@ -519,75 +538,84 @@ const WorkflowBuilderContent = ({
             setWorkflowName={setWorkflowName}
           />
 
-          <div
-            className="flex-1 h-[calc(100%-1rem)] bg-gray-100 dark:bg-gray-900/30 rounded-3xl relative overflow-hidden ml-4 my-2"
-            ref={reactFlowWrapper}
+          <AppContextMenu
+            mode="workflow"
+            workflowActions={{
+              onExportJson: handleExportJson,
+              onSaveWorkflow: saveWorkflow,
+              onDeleteWorkflow: handleDeleteWorkflow,
+            }}
           >
-            <ReactFlow
-              nodes={nodes}
-              edges={edges}
-              onNodesChange={onNodesChange}
-              onEdgesChange={onEdgesChange}
-              onConnect={onConnect}
-              onInit={handleReactFlowInit}
-              onDrop={onDrop}
-              onDragOver={onDragOver}
-              onNodeClick={onNodeClick}
-              onEdgeClick={onEdgeClick}
-              onPaneClick={onPaneClick}
-              nodeTypes={nodeTypes}
-              fitView
-              defaultEdgeOptions={{
-                style: {
-                  stroke: isDark ? "#4B5563" : "#9CA3AF",
-                  strokeWidth: 2,
-                },
-                type: "smoothstep",
-              }}
+            <div
+              className="flex-1 h-[calc(100%-1rem)] bg-gray-100 dark:bg-gray-900/30 rounded-3xl relative overflow-hidden ml-4 my-2"
+              ref={reactFlowWrapper}
             >
-              <Controls className="border border-gray-200 dark:border-gray-800 rounded-lg shadow-sm [&>button]:bg-gray-200 dark:[&>button]:bg-gray-800 [&>button]:text-gray-900 dark:[&>button]:text-gray-100" />
-              <Background
-                color={isDark ? "#363636" : "#b3b3b3"}
-                gap={30}
-                size={2}
-                className=""
-              />
-            </ReactFlow>
+              <ReactFlow
+                nodes={nodes}
+                edges={edges}
+                onNodesChange={onNodesChange}
+                onEdgesChange={onEdgesChange}
+                onConnect={onConnect}
+                onInit={handleReactFlowInit}
+                onDrop={onDrop}
+                onDragOver={onDragOver}
+                onNodeClick={onNodeClick}
+                onEdgeClick={onEdgeClick}
+                onPaneClick={onPaneClick}
+                nodeTypes={nodeTypes}
+                fitView
+                defaultEdgeOptions={{
+                  style: {
+                    stroke: isDark ? "#4B5563" : "#9CA3AF",
+                    strokeWidth: 2,
+                  },
+                  type: "smoothstep",
+                }}
+              >
+                <Controls className="border border-gray-200 dark:border-gray-800 rounded-lg shadow-sm [&>button]:bg-gray-200 dark:[&>button]:bg-gray-800 [&>button]:text-gray-900 dark:[&>button]:text-gray-100" />
+                <Background
+                  color={isDark ? "#363636" : "#b3b3b3"}
+                  gap={30}
+                  size={2}
+                  className=""
+                />
+              </ReactFlow>
 
-            {/* Enhanced Canvas Overlay Info */}
-            {nodes.length === 0 && (
-              <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                <div className="text-center relative">
-                  <div className="w-16 h-16 bg-white dark:bg-gray-800 rounded-2xl flex items-center justify-center mx-auto mb-4 border border-gray-200 dark:border-gray-700 shadow-sm relative z-10">
-                    <svg
-                      className="w-8 h-8 text-purple-600 dark:text-purple-400"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M12 6v6m0 0v6m0-6h6m-6 0H6"
-                      />
-                    </svg>
+              {/* Enhanced Canvas Overlay Info */}
+              {nodes.length === 0 && (
+                <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                  <div className="text-center relative">
+                    <div className="w-16 h-16 bg-white dark:bg-gray-800 rounded-2xl flex items-center justify-center mx-auto mb-4 border border-gray-200 dark:border-gray-700 shadow-sm relative z-10">
+                      <svg
+                        className="w-8 h-8 text-purple-600 dark:text-purple-400"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M12 6v6m0 0v6m0-6h6m-6 0H6"
+                        />
+                      </svg>
+                    </div>
+
+                    <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-3">
+                      Start Building Your Workflow
+                    </h3>
+                    <p className="text-sm text-gray-500 dark:text-gray-400 max-w-md">
+                      Drag components from the sidebar to create intelligent
+                      automation workflows
+                    </p>
                   </div>
-
-                  <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-3">
-                    Start Building Your Workflow
-                  </h3>
-                  <p className="text-sm text-gray-500 dark:text-gray-400 max-w-md">
-                    Drag components from the sidebar to create intelligent
-                    automation workflows
-                  </p>
                 </div>
-              </div>
-            )}
+              )}
 
-            {/* Enhanced AI Automation Floating Button */}
-            <GenieButton onClick={() => setShowAIGenerator(true)} />
-          </div>
+              {/* Enhanced AI Automation Floating Button */}
+              <GenieButton onClick={() => setShowAIGenerator(true)} />
+            </div>
+          </AppContextMenu>
 
           <RightSidebar
             selectedNode={selectedNode}
