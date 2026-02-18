@@ -9,7 +9,7 @@ import { toast } from "sonner";
 import { scriptService, mapScriptToScriptFile } from "@/lib/api/scripts";
 import { ScriptFile, ScriptLanguage } from "@/utils/types";
 
-export function useCodeEditor() {
+export function useScriptEditor() {
   const { name } = useParams();
   const navigate = useNavigate();
   const { toast: clientToast } = useToast();
@@ -305,7 +305,10 @@ export function useCodeEditor() {
       setCurrentFile(updatedFile);
       setHasUnsavedChanges(false);
 
-      clientToast({ title: "Saved", description: "Script saved successfully." });
+      clientToast({
+        title: "Saved",
+        description: "Script saved successfully.",
+      });
     } catch (error: any) {
       console.error("Failed to save file:", error);
       clientToast({
@@ -326,7 +329,10 @@ export function useCodeEditor() {
       setIsLoading(true);
       try {
         const clerkToken = await getToken();
-        const scriptContent = await scriptService.getContent(file.id, clerkToken);
+        const scriptContent = await scriptService.getContent(
+          file.id,
+          clerkToken,
+        );
         fileToSet = { ...file, content: scriptContent.content };
 
         setFiles((prev) => prev.map((f) => (f.id === file.id ? fileToSet : f)));
@@ -350,7 +356,10 @@ export function useCodeEditor() {
     if (!openTabs.find((tab) => tab.id === file.id)) {
       setOpenTabs((prev) => {
         const newTabs = [...prev, fileToSet];
-        localStorage.setItem("openTabs", JSON.stringify(newTabs.map((t) => t.id)));
+        localStorage.setItem(
+          "openTabs",
+          JSON.stringify(newTabs.map((t) => t.id)),
+        );
         return newTabs;
       });
     }
@@ -363,7 +372,10 @@ export function useCodeEditor() {
 
     const updatedTabs = openTabs.filter((tab) => tab.id !== fileId);
     setOpenTabs(updatedTabs);
-    localStorage.setItem("openTabs", JSON.stringify(updatedTabs.map((t) => t.id)));
+    localStorage.setItem(
+      "openTabs",
+      JSON.stringify(updatedTabs.map((t) => t.id)),
+    );
 
     if (currentFile?.id === fileId) {
       if (updatedTabs.length > 0) {
@@ -434,14 +446,20 @@ export function useCodeEditor() {
 
       setOpenTabs((prev) => {
         const newTabs = [...prev, newFile];
-        localStorage.setItem("openTabs", JSON.stringify(newTabs.map((t) => t.id)));
+        localStorage.setItem(
+          "openTabs",
+          JSON.stringify(newTabs.map((t) => t.id)),
+        );
         return newTabs;
       });
 
       setHasUnsavedChanges(false);
       setIsCreatingFile(false);
 
-      clientToast({ title: "Created", description: "Script created successfully." });
+      clientToast({
+        title: "Created",
+        description: "Script created successfully.",
+      });
     } catch (error: any) {
       console.error("Failed to create file:", error);
       clientToast({
@@ -483,7 +501,8 @@ export function useCodeEditor() {
 
     if (
       files.some(
-        (f) => f.id !== id && f.name.toLowerCase() === trimmedName.toLowerCase(),
+        (f) =>
+          f.id !== id && f.name.toLowerCase() === trimmedName.toLowerCase(),
       )
     ) {
       clientToast({
@@ -514,7 +533,10 @@ export function useCodeEditor() {
       }
 
       setRenamingFileId(null);
-      clientToast({ title: "Renamed", description: "Script renamed successfully." });
+      clientToast({
+        title: "Renamed",
+        description: "Script renamed successfully.",
+      });
     } catch (error: any) {
       console.error("Failed to rename file:", error);
       clientToast({
@@ -547,7 +569,10 @@ export function useCodeEditor() {
 
       const updatedTabs = openTabs.filter((tab) => tab.id !== scriptToDeleteId);
       setOpenTabs(updatedTabs);
-      localStorage.setItem("openTabs", JSON.stringify(updatedTabs.map((t) => t.id)));
+      localStorage.setItem(
+        "openTabs",
+        JSON.stringify(updatedTabs.map((t) => t.id)),
+      );
 
       if (currentFile?.id === scriptToDeleteId) {
         if (updatedTabs.length > 0) {
@@ -559,7 +584,10 @@ export function useCodeEditor() {
         setHasUnsavedChanges(false);
       }
 
-      clientToast({ title: "Deleted", description: "Script deleted successfully." });
+      clientToast({
+        title: "Deleted",
+        description: "Script deleted successfully.",
+      });
     } catch (error: any) {
       console.error("Failed to delete file:", error);
       clientToast({
@@ -604,7 +632,10 @@ export function useCodeEditor() {
       setOpenTabs((prev) => {
         if (!prev.find((t) => t.id === newFile.id)) {
           const newTabs = [...prev, newFile];
-          localStorage.setItem("openTabs", JSON.stringify(newTabs.map((t) => t.id)));
+          localStorage.setItem(
+            "openTabs",
+            JSON.stringify(newTabs.map((t) => t.id)),
+          );
           return newTabs;
         }
         return prev;
@@ -653,7 +684,10 @@ export function useCodeEditor() {
       const newFile = mapScriptToScriptFile(created, content);
       setFiles((prev) => [...prev, newFile]);
 
-      clientToast({ title: "Duplicated", description: "Script duplicated successfully." });
+      clientToast({
+        title: "Duplicated",
+        description: "Script duplicated successfully.",
+      });
     } catch (e: any) {
       console.error("Duplicate failed", e);
       clientToast({

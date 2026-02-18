@@ -1,17 +1,20 @@
 import LeftNav from "@/components/LeftNav";
 import { useTheme } from "@/provider/theme-provider";
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar";
-import { FileExplorerSidebar } from "@/components/CodeEditor/FileExplorerSidebar";
-import { AIScriptGeneratorSidebar } from "@/components/CodeEditor/AIScriptGeneratorSidebar";
+import { FileExplorerSidebar } from "@/components/ScriptEditor/FileExplorerSidebar";
+import { AIScriptGeneratorSidebar } from "@/components/ScriptEditor/AIScriptGeneratorSidebar";
 import { DeleteConfirmationModal } from "@/components/DeleteConfirmationModal";
 import { useNavigate } from "react-router-dom";
 
-import { useCodeEditor } from "../components/CodeEditor/useCodeEditor";
-import { EditorHeader } from "../components/CodeEditor/EditorHeader";
-import { EditorTabs } from "../components/CodeEditor/EditorTabs";
-import { EditorPane } from "../components/CodeEditor/EditorPane";
+import { useScriptEditor } from "../components/ScriptEditor/useScriptEditor";
+import { EditorHeader } from "../components/ScriptEditor/EditorHeader";
+import { EditorTabs } from "../components/ScriptEditor/EditorTabs";
+import { EditorPane } from "../components/ScriptEditor/EditorPane";
+import { useScriptExecution } from "../components/ScriptEditor/useScriptExecution";
+import { ScriptExecutionDrawer } from "../components/ScriptEditor/ScriptExecutionDrawer";
+import { useState } from "react";
 
-const CodeEditor = () => {
+const ScriptEditor = () => {
   const navigate = useNavigate();
   const { isDark } = useTheme();
 
@@ -41,7 +44,21 @@ const CodeEditor = () => {
     downloadFile,
     configureMonacoEditor,
     getFileIcon,
-  } = useCodeEditor();
+  } = useScriptEditor();
+
+  const [isExecutionOpen, setIsExecutionOpen] = useState(false);
+
+  const {
+    servers,
+    credentials,
+    selectedServerId,
+    setSelectedServerId,
+    selectedCredentialId,
+    setSelectedCredentialId,
+    executeScript,
+    isExecuting,
+    logs,
+  } = useScriptExecution();
 
   return (
     <SidebarProvider>
@@ -74,6 +91,7 @@ const CodeEditor = () => {
               isAISidebarOpen={isAISidebarOpen}
               onSave={saveFile}
               onToggleAI={() => setIsAISidebarOpen(!isAISidebarOpen)}
+              onToggleTerminal={() => setIsExecutionOpen(!isExecutionOpen)}
             />
 
             <EditorTabs
@@ -91,6 +109,20 @@ const CodeEditor = () => {
                 onMount={configureMonacoEditor}
                 onChange={handleEditorChange}
                 onCreateFile={startCreateFile}
+              />
+              <ScriptExecutionDrawer
+                isOpen={isExecutionOpen}
+                onClose={() => setIsExecutionOpen(false)}
+                scriptName={currentFile?.name}
+                servers={servers}
+                credentials={credentials}
+                selectedServerId={selectedServerId}
+                setSelectedServerId={setSelectedServerId}
+                selectedCredentialId={selectedCredentialId}
+                setSelectedCredentialId={setSelectedCredentialId}
+                onExecute={() => currentFile && executeScript(currentFile.id)}
+                isExecuting={isExecuting}
+                logs={logs}
               />
             </div>
           </div>
@@ -116,4 +148,4 @@ const CodeEditor = () => {
   );
 };
 
-export default CodeEditor;
+export default ScriptEditor;

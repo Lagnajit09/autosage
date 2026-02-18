@@ -9,7 +9,7 @@ import WorkflowExecution from "./pages/WorkflowExecution";
 import NotFound from "./pages/NotFound";
 import SignUp from "./pages/SignUp";
 import SignIn from "./pages/SignIn";
-import CodeEditor from "./pages/CodeEditor";
+import ScriptEditor from "./pages/ScriptEditor";
 import ScriptViewer from "./pages/ScriptViewer";
 import Landing from "./pages/Landing";
 import { LoadingProvider } from "./contexts/LoadingContext";
@@ -83,10 +83,10 @@ const App = () => {
                     <Route path="/workflows" element={<Workflows />} />
                     <Route path="/templates" element={<Templates />} />
                     <Route path="/dashboard" element={<Dashboard />} />
-                    <Route path="/script-editor" element={<CodeEditor />} />
+                    <Route path="/script-editor" element={<ScriptEditor />} />
                     <Route
                       path="/script-editor/:name"
-                      element={<CodeEditor />}
+                      element={<ScriptEditor />}
                     />
                     <Route path="/raw/:id" element={<ScriptViewer />} />
                     <Route path="/ai/autobot" element={<AutobotChat />} />
