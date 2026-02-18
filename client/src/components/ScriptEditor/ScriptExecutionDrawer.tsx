@@ -1,6 +1,5 @@
-import { X, Play, Server as ServerIcon, Key, Terminal } from "lucide-react";
+import { X, Play, Server as ServerIcon, Key, Airplay } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -52,7 +51,7 @@ export function ScriptExecutionDrawer({
       <div className="flex items-center justify-between px-4 py-2 border-b border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-[#252526]">
         <div className="flex items-center gap-4 flex-1">
           <div className="flex items-center gap-2 text-sm font-semibold text-gray-700 dark:text-gray-300">
-            <Terminal className="w-4 h-4" />
+            <Airplay className="w-4 h-4" />
             <span className="hidden sm:inline">Terminal</span>
           </div>
 
@@ -66,10 +65,10 @@ export function ScriptExecutionDrawer({
                 value={selectedServerId}
                 onValueChange={setSelectedServerId}
               >
-                <SelectTrigger className="h-8 text-xs bg-white dark:bg-[#3c3c3c] border-gray-300 dark:border-gray-600">
+                <SelectTrigger className="h-8 text-xs bg-white dark:bg-[#3c3c3c] dark:text-gray-200 border-gray-300 dark:border-gray-600">
                   <SelectValue placeholder="Select Server" />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent className="dark:bg-[#3c3c3c] dark:text-gray-200 border-gray-300 dark:border-gray-600">
                   {servers.length === 0 ? (
                     <div className="p-2 text-xs text-muted-foreground text-center">
                       No servers found.
@@ -95,10 +94,10 @@ export function ScriptExecutionDrawer({
                 value={selectedCredentialId}
                 onValueChange={setSelectedCredentialId}
               >
-                <SelectTrigger className="h-8 text-xs bg-white dark:bg-[#3c3c3c] border-gray-300 dark:border-gray-600">
+                <SelectTrigger className="h-8 text-xs bg-white dark:bg-[#3c3c3c] dark:text-gray-200 border-gray-300 dark:border-gray-600">
                   <SelectValue placeholder="Select Credential" />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent className="dark:bg-[#3c3c3c] dark:text-gray-200 border-gray-300 dark:border-gray-600">
                   <SelectItem value="none" className="text-xs italic">
                     -- None --
                   </SelectItem>
@@ -143,7 +142,7 @@ export function ScriptExecutionDrawer({
       </div>
 
       {/* Terminal Output */}
-      <div className="flex-1 flex flex-col min-h-0 bg-[#1e1e1e] text-gray-300 font-mono text-xs overflow-hidden">
+      <div className="flex-1 flex flex-col min-h-0 bg-[#1e1e1e] dark:bg-[#121212] text-gray-300 font-mono text-xs overflow-hidden">
         <ScrollArea className="flex-1 p-3">
           <div className="space-y-1">
             <div className="text-blue-600 mb-2">
