@@ -37,6 +37,9 @@ DEBUG = config('DEBUG', default=True, cast=bool)
 # Vercel Blob Token
 VERCEL_BLOB_TOKEN = config('BLOB_READ_WRITE_TOKEN', default='')
 
+# Cloud Run URL
+CLOUD_RUN_EXECUTOR_URL = config('CLOUD_RUN_EXECUTOR_URL', default='')
+
 ALLOWED_HOSTS = ["http://localhost:5173", "http://127.0.0.1:5173", "localhost", "127.0.0.1"]
 
 
@@ -81,6 +84,8 @@ REST_FRAMEWORK = {
         'vault_burst': '30/minute',
         'vault_sustained': '500/day',
         'vault_create': '10/minute',
+        'execution_burst': '30/minute',
+        'execution_sustained': '500/day',
     }
 }
 

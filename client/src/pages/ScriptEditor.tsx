@@ -27,6 +27,7 @@ const ScriptEditor = () => {
     setIsAISidebarOpen,
     isLoading,
     isCreatingFile,
+    setIsCreatingFile,
     renamingFileId,
     setRenamingFileId,
     deleteModalOpen,
@@ -80,7 +81,7 @@ const ScriptEditor = () => {
           renamingFileId={renamingFileId}
           onCreateSubmit={handleCreateSubmit}
           onRenameSubmit={handleRenameSubmit}
-          onCancelCreate={() => setIsAISidebarOpen(false)}
+          onCancelCreate={() => setIsCreatingFile(false)}
           onCancelRename={() => setRenamingFileId(null)}
         />
 

@@ -723,6 +723,7 @@ export function useScriptEditor() {
     setIsAISidebarOpen,
     isLoading,
     isCreatingFile,
+    setIsCreatingFile,
     renamingFileId,
     setRenamingFileId,
     deleteModalOpen,

@@ -26,3 +26,9 @@ class VaultSustainedThrottle(UserRateThrottle):
 
 class VaultCreateThrottle(UserRateThrottle):
     scope = 'vault_create'
+
+class ExecutionBurstThrottle(UserRateThrottle):
+    scope = 'execution_burst'
+
+class ExecutionSustainedThrottle(UserRateThrottle):
+    scope = 'execution_sustained'

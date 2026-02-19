@@ -22,4 +22,5 @@ urlpatterns = [
     path('api/workflows/', include('workflows.urls')),
     path('api/vault/', include('vault.urls')),
     path('api/scripts/', include('scripts.urls')),
+    path('api/executions/', include('execution_engine.urls')),
 ]

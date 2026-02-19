@@ -121,16 +121,12 @@ export const FileExplorerSidebar: React.FC<FileExplorerSidebarProps> = ({
     }
   };
 
-  const handleBlur = (isCreate: boolean, fileId?: string) => {
-    // Auto-submit on blur, or cancel.
-    // but if it's empty, cancel.
-    if (inputValue.trim() === "") {
-      if (isCreate) onCancelCreate();
-      else onCancelRename();
+  const handleBlur = (isCreate: boolean) => {
+    // Cancel operation on blur as requested
+    if (isCreate) {
+      onCancelCreate();
     } else {
-      // We can choose to submit here.
-      // if (isCreate) onCreateSubmit(inputValue);
-      // else if (fileId) onRenameSubmit(fileId, inputValue);
+      onCancelRename();
     }
   };
 
@@ -219,7 +215,7 @@ export const FileExplorerSidebar: React.FC<FileExplorerSidebarProps> = ({
                         value={inputValue}
                         onChange={(e) => setInputValue(e.target.value)}
                         onKeyDown={(e) => handleKeyDown(e, false, file.id)}
-                        onBlur={() => handleBlur(false, file.id)}
+                        onBlur={() => handleBlur(false)}
                         className="h-7 text-sm px-2 py-0"
                       />
                     </div>

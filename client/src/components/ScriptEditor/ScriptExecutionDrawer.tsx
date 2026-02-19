@@ -124,7 +124,7 @@ export function ScriptExecutionDrawer({
                 <>Running...</>
               ) : (
                 <>
-                  <Play className="w-3 h-3 mr-2 fill-current" /> Run
+                  <Play className="w-2 h-2 fill-current" /> Run
                 </>
               )}
             </Button>
