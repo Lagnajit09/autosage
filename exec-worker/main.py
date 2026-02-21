@@ -9,6 +9,8 @@ from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 
+from executors import ShellExecutor
+
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -27,10 +29,15 @@ def sanitize_input(text: str) -> str:
     clean_text = bleach.clean(text, tags=[], strip=True)
     return clean_text
 
+class Credentials(BaseModel):
+    username: str
+    password: str
+    port: int = 22
+
 class ExecutionRequest(BaseModel):
     blob_url: str
     server_address: str
-    credentials: dict
+    credentials: Credentials
 
     @validator('blob_url', 'server_address')
     def validate_and_sanitize(cls, v):
@@ -71,17 +78,30 @@ async def execute_script(request: Request, exec_request: ExecutionRequest):
                 )
             
             script_content = response.text
-            
-            # TODO: Parse and validate script content
-            
-            return {
-                "success": True,
-                "message": "Script content fetched successfully",
-                "data": {
-                    "script_content": script_content,
-                    "server_address": exec_request.server_address
-                }
+
+        # Execute script on remote server via SSH
+        executor = ShellExecutor(
+            host=exec_request.server_address,
+            username=exec_request.credentials.username,
+            password=exec_request.credentials.password,
+            port=exec_request.credentials.port,
+        )
+
+        result = executor.run(script_content)
+
+        if result.error:
+            logger.error(f"Execution error: {result.error}")
+            raise HTTPException(status_code=502, detail=result.error)
+
+        return {
+            "success": result.success,
+            "message": "Script executed successfully" if result.success else "Script execution failed",
+            "data": {
+                "exit_code": result.exit_code,
+                "stdout": result.stdout,
+                "stderr": result.stderr,
             }
+        }
 
     except httpx.TimeoutException:
         logger.error("Timeout fetching script content")
