@@ -2,13 +2,15 @@
 Shell Script Executor using Fabric.
 
 Handles SSH-based execution of shell scripts on remote Linux servers.
-Uses username/password authentication via Fabric's Connection.
+Supports both password and SSH private key authentication.
 """
 
 import logging
 import io
 from dataclasses import dataclass, field
 from typing import Optional
+
+import paramiko
 
 from fabric import Connection
 from invoke.exceptions import UnexpectedExit
@@ -35,12 +37,23 @@ class ShellExecutor:
     """
     Execute shell scripts on remote Linux servers over SSH using Fabric.
 
-    Usage:
+    Supports two authentication modes:
+      - Password auth:  provide `password`
+      - SSH key auth:   provide `ssh_key` (private key as a string)
+
+    Usage (password):
         executor = ShellExecutor(
             host="192.168.1.10",
             username="deploy",
             password="secret",
-            port=22,
+        )
+        result = executor.run(script_content)
+
+    Usage (SSH key):
+        executor = ShellExecutor(
+            host="192.168.1.10",
+            username="deploy",
+            ssh_key="-----BEGIN OPENSSH PRIVATE KEY-----\n...",
         )
         result = executor.run(script_content)
     """
@@ -52,27 +65,67 @@ class ShellExecutor:
         self,
         host: str,
         username: str,
-        password: str,
+        password: Optional[str] = None,
+        ssh_key: Optional[str] = None,
+        key_passphrase: Optional[str] = None,
         port: int = DEFAULT_PORT,
         timeout: int = DEFAULT_TIMEOUT,
     ):
+        if not password and not ssh_key:
+            raise ValueError("Either password or ssh_key must be provided.")
+
         self.host = host
         self.username = username
         self.password = password
+        self.ssh_key = ssh_key
+        self.key_passphrase = key_passphrase
         self.port = port
         self.timeout = timeout
 
+    @staticmethod
+    def _load_pkey(key_str: str, passphrase: Optional[str] = None) -> paramiko.PKey:
+        """
+        Load a private key from a raw string.
+        Tries OpenSSH, RSA, Ed25519, and ECDSA key formats.
+        """
+        key_file = io.StringIO(key_str)
+        key_classes = [
+            paramiko.Ed25519Key,
+            paramiko.RSAKey,
+            paramiko.ECDSAKey,
+        ]
+
+        for cls in key_classes:
+            try:
+                key_file.seek(0)
+                return cls.from_private_key(key_file, password=passphrase)
+            except (paramiko.SSHException, ValueError):
+                continue
+
+        raise ValueError(
+            "Unable to parse private key. Supported formats: Ed25519, RSA, ECDSA."
+        )
+
     def _build_connection(self) -> Connection:
-        """Create a Fabric Connection with password auth."""
+        """Create a Fabric Connection with password or SSH key auth."""
+        connect_kwargs = {
+            "look_for_keys": False,
+            "allow_agent": False,
+        }
+
+        if self.ssh_key:
+            pkey = self._load_pkey(self.ssh_key, self.key_passphrase)
+            connect_kwargs["pkey"] = pkey
+            logger.info("Using SSH key authentication")
+        else:
+            connect_kwargs["password"] = self.password
+            logger.info("Using password authentication")
+
         return Connection(
             host=self.host,
             port=self.port,
             user=self.username,
-            connect_kwargs={
-                "password": self.password,
-                "look_for_keys": False,
-                "allow_agent": False,
-            },
+            connect_kwargs=connect_kwargs,
             connect_timeout=self.timeout,
         )
 

@@ -1,5 +1,6 @@
 from fastapi import FastAPI, HTTPException, Request
 from pydantic import BaseModel, validator
+from typing import Optional
 import httpx
 import logging
 import uvicorn
@@ -31,8 +32,16 @@ def sanitize_input(text: str) -> str:
 
 class Credentials(BaseModel):
     username: str
-    password: str
+    password: Optional[str] = None
+    ssh_key: Optional[str] = None
+    key_passphrase: Optional[str] = None
     port: int = 22
+
+    @validator('ssh_key', always=True)
+    def require_auth_method(cls, v, values):
+        if not v and not values.get('password'):
+            raise ValueError('Either password or ssh_key must be provided')
+        return v
 
 class ExecutionRequest(BaseModel):
     blob_url: str
@@ -84,6 +93,8 @@ async def execute_script(request: Request, exec_request: ExecutionRequest):
             host=exec_request.server_address,
             username=exec_request.credentials.username,
             password=exec_request.credentials.password,
+            ssh_key=exec_request.credentials.ssh_key,
+            key_passphrase=exec_request.credentials.key_passphrase,
             port=exec_request.credentials.port,
         )
 
