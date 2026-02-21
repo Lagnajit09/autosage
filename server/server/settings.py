@@ -38,7 +38,8 @@ DEBUG = config('DEBUG', default=True, cast=bool)
 VERCEL_BLOB_TOKEN = config('BLOB_READ_WRITE_TOKEN', default='')
 
 # Cloud Run URL
-CLOUD_RUN_EXECUTOR_URL = config('CLOUD_RUN_EXECUTOR_URL', default='')
+EXEC_WORKER_URL = config('EXEC_WORKER_URL', default='')
+WORKER_API_KEY = config('WORKER_API_KEY', default='')
 
 ALLOWED_HOSTS = ["http://localhost:5173", "http://127.0.0.1:5173", "localhost", "127.0.0.1"]
 

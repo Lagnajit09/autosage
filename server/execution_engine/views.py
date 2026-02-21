@@ -20,11 +20,12 @@ from server.rate_limiters import ExecutionBurstThrottle, ExecutionSustainedThrot
 
 logger = logging.getLogger(__name__)
 
-# Cloud Run endpoint
+# Execution Worker endpoint
 import os
 from django.conf import settings
 
-CLOUD_RUN_URL = getattr(settings, "CLOUD_RUN_EXECUTOR_URL", os.getenv("CLOUD_RUN_EXECUTOR_URL", ""))
+EXEC_WORKER_URL = getattr(settings, "EXEC_WORKER_URL", os.getenv("EXEC_WORKER_URL", ""))
+WORKER_API_KEY = getattr(settings, "WORKER_API_KEY", os.getenv("WORKER_API_KEY", ""))
 
 
 # SSE helpers
@@ -34,10 +35,10 @@ def _sse_event(event: str, data: dict) -> str:
 
 
 # Core async generator – streams execution updates to the client
-async def _stream_execution(execution_id: str, payload: dict, credential_data: dict):
+async def _stream_execution(execution_id: str, payload: dict):
     """
     Async generator that:
-    1. Sends the execution request to Cloud Run (streaming response).
+    1. Sends the execution request to the exec-worker (streaming response).
     2. Yields SSE events for each chunk / status update received.
     3. Persists final result to the ScriptExecution record.
     """
@@ -65,27 +66,23 @@ async def _stream_execution(execution_id: str, payload: dict, credential_data: d
     exit_code = None
 
     try:
-        # ── Call Cloud Run with streaming ────────────────────────────────
+        # ── Call exec-worker ──────────────────────────────────────────
         headers = {
             "Content-Type": "application/json",
-            # Forward credential details so Cloud Run can authenticate to the target server
-            "X-Credential-Username": credential_data.get("username", ""),
-            "X-Credential-Password": credential_data.get("password", ""),
-            "X-Credential-SSH-Key": credential_data.get("ssh_key", ""),
-            "X-Credential-Passphrase": credential_data.get("key_passphrase", ""),
+            "X-API-Key": WORKER_API_KEY,
         }
 
         async with httpx.AsyncClient(timeout=None) as client:
             async with client.stream(
                 "POST",
-                CLOUD_RUN_URL,
+                EXEC_WORKER_URL,
                 json=payload,
                 headers=headers,
             ) as response:
                 if response.status_code != 200:
                     error_body = await response.aread()
                     raise RuntimeError(
-                        f"Cloud Run returned {response.status_code}: {error_body.decode()}"
+                        f"Exec worker returned {response.status_code}: {error_body.decode()}"
                     )
 
                 async for line in response.aiter_lines():
@@ -217,8 +214,8 @@ def execute_script(request):
         status="pending",
     )
 
-    # ── Build payload for Cloud Run ──────────────────────────────────────
-    cloud_run_payload = {
+    # ── Build payload for exec-worker ─────────────────────────────────────
+    worker_payload = {
         "execution_id": str(execution.id),
         "script": {
             "id": str(script_details["script_id"]),
@@ -232,31 +229,29 @@ def execute_script(request):
             "port": server.port or (5985 if server.connection_method == 'winrm' else 22),
             "connection_method": server.connection_method,
         },
+        "credentials": {
+            "username": credential.username or "",
+            "password": credential.password or "",
+            "ssh_key": credential.ssh_key or "",
+            "key_passphrase": credential.key_passphrase or "",
+        },
         "inputs": inputs,
     }
 
-    # Credential data forwarded via headers
-    credential_data = {
-        "username": credential.username or "",
-        "password": credential.password or "",
-        "ssh_key": credential.ssh_key or "",
-        "key_passphrase": credential.key_passphrase or "",
-    }
-
-    # ── Validate Cloud Run URL is configured ────────────────────────────
-    if not CLOUD_RUN_URL:
+    # ── Validate exec-worker URL is configured ───────────────────────────
+    if not EXEC_WORKER_URL:
         execution.status = "failed"
-        execution.stderr = "CLOUD_RUN_EXECUTOR_URL is not configured."
+        execution.stderr = "EXEC_WORKER_URL is not configured."
         execution.save()
         return api_response(
             success=False,
-            message="Cloud Run executor URL is not configured.",
+            message="Execution worker URL is not configured.",
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
         )
 
     # ── Stream SSE response ──────────────────────────────────────────────
     async def event_stream():
-        async for chunk in _stream_execution(str(execution.id), cloud_run_payload, credential_data):
+        async for chunk in _stream_execution(str(execution.id), worker_payload):
             yield chunk
 
     streaming_response = StreamingHttpResponse(

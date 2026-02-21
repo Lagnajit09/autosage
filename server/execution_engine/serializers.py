@@ -3,7 +3,7 @@ from .models import ScriptExecution
 
 
 class ScriptDetailsSerializer(serializers.Serializer):
-    script_id = serializers.UUIDField()
+    script_id = serializers.IntegerField()
     script_name = serializers.CharField(max_length=255)
     pathname = serializers.CharField(max_length=500)
     url = serializers.URLField()  # Vercel Blob URL (blob_url)
