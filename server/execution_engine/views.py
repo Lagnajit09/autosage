@@ -4,19 +4,27 @@ import asyncio
 from datetime import datetime, timezone
 
 import httpx
-from django.http import StreamingHttpResponse
+from django.http import StreamingHttpResponse, JsonResponse
 from django.utils import timezone as dj_timezone
-from rest_framework.decorators import api_view, permission_classes
-from rest_framework.permissions import IsAuthenticated
-from rest_framework.response import Response
+from django.contrib.auth.models import AnonymousUser
+from django.views import View
+from django.utils.decorators import method_decorator
+from django.views.decorators.csrf import csrf_exempt
+from rest_framework.throttling import UserRateThrottle
 from rest_framework import status
 
 from vault.models import Vault, Server, Credential
 from scripts.models import Script
 from .models import ScriptExecution
-from .serializers import ScriptExecutionRequestSerializer
+from .serializers import ScriptExecutionRequestSerializer, ScriptExecutionResponseSerializer
 from server.utils import api_response
 from server.rate_limiters import ExecutionBurstThrottle, ExecutionSustainedThrottle
+
+# For non-streaming endpoints still using DRF decorators
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
+from rest_framework.request import Request as DRFRequest
 
 logger = logging.getLogger(__name__)
 
@@ -28,13 +36,35 @@ EXEC_WORKER_URL = getattr(settings, "EXEC_WORKER_URL", os.getenv("EXEC_WORKER_UR
 WORKER_API_KEY = getattr(settings, "WORKER_API_KEY", os.getenv("WORKER_API_KEY", ""))
 
 
-# SSE helpers
+# ── Helpers ───────────────────────────────────────────────────────────────────
+
+def _json_response(success: bool, message: str, data=None, errors=None, status_code: int = 200) -> JsonResponse:
+    """Async-safe replacement for api_response() that returns JsonResponse."""
+    return JsonResponse(
+        {"success": success, "message": message, "data": data, "errors": errors},
+        status=status_code,
+    )
+
+
 def _sse_event(event: str, data: dict) -> str:
     """Format a Server-Sent Event frame."""
     return f"event: {event}\ndata: {json.dumps(data)}\n\n"
 
 
-# Core async generator – streams execution updates to the client
+def _check_throttle(request, throttle_class):
+    """
+    Run a DRF throttle against the raw Django request.
+    Returns True when the request is allowed.
+    """
+    throttle = throttle_class()
+    # DRF throttles need a DRF Request wrapper; we build a minimal one.
+    drf_request = DRFRequest(request)
+    drf_request._user = request.user
+    return throttle.allow_request(drf_request, None)
+
+
+# ── Core async SSE generator ──────────────────────────────────────────────────
+
 async def _stream_execution(execution_id: str, payload: dict):
     """
     Async generator that:
@@ -64,6 +94,7 @@ async def _stream_execution(execution_id: str, payload: dict):
     stderr_chunks = []
     logs = []
     exit_code = None
+    final_status = "failed"
 
     try:
         # ── Call exec-worker ──────────────────────────────────────────
@@ -96,7 +127,8 @@ async def _stream_execution(execution_id: str, payload: dict):
                         chunk = {"type": "stdout", "data": line}
 
                     chunk_type = chunk.get("type", "stdout")
-                    chunk_data = chunk.get("data", "")
+                    # Ensure chunk_data is always a string
+                    chunk_data = str(chunk.get("data", ""))
 
                     if chunk_type == "stdout":
                         stdout_chunks.append(chunk_data)
@@ -152,29 +184,47 @@ async def _stream_execution(execution_id: str, payload: dict):
     yield _sse_event("done", {"execution_id": execution_id})
 
 
-# View
-@api_view(["POST"])
-@permission_classes([IsAuthenticated])
-def execute_script(request):
-    """
-    POST /executions/run/
-    """
-    # ── Throttling ───────────────────────────────────────────────────
-    for throttle in [ExecutionBurstThrottle(), ExecutionSustainedThrottle()]:
-        if not throttle.allow_request(request, execute_script):
-            return api_response(
-                success=False,
-                message="Rate limit exceeded.",
-                status_code=status.HTTP_429_TOO_MANY_REQUESTS
-            )
+# ── Async execute view (SSE streaming) ───────────────────────────────────────
 
-    serializer = ScriptExecutionRequestSerializer(data=request.data)
+@csrf_exempt
+async def execute_script(request):
+    """
+    POST /api/execution-engine/run/
+
+    Native async Django view so that StreamingHttpResponse can consume
+    the async generator directly (requires ASGI server, e.g. uvicorn/daphne).
+    """
+    if request.method != "POST":
+        return _json_response(False, "Method not allowed.", status_code=405)
+
+    # ── Auth check ────────────────────────────────────────────────────────
+    user = getattr(request, "user", None)
+    if not user or isinstance(user, AnonymousUser) or not user.is_authenticated:
+        return _json_response(False, "Authentication required.", status_code=401)
+
+    # ── Throttling ────────────────────────────────────────────────────────
+    from asgiref.sync import sync_to_async
+    check_burst = sync_to_async(_check_throttle)
+    check_sustained = sync_to_async(_check_throttle)
+
+    if not await check_burst(request, ExecutionBurstThrottle):
+        return _json_response(False, "Rate limit exceeded.", status_code=429)
+    if not await check_sustained(request, ExecutionSustainedThrottle):
+        return _json_response(False, "Rate limit exceeded.", status_code=429)
+
+    # ── Parse & validate request body ────────────────────────────────────
+    try:
+        body = json.loads(request.body)
+    except (json.JSONDecodeError, Exception):
+        return _json_response(False, "Invalid JSON body.", status_code=400)
+
+    serializer = ScriptExecutionRequestSerializer(data=body)
     if not serializer.is_valid():
-        return api_response(
-            success=False,
-            message="Invalid request data.",
+        return _json_response(
+            False,
+            "Invalid request data.",
             errors=serializer.errors,
-            status_code=status.HTTP_400_BAD_REQUEST
+            status_code=400,
         )
 
     data = serializer.validated_data
@@ -182,34 +232,40 @@ def execute_script(request):
     vault_details = data["vault_details"]
     inputs = data.get("inputs", {})
 
-    # ── Fetch and Validate Ownership ─────────────────────────────────────
-    try:
-        # Check vault ownership
-        vault = Vault.objects.get(id=vault_details["vault_id"], owner=request.user)
-        
-        # Check server and credential belong to this user AND this vault
-        server = Server.objects.get(id=vault_details["server_id"], vault=vault)
-        credential = Credential.objects.get(id=vault_details["credential_id"], vault=vault)
-        
-        # Check script ownership
-        script = Script.objects.get(id=script_details["script_id"], owner=request.user)
-        
-    except Vault.DoesNotExist:
-        return api_response(success=False, message="Vault not found or access denied.", status_code=status.HTTP_404_NOT_FOUND)
-    except Server.DoesNotExist:
-        return api_response(success=False, message="Server not found in vault.", status_code=status.HTTP_404_NOT_FOUND)
-    except Credential.DoesNotExist:
-        return api_response(success=False, message="Credential not found in vault.", status_code=status.HTTP_404_NOT_FOUND)
-    except Script.DoesNotExist:
-        return api_response(success=False, message="Script not found or access denied.", status_code=status.HTTP_404_NOT_FOUND)
+    # ── Fetch and validate ownership (sync ORM via sync_to_async) ────────
+    get_vault = sync_to_async(Vault.objects.get)
+    get_server = sync_to_async(Server.objects.get)
+    get_credential = sync_to_async(Credential.objects.get)
+    get_script = sync_to_async(Script.objects.get)
+    create_execution = sync_to_async(ScriptExecution.objects.create)
 
-    # ── Create execution record ──────────────────────────────────────────
-    execution = ScriptExecution.objects.create(
+    try:
+        vault = await get_vault(id=vault_details["vault_id"], owner=user)
+    except Vault.DoesNotExist:
+        return _json_response(False, "Vault not found or access denied.", status_code=404)
+
+    try:
+        server = await get_server(id=vault_details["server_id"], vault=vault)
+    except Server.DoesNotExist:
+        return _json_response(False, "Server not found in vault.", status_code=404)
+
+    try:
+        credential = await get_credential(id=vault_details["credential_id"], vault=vault)
+    except Credential.DoesNotExist:
+        return _json_response(False, "Credential not found in vault.", status_code=404)
+
+    try:
+        script = await get_script(id=script_details["script_id"], owner=user)
+    except Script.DoesNotExist:
+        return _json_response(False, "Script not found or access denied.", status_code=404)
+
+    # ── Create execution record ───────────────────────────────────────────
+    execution = await create_execution(
         script=script,
         vault=vault,
         server=server,
         credential=credential,
-        user=request.user,
+        user=user,
         inputs=inputs,
         status="pending",
     )
@@ -226,7 +282,7 @@ def execute_script(request):
         "server": {
             "id": str(server.id),
             "host": server.host,
-            "port": server.port or (5985 if server.connection_method == 'winrm' else 22),
+            "port": server.port or (5985 if server.connection_method == "winrm" else 22),
             "connection_method": server.connection_method,
         },
         "credentials": {
@@ -238,24 +294,21 @@ def execute_script(request):
         "inputs": inputs,
     }
 
-    # ── Validate exec-worker URL is configured ───────────────────────────
+    # ── Validate exec-worker URL is configured ────────────────────────────
     if not EXEC_WORKER_URL:
+        save_execution = sync_to_async(lambda obj: obj.save())
         execution.status = "failed"
         execution.stderr = "EXEC_WORKER_URL is not configured."
-        execution.save()
-        return api_response(
-            success=False,
-            message="Execution worker URL is not configured.",
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        await save_execution(execution)
+        return _json_response(
+            False,
+            "Execution worker URL is not configured.",
+            status_code=503,
         )
 
-    # ── Stream SSE response ──────────────────────────────────────────────
-    async def event_stream():
-        async for chunk in _stream_execution(str(execution.id), worker_payload):
-            yield chunk
-
+    # ── Return async SSE stream ───────────────────────────────────────────
     streaming_response = StreamingHttpResponse(
-        event_stream(),
+        _stream_execution(str(execution.id), worker_payload),
         content_type="text/event-stream",
     )
     streaming_response["Cache-Control"] = "no-cache"
@@ -264,20 +317,22 @@ def execute_script(request):
     return streaming_response
 
 
-# Status endpoint – lightweight poll fallback
+# ── Status endpoint – lightweight poll fallback ────────────────────────────
+
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def execution_status(request, execution_id):
     """
-    GET /executions/<execution_id>/status/
+    GET /api/execution-engine/<execution_id>/status/
     """
     # ── Throttling ───────────────────────────────────────────────────
-    for throttle in [ExecutionBurstThrottle(), ExecutionSustainedThrottle()]:
+    for throttle_cls in [ExecutionBurstThrottle, ExecutionSustainedThrottle]:
+        throttle = throttle_cls()
         if not throttle.allow_request(request, execution_status):
             return api_response(
                 success=False,
                 message="Rate limit exceeded.",
-                status_code=status.HTTP_429_TOO_MANY_REQUESTS
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
             )
 
     try:
@@ -286,12 +341,11 @@ def execution_status(request, execution_id):
         return api_response(
             success=False,
             message="Execution record not found or access denied.",
-            status_code=status.HTTP_404_NOT_FOUND
+            status_code=status.HTTP_404_NOT_FOUND,
         )
 
-    from .serializers import ScriptExecutionResponseSerializer
     return api_response(
         success=True,
         message="Execution status retrieved successfully.",
-        data=ScriptExecutionResponseSerializer(execution).data
+        data=ScriptExecutionResponseSerializer(execution).data,
     )
