@@ -117,40 +117,60 @@ async def _stream_execution(execution_id: str, payload: dict):
                     )
 
                 async for line in response.aiter_lines():
-                    if not line:
+                    if not line.strip():
                         continue
 
+                    # ── Parse NDJSON line from exec-worker ───────────────
                     try:
                         chunk: dict = json.loads(line)
                     except json.JSONDecodeError:
-                        # Plain text line – treat as stdout
+                        # Bare text (shouldn't happen) – treat as stdout
                         chunk = {"type": "stdout", "data": line}
 
                     chunk_type = chunk.get("type", "stdout")
-                    # Ensure chunk_data is always a string
-                    chunk_data = str(chunk.get("data", ""))
+                    raw_data   = chunk.get("data", "")
+
+                    # ── Normalise data per chunk type ─────────────────────
+                    if chunk_type == "exit_code":
+                        # data is an int from the worker
+                        try:
+                            exit_code = int(raw_data)
+                        except (TypeError, ValueError):
+                            exit_code = -1
+                        yield _sse_event("exit_code", {"exit_code": exit_code})
+                        continue
+
+                    # For stdout / stderr / error: data is a string
+                    # The string may itself be JSON-formatted output from the
+                    # user's script – we pass it through as-is so the
+                    # frontend can decide whether to pretty-print it.
+                    chunk_data = str(raw_data) if not isinstance(raw_data, str) else raw_data
+                    ts = dj_timezone.now().isoformat()
 
                     if chunk_type == "stdout":
                         stdout_chunks.append(chunk_data)
-                        logs.append({"type": "stdout", "data": chunk_data, "ts": dj_timezone.now().isoformat()})
+                        logs.append({"type": "stdout", "data": chunk_data, "ts": ts})
                         yield _sse_event("stdout", {"data": chunk_data})
 
                     elif chunk_type == "stderr":
                         stderr_chunks.append(chunk_data)
-                        logs.append({"type": "stderr", "data": chunk_data, "ts": dj_timezone.now().isoformat()})
+                        logs.append({"type": "stderr", "data": chunk_data, "ts": ts})
                         yield _sse_event("stderr", {"data": chunk_data})
 
-                    elif chunk_type == "exit_code":
-                        exit_code = int(chunk_data)
-                        yield _sse_event("exit_code", {"exit_code": exit_code})
+                    elif chunk_type == "error":
+                        # Worker-level errors (SSH failure, fetch error, etc.)
+                        # Surface as stderr so they appear in the terminal
+                        stderr_chunks.append(chunk_data)
+                        logs.append({"type": "error", "data": chunk_data, "ts": ts})
+                        yield _sse_event("stderr", {"data": chunk_data})
 
                     elif chunk_type == "log":
-                        logs.append({"type": "log", "data": chunk_data, "ts": dj_timezone.now().isoformat()})
+                        logs.append({"type": "log", "data": chunk_data, "ts": ts})
                         yield _sse_event("log", {"data": chunk_data})
 
                     else:
                         # Forward unknown event types transparently
-                        yield _sse_event(chunk_type, chunk)
+                        yield _sse_event(chunk_type, {"data": chunk_data})
 
         # ── Execution finished successfully ──────────────────────────────
         final_status = "completed" if (exit_code is None or exit_code == 0) else "failed"
