@@ -184,6 +184,14 @@ export function useScriptExecution() {
     }
   };
 
+  const refreshData = async () => {
+    await fetchData();
+    setLogs([]);
+    toast.success("Servers and credentials refreshed");
+  };
+
+  const clearLogs = () => setLogs([]);
+
   return {
     servers,
     credentials,
@@ -193,6 +201,8 @@ export function useScriptExecution() {
     selectedCredentialId,
     setSelectedCredentialId,
     executeScript,
+    refreshData,
+    clearLogs,
     isExecuting,
     logs,
     setLogs,

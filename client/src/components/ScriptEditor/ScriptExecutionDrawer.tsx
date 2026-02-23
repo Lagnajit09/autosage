@@ -1,4 +1,12 @@
-import { X, Play, Server as ServerIcon, Key, Airplay } from "lucide-react";
+import {
+  X,
+  Play,
+  Server as ServerIcon,
+  Key,
+  Airplay,
+  RefreshCw,
+  Trash2,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -22,7 +30,10 @@ interface ScriptExecutionDrawerProps {
   selectedCredentialId: string;
   setSelectedCredentialId: (id: string) => void;
   onExecute: () => void;
+  onRefresh: () => void;
+  onClearLogs: () => void;
   isExecuting: boolean;
+  isLoadingData: boolean;
   logs: string[];
 }
 
@@ -37,7 +48,9 @@ export function ScriptExecutionDrawer({
   selectedCredentialId,
   setSelectedCredentialId,
   onExecute,
+  onRefresh,
   isExecuting,
+  isLoadingData,
   logs,
 }: ScriptExecutionDrawerProps) {
   return (
@@ -116,7 +129,20 @@ export function ScriptExecutionDrawer({
 
             <Button
               size="sm"
-              className="h-8 bg-green-600 hover:bg-green-700 text-white ml-auto"
+              variant="outline"
+              className="h-8 px-2 border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-400 dark:bg-gray-800 dark:hover:text-gray-200 ml-auto"
+              onClick={onRefresh}
+              disabled={isExecuting || isLoadingData}
+              title="Refresh Terminal Session"
+            >
+              <RefreshCw
+                className={cn("w-4 h-4", isLoadingData && "animate-spin")}
+              />
+            </Button>
+
+            <Button
+              size="sm"
+              className="h-8 bg-green-600 hover:bg-green-700 text-white"
               onClick={onExecute}
               disabled={!selectedServerId || isExecuting}
             >
@@ -135,7 +161,7 @@ export function ScriptExecutionDrawer({
           variant="ghost"
           size="icon"
           onClick={onClose}
-          className="h-6 w-6 ml-2 text-gray-500 hover:text-gray-900 dark:hover:text-gray-100"
+          className="h-6 w-6 ml-2 text-gray-500 hover:text-gray-900 dark:hover:text-gray-100 dark:hover:bg-gray-700"
         >
           <X className="w-4 h-4" />
         </Button>

@@ -12,7 +12,7 @@ import { EditorTabs } from "../components/ScriptEditor/EditorTabs";
 import { EditorPane } from "../components/ScriptEditor/EditorPane";
 import { useScriptExecution } from "../components/ScriptEditor/useScriptExecution";
 import { ScriptExecutionDrawer } from "../components/ScriptEditor/ScriptExecutionDrawer";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 const ScriptEditor = () => {
   const navigate = useNavigate();
@@ -57,9 +57,19 @@ const ScriptEditor = () => {
     selectedCredentialId,
     setSelectedCredentialId,
     executeScript,
+    refreshData,
+    clearLogs,
     isExecuting,
+    isLoadingData,
     logs,
   } = useScriptExecution();
+
+  // Clear logs when script changes to improve user experience
+  useEffect(() => {
+    if (currentFile?.id) {
+      clearLogs();
+    }
+  }, [currentFile?.id]);
 
   return (
     <SidebarProvider>
@@ -122,7 +132,13 @@ const ScriptEditor = () => {
                 selectedCredentialId={selectedCredentialId}
                 setSelectedCredentialId={setSelectedCredentialId}
                 onExecute={() => currentFile && executeScript(currentFile)}
+                onRefresh={() => {
+                  refreshData();
+                  clearLogs();
+                }}
+                onClearLogs={clearLogs}
                 isExecuting={isExecuting}
+                isLoadingData={isLoadingData}
                 logs={logs}
               />
             </div>
