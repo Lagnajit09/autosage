@@ -230,6 +230,7 @@ export function Vault({
                     value={newVaultName}
                     onChange={(e) => setNewVaultName(e.target.value)}
                     placeholder="e.g. Production Keys"
+                    maxLength={25}
                     className="bg-white dark:bg-gray-950 border-gray-300 dark:border-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500"
                   />
                 </div>
@@ -241,6 +242,7 @@ export function Vault({
                     value={newVaultDesc}
                     onChange={(e) => setNewVaultDesc(e.target.value)}
                     placeholder="Optional description"
+                    maxLength={500}
                     className="bg-white dark:bg-gray-950 border-gray-300 dark:border-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500"
                   />
                 </div>

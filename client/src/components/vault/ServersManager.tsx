@@ -169,6 +169,7 @@ export function ServersManager({
                 <Input
                   value={name}
                   onChange={(e) => setName(e.target.value)}
+                  maxLength={25}
                   placeholder="e.g. Web Server Prod"
                   className="bg-white dark:bg-gray-950 border-gray-300 dark:border-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500"
                 />
@@ -179,7 +180,12 @@ export function ServersManager({
                 </Label>
                 <Input
                   value={host}
-                  onChange={(e) => setHost(e.target.value)}
+                  onChange={(e) => {
+                    if (e.target.value.match(/^[0-9.]*$/)) {
+                      setHost(e.target.value);
+                    }
+                  }}
+                  maxLength={25}
                   placeholder="192.168.x.x"
                   className="bg-white dark:bg-gray-950 border-gray-300 dark:border-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500"
                 />
@@ -216,7 +222,12 @@ export function ServersManager({
                 <Input
                   type="text"
                   value={port}
-                  onChange={(e) => setPort(e.target.value)}
+                  onChange={(e) => {
+                    if (e.target.value.match(/^[0-9]*$/)) {
+                      setPort(e.target.value);
+                    }
+                  }}
+                  maxLength={5}
                   placeholder={method === "ssh" ? "22" : "5985"}
                   className="bg-white dark:bg-gray-950 border-gray-300 dark:border-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500"
                 />

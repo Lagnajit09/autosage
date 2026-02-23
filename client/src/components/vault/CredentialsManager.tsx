@@ -178,6 +178,7 @@ export function CredentialsManager({
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   placeholder="e.g. Root User"
+                  maxLength={25}
                   className="bg-white dark:bg-gray-950 border-gray-300 dark:border-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500"
                 />
               </div>
