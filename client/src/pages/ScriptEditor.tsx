@@ -121,7 +121,7 @@ const ScriptEditor = () => {
                 setSelectedServerId={setSelectedServerId}
                 selectedCredentialId={selectedCredentialId}
                 setSelectedCredentialId={setSelectedCredentialId}
-                onExecute={() => currentFile && executeScript(currentFile.id)}
+                onExecute={() => currentFile && executeScript(currentFile)}
                 isExecuting={isExecuting}
                 logs={logs}
               />

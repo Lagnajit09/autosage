@@ -7,6 +7,8 @@ export interface ScriptFile {
   language: ScriptLanguage;
   lastModified: Date;
   source: "upload" | "editor";
+  pathname?: string;
+  blobUrl?: string;
 }
 
 export type ComparisonOperator =

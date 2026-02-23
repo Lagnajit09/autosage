@@ -150,11 +150,25 @@ export function ScriptExecutionDrawer({
                 ? `> Executing ${scriptName}...`
                 : "> No script selected."}
             </div>
-            {logs.map((log, i) => (
-              <div key={i} className="break-all whitespace-pre-wrap font-mono">
-                {log}
-              </div>
-            ))}
+            {logs.map((log, i) => {
+              let colorClass = "text-gray-300";
+              if (log.startsWith("[ERROR]")) colorClass = "text-red-500";
+              else if (log.startsWith("[STATUS]")) colorClass = "text-blue-400";
+              else if (log.startsWith("[EXIT]")) colorClass = "text-yellow-500";
+              else if (log.startsWith(">")) colorClass = "text-green-500";
+
+              return (
+                <div
+                  key={i}
+                  className={cn(
+                    "break-all whitespace-pre-wrap font-mono",
+                    colorClass,
+                  )}
+                >
+                  {log}
+                </div>
+              );
+            })}
             {isExecuting && (
               <div className="animate-pulse text-green-500 inline-block">_</div>
             )}

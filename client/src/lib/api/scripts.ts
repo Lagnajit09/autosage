@@ -28,7 +28,9 @@ export const mapScriptToScriptFile = (
     content: content,
     language: language,
     lastModified: new Date(script.updated_at),
-    source: "upload", // or editor, backend doesn't distinguish but it's persisted now
+    source: "upload",
+    pathname: script.pathname,
+    blobUrl: script.blob_url,
   };
 };
 
