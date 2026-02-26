@@ -302,8 +302,12 @@ async def execute_script(request):
         "server": {
             "id": str(server.id),
             "host": server.host,
-            "port": server.port or (5985 if server.connection_method == "winrm" else 22),
+            "port": server.port or 22,
             "connection_method": server.connection_method,
+            "os_type": "windows" if server.connection_method == "winrm" else "linux",
+            "winrm_port": server.port or 5985,
+            "winrm_use_ssl": False,
+            "winrm_transport": "ntlm",
         },
         "credentials": {
             "username": credential.username or "",
