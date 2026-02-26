@@ -211,9 +211,9 @@ class PowerShellExecutor:
             while True:
                 await asyncio.sleep(self.POLL_INTERVAL)
 
-                # get_command_output returns (std_out, std_err, return_code, done)
+                # get_command_output_raw returns (std_out, std_err, return_code, done)
                 def _poll():
-                    return protocol.get_command_output(shell_id, command_id)
+                    return protocol.get_command_output_raw(shell_id, command_id)
 
                 try:
                     std_out_chunk, std_err_chunk, return_code, done = (
