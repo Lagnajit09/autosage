@@ -262,3 +262,19 @@ export interface DecisionNodeData {
   falseLabel?: string[];
   description?: string;
 }
+
+export interface ScriptExecution {
+  id: string;
+  script_id: number;
+  script_name: string;
+  status: "pending" | "running" | "completed" | "failed" | "cancelled";
+  stdout: string;
+  stderr: string;
+  exit_code: number | null;
+  started_at: string | null;
+  completed_at: string | null;
+  duration: string | null;
+  logs: any[];
+  created_at: string;
+  updated_at: string;
+}

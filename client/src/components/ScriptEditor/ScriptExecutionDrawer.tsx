@@ -18,6 +18,7 @@ import {
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
 import { Server, Credential } from "@/utils/types";
+import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
 
 interface ScriptExecutionDrawerProps {
   isOpen: boolean;
@@ -127,18 +128,24 @@ export function ScriptExecutionDrawer({
               </Select>
             </div>
 
-            <Button
-              size="sm"
-              variant="outline"
-              className="h-8 px-2 border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-400 dark:bg-gray-800 dark:hover:text-gray-200 ml-auto"
-              onClick={onRefresh}
-              disabled={isExecuting || isLoadingData}
-              title="Refresh Terminal Session"
-            >
-              <RefreshCw
-                className={cn("w-4 h-4", isLoadingData && "animate-spin")}
-              />
-            </Button>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-8 px-2 border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-400 dark:bg-gray-800 dark:hover:text-gray-200 ml-auto"
+                  onClick={onRefresh}
+                  disabled={isExecuting || isLoadingData}
+                >
+                  <RefreshCw
+                    className={cn("w-4 h-4", isLoadingData && "animate-spin")}
+                  />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>Refresh Terminal Session</p>
+              </TooltipContent>
+            </Tooltip>
 
             <Button
               size="sm"

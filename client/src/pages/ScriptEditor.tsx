@@ -12,6 +12,7 @@ import { EditorTabs } from "../components/ScriptEditor/EditorTabs";
 import { EditorPane } from "../components/ScriptEditor/EditorPane";
 import { useScriptExecution } from "../components/ScriptEditor/useScriptExecution";
 import { ScriptExecutionDrawer } from "../components/ScriptEditor/ScriptExecutionDrawer";
+import { ExecutionHistoryModal } from "../components/ScriptEditor/ExecutionHistoryModal";
 import { useState, useEffect } from "react";
 
 const ScriptEditor = () => {
@@ -48,6 +49,7 @@ const ScriptEditor = () => {
   } = useScriptEditor();
 
   const [isExecutionOpen, setIsExecutionOpen] = useState(false);
+  const [isExecutionsHistoryOpen, setIsExecutionsHistoryOpen] = useState(false);
 
   const {
     servers,
@@ -103,6 +105,7 @@ const ScriptEditor = () => {
               onSave={saveFile}
               onToggleAI={() => setIsAISidebarOpen(!isAISidebarOpen)}
               onToggleTerminal={() => setIsExecutionOpen(!isExecutionOpen)}
+              onToggleExecutions={() => setIsExecutionsHistoryOpen(true)}
             />
 
             <EditorTabs
@@ -140,6 +143,10 @@ const ScriptEditor = () => {
                 isExecuting={isExecuting}
                 isLoadingData={isLoadingData}
                 logs={logs}
+              />
+              <ExecutionHistoryModal
+                isOpen={isExecutionsHistoryOpen}
+                onClose={() => setIsExecutionsHistoryOpen(false)}
               />
             </div>
           </div>

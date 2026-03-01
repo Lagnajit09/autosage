@@ -17,6 +17,7 @@ interface EditorHeaderProps {
   onSave: () => void;
   onToggleAI: () => void;
   onToggleTerminal: () => void;
+  onToggleExecutions: () => void;
 }
 
 export function EditorHeader({
@@ -25,6 +26,7 @@ export function EditorHeader({
   onSave,
   onToggleAI,
   onToggleTerminal,
+  onToggleExecutions,
 }: EditorHeaderProps) {
   const [showVault, setShowVault] = useState(false);
 
@@ -39,6 +41,15 @@ export function EditorHeader({
         </div>
 
         <div className="flex items-center space-x-2">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={onToggleExecutions}
+            className="flex items-center space-x-1 border-2 border-gray-200 dark:border-gray-800 text-gray-700 dark:text-gray-300 dark:hover:bg-gray-700/30"
+          >
+            <Airplay size={16} />
+            <span className="hidden sm:inline">Executions</span>
+          </Button>
           <Button
             variant="ghost"
             size="sm"
