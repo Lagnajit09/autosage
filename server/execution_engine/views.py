@@ -182,8 +182,13 @@ async def _stream_execution(execution_id: str, payload: dict):
 
     except Exception as exc:
         final_status = "failed"
+        error_msg = f"Worker Error: {str(exc)}"
+        stderr_chunks.append(error_msg)
+        ts = dj_timezone.now().isoformat()
+        logs.append({"type": "error", "data": error_msg, "ts": ts})
+        
         logger.exception("Execution %s failed: %s", execution_id, exc)
-        yield _sse_event("error", {"execution_id": execution_id, "message": str(exc)})
+        yield _sse_event("error", {"execution_id": execution_id, "message": error_msg})
 
     # ── Persist final state ──────────────────────────────────────────────
     try:

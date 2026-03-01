@@ -1,4 +1,4 @@
-import { Airplay, DatabaseZap, Save } from "lucide-react";
+import { Airplay, DatabaseZap, History, Save } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import GenieButton from "@/components/GenieButton";
 import { SidebarTrigger } from "@/components/ui/sidebar";
@@ -47,7 +47,7 @@ export function EditorHeader({
             onClick={onToggleExecutions}
             className="flex items-center space-x-1 border-2 border-gray-200 dark:border-gray-800 text-gray-700 dark:text-gray-300 dark:hover:bg-gray-700/30"
           >
-            <Airplay size={16} />
+            <History size={16} />
             <span className="hidden sm:inline">Executions</span>
           </Button>
           <Button

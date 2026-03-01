@@ -213,11 +213,8 @@ ${execution.stderr || ""}
             </TableHeader>
             <TableBody>
               {isLoading ? (
-                <TableRow>
-                  <TableCell
-                    colSpan={7}
-                    className="h-64 text-center dark:bg-zinc-900/20"
-                  >
+                <TableRow className="dark:bg-zinc-900/20 dark:hover:bg-zinc-900/20">
+                  <TableCell colSpan={7} className="h-64 text-center">
                     <div className="flex flex-col items-center justify-center gap-3">
                       <Loader2 className="h-8 w-8 animate-spin text-purple-500" />
                       <p className="text-sm text-zinc-500 animate-pulse">
@@ -227,11 +224,8 @@ ${execution.stderr || ""}
                   </TableCell>
                 </TableRow>
               ) : executions.length === 0 ? (
-                <TableRow>
-                  <TableCell
-                    colSpan={7}
-                    className="h-64 text-center dark:bg-zinc-900/20"
-                  >
+                <TableRow className="dark:bg-zinc-900/20 dark:hover:bg-zinc-900/20">
+                  <TableCell colSpan={7} className="h-64 text-center">
                     <div className="flex flex-col items-center justify-center gap-2">
                       <p className="text-lg font-medium text-zinc-400 dark:text-zinc-600">
                         No history found
@@ -298,43 +292,29 @@ ${execution.stderr || ""}
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="flex items-center justify-end gap-2">
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                className="h-8 px-2 text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 dark:hover:bg-zinc-300/20"
-                                onClick={() => copyLogs(execution)}
-                              >
-                                <Copy className="h-4 w-4" />
-                                <span className="ml-2 hidden lg:inline">
-                                  Copy Logs
-                                </span>
-                              </Button>
-                            </TooltipTrigger>
-                            <TooltipContent>
-                              Copy stdout and stderr
-                            </TooltipContent>
-                          </Tooltip>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-8 px-2 text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 dark:hover:bg-zinc-300/20"
+                            onClick={() => copyLogs(execution)}
+                          >
+                            <Copy className="h-4 w-4" />
+                            <span className="ml-2 hidden lg:inline">
+                              Copy Logs
+                            </span>
+                          </Button>
 
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                className="h-8 px-2 text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 dark:hover:bg-zinc-300/20"
-                                onClick={() => downloadLogs(execution)}
-                              >
-                                <Download className="h-4 w-4" />
-                                <span className="ml-2 hidden lg:inline">
-                                  Download
-                                </span>
-                              </Button>
-                            </TooltipTrigger>
-                            <TooltipContent>
-                              Download as .log file
-                            </TooltipContent>
-                          </Tooltip>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-8 px-2 text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 dark:hover:bg-zinc-300/20"
+                            onClick={() => downloadLogs(execution)}
+                          >
+                            <Download className="h-4 w-4" />
+                            <span className="ml-2 hidden lg:inline">
+                              Download
+                            </span>
+                          </Button>
                         </div>
                       </TableCell>
                     </TableRow>
