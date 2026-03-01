@@ -30,3 +30,17 @@ class ScriptExecutionResponseSerializer(serializers.ModelSerializer):
             'created_at', 'updated_at',
         ]
         read_only_fields = fields
+
+
+class ScriptExecutionHistorySerializer(serializers.ModelSerializer):
+    script_id = serializers.IntegerField(source='script.id', read_only=True)
+    script_name = serializers.CharField(source='script.name', read_only=True)
+
+    class Meta:
+        model = ScriptExecution
+        fields = [
+            'id', 'script_id', 'script_name', 'status', 'stdout', 'stderr', 'exit_code',
+            'started_at', 'completed_at', 'duration', 'logs',
+            'created_at', 'updated_at',
+        ]
+        read_only_fields = fields

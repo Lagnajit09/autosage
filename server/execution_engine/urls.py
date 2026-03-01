@@ -9,4 +9,7 @@ urlpatterns = [
 
     # Polling fallback – returns current execution state as JSON
     path("<uuid:execution_id>/status/", views.execution_status, name="execution-status"),
+
+    # Execution History endpoint
+    path("history/", views.execution_history, name="execution-history"),
 ]

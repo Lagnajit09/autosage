@@ -373,3 +373,60 @@ def execution_status(request, execution_id):
         message="Execution status retrieved successfully.",
         data=ScriptExecutionResponseSerializer(execution).data,
     )
+
+# ── History endpoint ─────────────────────────────────────────────────────────
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def execution_history(request):
+    """
+    GET /api/execution-engine/history/
+    Retrieves the execution history for the authenticated user.
+    """
+    from django.core.paginator import Paginator, EmptyPage
+
+    # ── Throttling ───────────────────────────────────────────────────
+    for throttle_cls in [ExecutionBurstThrottle, ExecutionSustainedThrottle]:
+        throttle = throttle_cls()
+        if not throttle.allow_request(request, execution_history):
+            return api_response(
+                success=False,
+                message="Rate limit exceeded.",
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            )
+
+    try:
+        page_number = int(request.GET.get('page', 1))
+        page_size = int(request.GET.get('page_size', 50))
+    except ValueError:
+        return api_response(
+            success=False,
+            message="Invalid pagination parameters.",
+            status_code=status.HTTP_400_BAD_REQUEST,
+        )
+
+    executions = ScriptExecution.objects.filter(user=request.user).select_related('script')
+    paginator = Paginator(executions, page_size)
+
+    try:
+        page_obj = paginator.page(page_number)
+    except EmptyPage:
+        return api_response(
+            success=True,
+            message="Execution history retrieved successfully.",
+            data={'executions': [], 'total_count': paginator.count, 'total_pages': paginator.num_pages, 'current_page': page_number}
+        )
+
+    from .serializers import ScriptExecutionHistorySerializer
+    
+    serializer = ScriptExecutionHistorySerializer(page_obj.object_list, many=True)
+    return api_response(
+        success=True,
+        message="Execution history retrieved successfully.",
+        data={
+            'executions': serializer.data,
+            'total_count': paginator.count,
+            'total_pages': paginator.num_pages,
+            'current_page': page_number
+        },
+    )
