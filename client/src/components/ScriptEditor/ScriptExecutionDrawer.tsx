@@ -5,7 +5,7 @@ import {
   Key,
   Airplay,
   RefreshCw,
-  Trash2,
+  Square,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -31,9 +31,11 @@ interface ScriptExecutionDrawerProps {
   selectedCredentialId: string;
   setSelectedCredentialId: (id: string) => void;
   onExecute: () => void;
+  onStop: () => void;
   onRefresh: () => void;
   onClearLogs: () => void;
   isExecuting: boolean;
+  isStopping: boolean;
   isLoadingData: boolean;
   logs: string[];
 }
@@ -49,8 +51,10 @@ export function ScriptExecutionDrawer({
   selectedCredentialId,
   setSelectedCredentialId,
   onExecute,
+  onStop,
   onRefresh,
   isExecuting,
+  isStopping,
   isLoadingData,
   logs,
 }: ScriptExecutionDrawerProps) {
@@ -146,6 +150,25 @@ export function ScriptExecutionDrawer({
                 <p>Refresh Terminal Session</p>
               </TooltipContent>
             </Tooltip>
+
+            {isExecuting && (
+              <Button
+                size="sm"
+                variant="destructive"
+                className="h-8 bg-red-600 hover:bg-red-700 text-white animate-in fade-in slide-in-from-right-2 duration-300"
+                onClick={onStop}
+                disabled={isStopping}
+              >
+                {isStopping ? (
+                  <>Stopping...</>
+                ) : (
+                  <>
+                    <Square className="w-3 h-3 translate-y-[0px] fill-current" />{" "}
+                    Stop
+                  </>
+                )}
+              </Button>
+            )}
 
             <Button
               size="sm"

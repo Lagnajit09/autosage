@@ -59,9 +59,11 @@ const ScriptEditor = () => {
     selectedCredentialId,
     setSelectedCredentialId,
     executeScript,
+    stopCurrentExecution,
     refreshData,
     clearLogs,
     isExecuting,
+    isStopping,
     isLoadingData,
     logs,
   } = useScriptExecution();
@@ -135,12 +137,14 @@ const ScriptEditor = () => {
                 selectedCredentialId={selectedCredentialId}
                 setSelectedCredentialId={setSelectedCredentialId}
                 onExecute={() => currentFile && executeScript(currentFile)}
+                onStop={stopCurrentExecution}
                 onRefresh={() => {
                   refreshData();
                   clearLogs();
                 }}
                 onClearLogs={clearLogs}
                 isExecuting={isExecuting}
+                isStopping={isStopping}
                 isLoadingData={isLoadingData}
                 logs={logs}
               />

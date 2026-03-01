@@ -3,6 +3,7 @@ import { Server, Credential } from "@/utils/types";
 import { apiRequest } from "@/lib/api-client";
 import { useAuth } from "@clerk/clerk-react";
 import { toast } from "sonner";
+import { executionsService } from "@/lib/api/executions";
 
 export function useScriptExecution() {
   const { getToken } = useAuth();
@@ -13,6 +14,10 @@ export function useScriptExecution() {
   const [selectedServerId, setSelectedServerId] = useState<string>("");
   const [selectedCredentialId, setSelectedCredentialId] = useState<string>("");
   const [isExecuting, setIsExecuting] = useState(false);
+  const [currentExecutionId, setCurrentExecutionId] = useState<string | null>(
+    null,
+  );
+  const [isStopping, setIsStopping] = useState(false);
   const [logs, setLogs] = useState<string[]>([]);
 
   useEffect(() => {
@@ -66,6 +71,8 @@ export function useScriptExecution() {
     }
 
     setIsExecuting(true);
+    setCurrentExecutionId(null);
+    setIsStopping(false);
     setLogs([`> Initializing execution for ${script.name}...`]);
 
     try {
@@ -152,6 +159,27 @@ export function useScriptExecution() {
       toast.error(error.message || "Failed to execute script");
     } finally {
       setIsExecuting(false);
+      setCurrentExecutionId(null);
+      setIsStopping(false);
+    }
+  };
+
+  const stopCurrentExecution = async () => {
+    if (!currentExecutionId) {
+      toast.error("No active execution ID found to stop");
+      return;
+    }
+
+    setIsStopping(true);
+    try {
+      const token = await getToken();
+      if (!token) throw new Error("No token");
+      await executionsService.stopExecution(currentExecutionId, token);
+      toast.success("Stop signal sent");
+    } catch (error: any) {
+      console.error("Failed to stop execution:", error);
+      toast.error(error.message || "Failed to stop execution");
+      setIsStopping(false);
     }
   };
 
@@ -165,6 +193,9 @@ export function useScriptExecution() {
         }
         break;
       case "status":
+        if (data.execution_id) {
+          setCurrentExecutionId(data.execution_id);
+        }
         setLogs((prev) => [...prev, `[STATUS] ${data.status.toUpperCase()}`]);
         break;
       case "exit_code":
@@ -201,9 +232,11 @@ export function useScriptExecution() {
     selectedCredentialId,
     setSelectedCredentialId,
     executeScript,
+    stopCurrentExecution,
     refreshData,
     clearLogs,
     isExecuting,
+    isStopping,
     logs,
     setLogs,
   };
