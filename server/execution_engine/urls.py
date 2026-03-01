@@ -12,4 +12,7 @@ urlpatterns = [
 
     # Execution History endpoint
     path("history/", views.execution_history, name="execution-history"),
+
+    # Stop execution endpoint
+    path("<uuid:execution_id>/stop/", views.stop_execution, name="stop-execution"),
 ]

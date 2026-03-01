@@ -23,6 +23,7 @@ from typing import AsyncGenerator, Dict, Any, Literal, Optional
 import uvicorn
 import bleach
 import httpx
+import asyncio
 from datetime import datetime
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Request, Header, Depends
@@ -42,6 +43,7 @@ logger = logging.getLogger(__name__)
 
 # ── Inter-service API Key ─────────────────────────────────────────────────────
 WORKER_API_KEY = os.getenv("WORKER_API_KEY", "")
+STOP_EVENTS: Dict[str, asyncio.Event] = {}
 
 
 async def verify_api_key(x_api_key: str = Header(..., alias="X-API-Key")):
@@ -171,6 +173,7 @@ def build_executor(req: ExecutionRequest):
         raise ValueError(
             "Linux/SSH execution requires either a password or an SSH private key."
         )
+
     return ShellExecutor(
         host=server.host,
         port=server.port,
@@ -179,6 +182,21 @@ def build_executor(req: ExecutionRequest):
         ssh_key=creds.ssh_key or None,
         key_passphrase=creds.key_passphrase or None,
     )
+
+
+@app.post("/api/worker/stop/{execution_id}")
+async def stop_execution(
+    execution_id: str,
+    _: None = Depends(verify_api_key),
+):
+    """Signal a running execution to stop."""
+    if execution_id in STOP_EVENTS:
+        logger.info("Setting stop event for execution_id=%s", execution_id)
+        STOP_EVENTS[execution_id].set()
+        return {"message": "Stop signal sent", "execution_id": execution_id}
+    else:
+        logger.warning("Stop signal received for unknown execution_id=%s", execution_id)
+        return {"message": "Execution not found or already finished", "execution_id": execution_id}
 
 
 # ── Endpoints ─────────────────────────────────────────────────────────────────
@@ -246,12 +264,14 @@ async def execute_script(
         # ── 2. Build executor & stream execution ──────────────────────────
         try:
             executor = build_executor(exec_request)
+            stop_event = asyncio.Event()
+            STOP_EVENTS[exec_request.execution_id] = stop_event
         except ValueError as e:
             yield ndjson({"type": "error", "data": str(e)})
             return
 
         try:
-            async for chunk in executor.stream(script_content):
+            async for chunk in executor.stream(script_content, stop_event=stop_event):
                 # chunk = {"type": "stdout"|"stderr"|"exit_code"|"error", "data": ...}
                 line = ndjson(chunk)
                 logger.debug("Chunk: %s", line.strip())
@@ -260,6 +280,8 @@ async def execute_script(
         except Exception as e:
             logger.exception("Unexpected error during streaming: %s", e)
             yield ndjson({"type": "error", "data": f"Unexpected error: {e}"})
+        finally:
+            STOP_EVENTS.pop(exec_request.execution_id, None)
 
     return StreamingResponse(
         generate(),

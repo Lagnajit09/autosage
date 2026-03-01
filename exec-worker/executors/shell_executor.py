@@ -140,7 +140,7 @@ class ShellExecutor:
 
     # ── Streaming execution ───────────────────────────────────────────────────
 
-    async def stream(self, script_content: str) -> AsyncGenerator[dict, None]:
+    async def stream(self, script_content: str, stop_event: Optional[asyncio.Event] = None) -> AsyncGenerator[dict, None]:
         """
         Async generator that executes a shell script on the remote server and
         yields output chunks in real time as the script runs.
@@ -204,6 +204,13 @@ class ShellExecutor:
             # the next chunk arrives or the channel closes.
 
             while True:
+                # ── Check for STOP signal ─────────────────────────────────
+                if stop_event and stop_event.is_set():
+                    logger.warning("Stop signal received for execution on %s. Terminating...", self.host)
+                    yield {"type": CHUNK_STDERR, "data": "\n--- Execution stopped by user ---\n"}
+                    yield {"type": CHUNK_EXIT_CODE, "data": -1}
+                    break
+
                 # Yield control to the event loop briefly
                 await asyncio.sleep(0.05)
 

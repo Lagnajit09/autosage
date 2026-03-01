@@ -435,3 +435,66 @@ def execution_history(request):
             'current_page': page_number
         },
     )
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def stop_execution(request, execution_id):
+    """
+    POST /api/execution-engine/executions/<execution_id>/stop/
+    Signals a running execution to terminate.
+    """
+    try:
+        execution = ScriptExecution.objects.get(id=execution_id, user=request.user)
+    except ScriptExecution.DoesNotExist:
+        return api_response(
+            success=False,
+            message="Execution not found or access denied.",
+            status_code=status.HTTP_404_NOT_FOUND,
+        )
+
+    if execution.status != "running":
+        return api_response(
+            success=False,
+            message=f"Execution is in status '{execution.status}' and cannot be stopped.",
+            status_code=status.HTTP_400_BAD_REQUEST,
+        )
+
+    if not EXEC_WORKER_URL:
+        return api_response(
+            success=False,
+            message="Execution worker URL not configured.",
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+
+    # EXEC_WORKER_URL typically includes "/api/worker/execute"
+    # We need to reach "/api/worker/stop/{id}"
+    base_url = EXEC_WORKER_URL.split("/api/worker/execute")[0].rstrip("/")
+    stop_endpoint = f"{base_url}/api/worker/stop/{execution_id}"
+
+    try:
+        # We use a synchronous httpx call here
+        with httpx.Client(timeout=5.0) as client:
+            resp = client.post(stop_endpoint, headers={"X-API-Key": WORKER_API_KEY})
+            
+            if resp.status_code == 200:
+                logger.info("Sent stop signal to worker for execution %s", execution_id)
+                return api_response(
+                    success=True,
+                    message="Stop signal sent to worker.",
+                )
+            else:
+                logger.error("Worker returned error %d stopping %s: %s", resp.status_code, execution_id, resp.text)
+                return api_response(
+                    success=False,
+                    message=f"Worker error: {resp.text}",
+                    status_code=status.HTTP_502_BAD_GATEWAY,
+                )
+
+    except Exception as e:
+        logger.exception("Failed to communicate with worker to stop execution %s", execution_id)
+        return api_response(
+            success=False,
+            message=f"Failed to communicate with worker: {str(e)}",
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
