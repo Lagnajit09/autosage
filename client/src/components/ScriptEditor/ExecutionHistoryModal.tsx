@@ -149,6 +149,12 @@ ${execution.stderr || ""}
             Running
           </Badge>
         );
+      case "cancelled":
+        return (
+          <Badge className="bg-slate-500/10 text-slate-600 dark:text-slate-400 border-slate-500/20 hover:bg-slate-500/20 transition-colors">
+            Cancelled
+          </Badge>
+        );
       default:
         return (
           <Badge variant="outline" className="capitalize text-muted-foreground">

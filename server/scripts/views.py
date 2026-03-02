@@ -15,9 +15,16 @@ from .serializers import (
 )
 from server.utils import api_response
 from server.rate_limiters import ScriptBurstThrottle, ScriptSustainedThrottle, ScriptCreateThrottle
-import requests
-import json
-import vercel_blob
+from .gcs import (
+    build_blob_path,
+    build_public_url,
+    upload_script,
+    download_script,
+    delete_script,
+    copy_script,
+)
+from google.cloud.exceptions import GoogleCloudError
+from google.api_core.exceptions import NotFound
 import logging
 
 # Configure logging
@@ -27,7 +34,7 @@ logger = logging.getLogger(__name__)
 class ScriptListCreateView(generics.ListCreateAPIView):
     """
     List all scripts owned by the user or create a new script.
-    POST: Create a new script with content uploaded to Vercel Blob
+    POST: Create a new script with content uploaded to Google Cloud Storage
     GET: List all scripts owned by the user
     """
     serializer_class = ScriptSerializer
@@ -55,8 +62,10 @@ class ScriptListCreateView(generics.ListCreateAPIView):
 
     def create(self, request, *args, **kwargs):
         """
-        Create a new script and upload content to Vercel Blob.
+        Create a new script and upload content to Google Cloud Storage.
         Expected payload: {name, language, content}
+
+        GCS path: scripts/<user_id>/<script_id>/<name>.<ext>
         """
         # Validate input data
         create_serializer = ScriptCreateSerializer(data=request.data)
@@ -77,8 +86,9 @@ class ScriptListCreateView(generics.ListCreateAPIView):
         lang_info = ScriptCreateSerializer.LANGUAGE_MAP[language]
         extension = lang_info['ext']
         content_type = lang_info['content_type']
+        filename = f"{name}.{extension}"
 
-        # Create pathname
+        # pathname is user-scoped; the full GCS path is built after we have a DB id
         pathname = f"scripts/{name}.{extension}"
 
         # Check if script with same pathname already exists for this user
@@ -90,52 +100,34 @@ class ScriptListCreateView(generics.ListCreateAPIView):
                 status_code=status.HTTP_400_BAD_REQUEST
             )
 
-        # Upload to Vercel Blob
         try:
-            blob_token = settings.VERCEL_BLOB_TOKEN
-            if not blob_token:
-                return api_response(
-                    success=False,
-                    message="Vercel Blob token not configured.",
-                    errors={"server": ["Blob storage is not configured properly."]},
-                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
+            with transaction.atomic():
+                # Create the DB record first so we have the script ID for the GCS path
+                script = Script.objects.create(
+                    name=filename,
+                    pathname=pathname,
+                    blob_url="",          # filled in after upload
+                    download_url="",
+                    owner=request.user,
+                    content_type=content_type,
+                    file_size=len(content.encode('utf-8')),
+                    version=1
                 )
 
-            # Upload file to Vercel Blob using PUT request
-            blob_response = vercel_blob.put(
-                path=pathname,
-                data=content.encode('utf-8'),
-                options={
-                    "token": blob_token,
-                    "addRandomSuffix": False,  # No Random Suffix
-                    "contentType": content_type
-                }
-            )
+                # Build GCS path: scripts/<user_id>/<script_id>/<filename>
+                blob_path = build_blob_path(request.user.id, script.id, filename)
 
-            if not blob_response.get('url'):
-                logger.error(f"Blob upload failed: {blob_response}")
-                return api_response(
-                    success=False,
-                    message="Failed to upload script to blob storage.",
-                    errors={"blob": [f"Upload failed: {blob_response}"]},
-                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
+                # Upload to GCS
+                gcs_url = upload_script(
+                    blob_path=blob_path,
+                    content=content.encode('utf-8'),
+                    content_type=content_type,
                 )
 
-            # The blob URL from response
-            blob_url = blob_response['url']
-            download_url = blob_response.get('downloadUrl', blob_url)
-
-            # Create Script record in database
-            script = Script.objects.create(
-                name=f"{name}.{extension}",
-                pathname=pathname,
-                blob_url=blob_url,
-                download_url=download_url,
-                owner=request.user,
-                content_type=content_type,
-                file_size=len(content.encode('utf-8')),
-                version=1
-            )
+                # Update the script record with the real GCS URL
+                script.blob_url = gcs_url
+                script.download_url = gcs_url
+                script.save(update_fields=['blob_url', 'download_url'])
 
             serializer = ScriptSerializer(script)
             return api_response(
@@ -145,12 +137,12 @@ class ScriptListCreateView(generics.ListCreateAPIView):
                 status_code=status.HTTP_201_CREATED
             )
 
-        except requests.exceptions.RequestException as e:
-            logger.error(f"Blob storage connection error: {str(e)}")
+        except GoogleCloudError as e:
+            logger.error(f"GCS upload error during script creation: {str(e)}")
             return api_response(
                 success=False,
-                message="Failed to connect to blob storage.",
-                errors={"blob": [str(e)]},
+                message="Failed to upload script to cloud storage.",
+                errors={"storage": [str(e)]},
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
         except Exception as e:
@@ -167,7 +159,7 @@ class ScriptDetailView(generics.RetrieveDestroyAPIView):
     """
     Retrieve or delete a script instance.
     GET: Retrieve script metadata
-    DELETE: Delete script from both database and Vercel Blob
+    DELETE: Delete script from both database and Google Cloud Storage
     """
     serializer_class = ScriptSerializer
     permission_classes = [IsAuthenticated]
@@ -190,30 +182,18 @@ class ScriptDetailView(generics.RetrieveDestroyAPIView):
 
     def destroy(self, request, *args, **kwargs):
         """
-        Delete script from both database and Vercel Blob storage.
+        Delete script from both database and Google Cloud Storage.
         """
         script = self.get_object()
-        blob_url = script.blob_url
+        blob_path = build_blob_path(request.user.id, script.id, script.name)
 
         try:
-            # Delete from Vercel Blob
-            blob_token = settings.VERCEL_BLOB_TOKEN
-            if blob_token and blob_url:
-                try:
-                    delete_response = vercel_blob.delete(
-                        blob_url,
-                        options={
-                            "token": blob_token,
-                        }
-                    )
-                    
-                    # Null checking before accessing status_code
-                    if delete_response and hasattr(delete_response, 'status_code'):
-                        if delete_response.status_code not in [200, 204]:
-                            logger.warning(f"Failed to delete blob: {delete_response}")
-                except Exception as blob_error:
-                    # Log blob deletion error but continue with database deletion
-                    logger.error(f"Error deleting blob: {str(blob_error)}")
+            # Delete from GCS (non-fatal if already gone)
+            try:
+                delete_script(blob_path)
+            except GoogleCloudError as gcs_error:
+                logger.error(f"GCS error deleting blob {blob_path}: {str(gcs_error)}")
+                # Continue to remove the DB record regardless
 
             # Delete from database
             script_name = script.name
@@ -237,33 +217,20 @@ class ScriptDetailView(generics.RetrieveDestroyAPIView):
 
 class ScriptContentView(APIView):
     """
-    Retrieve script content from Vercel Blob.
+    Retrieve script content from Google Cloud Storage.
     GET: Fetch and return the actual script content
     """
     permission_classes = [IsAuthenticated]
     throttle_classes = [ScriptBurstThrottle, ScriptSustainedThrottle]
 
     def get(self, request, pk):
-        """Fetch script content from Vercel Blob."""
-        # Get the script (must be owned by user)
+        """Fetch script content from GCS."""
         script = get_object_or_404(Script, pk=pk, owner=request.user)
+        blob_path = build_blob_path(request.user.id, script.id, script.name)
 
         try:
-            # Fetch content from blob URL
-            url_to_fetch = script.download_url or script.blob_url
-            content_response = requests.get(url_to_fetch, timeout=30)
+            content = download_script(blob_path)
 
-            if content_response.status_code != 200:
-                return api_response(
-                    success=False,
-                    message="Failed to fetch script content from storage.",
-                    errors={"blob": [f"Status code: {content_response.status_code}"]},
-                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
-                )
-
-            content = content_response.text
-
-            # Return content
             return api_response(
                 success=True,
                 message="Script content retrieved successfully.",
@@ -277,23 +244,23 @@ class ScriptContentView(APIView):
                 status_code=status.HTTP_200_OK
             )
 
-        except requests.exceptions.Timeout:
+        except NotFound:
             return api_response(
                 success=False,
-                message="Request to fetch script content timed out.",
-                errors={"blob": ["Timeout error"]},
-                status_code=status.HTTP_504_GATEWAY_TIMEOUT
+                message="Script file not found in storage.",
+                errors={"storage": ["The script file could not be located in GCS."]},
+                status_code=status.HTTP_404_NOT_FOUND
             )
-        except requests.exceptions.RequestException as e:
-            logger.error(f"Error fetching script content: {str(e)}")
+        except GoogleCloudError as e:
+            logger.error(f"GCS error fetching script content for pk={pk}: {str(e)}")
             return api_response(
                 success=False,
-                message="Failed to fetch script content.",
-                errors={"blob": [str(e)]},
+                message="Failed to fetch script content from storage.",
+                errors={"storage": [str(e)]},
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
         except Exception as e:
-            logger.error(f"Unexpected error fetching content: {str(e)}")
+            logger.error(f"Unexpected error fetching content for pk={pk}: {str(e)}")
             return api_response(
                 success=False,
                 message="An unexpected error occurred.",
@@ -305,17 +272,15 @@ class ScriptContentView(APIView):
 class ScriptUpdateView(APIView):
     """
     Update script content.
-    POST: Update script content in Vercel Blob
+    POST: Overwrite script content in Google Cloud Storage
     """
     permission_classes = [IsAuthenticated]
     throttle_classes = [ScriptBurstThrottle, ScriptSustainedThrottle]
 
     def post(self, request, pk):
         """Update script content."""
-        # Get the script (must be owned by user)
         script = get_object_or_404(Script, pk=pk, owner=request.user)
 
-        # Validate input data
         update_serializer = ScriptUpdateSerializer(data=request.data)
         if not update_serializer.is_valid():
             return api_response(
@@ -326,52 +291,22 @@ class ScriptUpdateView(APIView):
             )
 
         new_content = update_serializer.validated_data['content']
+        blob_path = build_blob_path(request.user.id, script.id, script.name)
 
         try:
-            blob_token = settings.VERCEL_BLOB_TOKEN
-            if not blob_token:
-                return api_response(
-                    success=False,
-                    message="Vercel Blob token not configured.",
-                    errors={"server": ["Blob storage is not configured properly."]},
-                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
-                )
-
-            pathname = script.pathname
-
-            blob_response = vercel_blob.put(
-                path=pathname,
-                data=new_content.encode('utf-8'),
-                options={
-                    "token": blob_token,
-                    "allowOverwrite": True,
-                    "addRandomSuffix": False,  # No Random Suffix
-                    "contentType": script.content_type
-                }
+            # Overwrite existing blob in GCS
+            gcs_url = upload_script(
+                blob_path=blob_path,
+                content=new_content.encode('utf-8'),
+                content_type=script.content_type,
             )
 
-            # .get() for safer access and log instead of print
-            logger.debug(f"Blob update response: {blob_response}")
-
-            if not blob_response.get('url') or not blob_response.get('downloadUrl'):
-                logger.error(f"Blob update failed: {blob_response}")
-                return api_response(
-                    success=False,
-                    message="Failed to upload updated script to blob storage.",
-                    errors={"blob": [f"Upload failed: {blob_response}"]},
-                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
-                )
-
-            # The blob URL from response
-            blob_url = blob_response['url']
-            download_url = blob_response['downloadUrl']
-
             # Update script record
-            script.blob_url = blob_url
-            script.download_url = download_url
+            script.blob_url = gcs_url
+            script.download_url = gcs_url
             script.file_size = len(new_content.encode('utf-8'))
             script.version += 1
-            script.save()
+            script.save(update_fields=['blob_url', 'download_url', 'file_size', 'version'])
 
             serializer = ScriptSerializer(script)
             return api_response(
@@ -381,16 +316,16 @@ class ScriptUpdateView(APIView):
                 status_code=status.HTTP_200_OK
             )
 
-        except requests.exceptions.RequestException as e:
-            logger.error(f"Blob storage error during update: {str(e)}")
+        except GoogleCloudError as e:
+            logger.error(f"GCS error during script update for pk={pk}: {str(e)}")
             return api_response(
                 success=False,
-                message="Failed to update script in blob storage.",
-                errors={"blob": [str(e)]},
+                message="Failed to update script in cloud storage.",
+                errors={"storage": [str(e)]},
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
         except Exception as e:
-            logger.error(f"Unexpected error during update: {str(e)}")
+            logger.error(f"Unexpected error during script update for pk={pk}: {str(e)}")
             return api_response(
                 success=False,
                 message="An unexpected error occurred.",
@@ -402,17 +337,15 @@ class ScriptUpdateView(APIView):
 class ScriptRenameView(APIView):
     """
     Rename a script.
-    POST: Rename script and update pathname in Vercel Blob
+    POST: Rename script — server-side GCS copy to new path, then delete old blob.
     """
     permission_classes = [IsAuthenticated]
     throttle_classes = [ScriptBurstThrottle, ScriptSustainedThrottle]
 
     def post(self, request, pk):
         """Rename a script."""
-        # Get the script (must be owned by user)
         script = get_object_or_404(Script, pk=pk, owner=request.user)
 
-        # Validate input data
         rename_serializer = ScriptRenameSerializer(data=request.data)
         if not rename_serializer.is_valid():
             return api_response(
@@ -423,17 +356,17 @@ class ScriptRenameView(APIView):
             )
 
         new_name = rename_serializer.validated_data['new_name']
-        
-        # Extract extension from current pathname
-        extension = script.pathname.split('.')[-1]
+
+        # Preserve extension from current script name
+        extension = script.name.rsplit('.', 1)[-1]
+        new_filename = f"{new_name}.{extension}"
         new_pathname = f"scripts/{new_name}.{extension}"
 
-        # Atomic transaction to prevent race conditions
         try:
             with transaction.atomic():
-                # Check if a script with the new name already exists (with lock)
+                # Check for name collision (with row lock)
                 if Script.objects.select_for_update().filter(
-                    owner=request.user, 
+                    owner=request.user,
                     pathname=new_pathname
                 ).exclude(pk=pk).exists():
                     return api_response(
@@ -443,102 +376,45 @@ class ScriptRenameView(APIView):
                         status_code=status.HTTP_400_BAD_REQUEST
                     )
 
-                blob_token = settings.VERCEL_BLOB_TOKEN
-                if not blob_token:
-                    return api_response(
-                        success=False,
-                        message="Vercel Blob token not configured.",
-                        errors={"server": ["Blob storage is not configured properly."]},
-                        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
-                    )
+                old_blob_path = build_blob_path(request.user.id, script.id, script.name)
+                new_blob_path = build_blob_path(request.user.id, script.id, new_filename)
 
-                # Fetch current content
-                content_response = requests.get(script.download_url or script.blob_url, timeout=30)
-                if content_response.status_code != 200:
-                    return api_response(
-                        success=False,
-                        message="Failed to fetch current script content.",
-                        errors={"blob": ["Could not retrieve current content."]},
-                        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
-                    )
+                # Server-side copy to the new path
+                new_gcs_url = copy_script(old_blob_path, new_blob_path)
 
-                content = content_response.text
-                old_blob_url = script.blob_url
-
-                # Upload with new pathname FIRST, then delete old one
-                blob_response = vercel_blob.put(
-                    path=new_pathname,
-                    data=content.encode('utf-8'),
-                    options={
-                        "token": blob_token,
-                        "addRandomSuffix": False,  # No Random Suffix
-                        "contentType": script.content_type
-                    }
-                )
-
-                if not blob_response.get('url') or not blob_response.get('downloadUrl'):
-                    logger.error(f"Blob rename upload failed: {blob_response}")
-                    return api_response(
-                        success=False,
-                        message="Failed to upload renamed script to blob storage.",
-                        errors={"blob": [f"Upload failed: {blob_response}"]},
-                        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
-                    )
-
-                # The blob URL from response
-                blob_url = blob_response['url']
-                download_url = blob_response['downloadUrl']
-
-                # Update script record
+                # Update DB record
                 old_name = script.name
-                script.name = f"{new_name}.{extension}"
+                script.name = new_filename
                 script.pathname = new_pathname
-                script.blob_url = blob_url
-                script.download_url = download_url
-                script.save()
+                script.blob_url = new_gcs_url
+                script.download_url = new_gcs_url
+                script.save(update_fields=['name', 'pathname', 'blob_url', 'download_url'])
 
-                # Delete old blob AFTER successful upload
+                # Delete old blob after successful copy + DB update
                 try:
-                    delete_response = vercel_blob.delete(
-                        old_blob_url,
-                        options={
-                            "token": blob_token,
-                        }
-                    )
-                    
-                    # Log if deletion fails
-                    if delete_response and hasattr(delete_response, 'status_code'):
-                        if delete_response.status_code not in [200, 204]:
-                            logger.warning(f"Failed to delete old blob after rename: {delete_response}")
-                except Exception as blob_error:
-                    # Log but don't fail the operation since new blob is already created
-                    logger.error(f"Error deleting old blob after rename: {str(blob_error)}")
+                    delete_script(old_blob_path)
+                except GoogleCloudError as gcs_error:
+                    # Non-fatal: new blob and DB are already consistent
+                    logger.error(f"Failed to delete old GCS blob after rename: {str(gcs_error)}")
 
                 serializer = ScriptSerializer(script)
                 return api_response(
                     success=True,
-                    message=f"Script renamed from '{old_name}' to '{new_name}' successfully.",
+                    message=f"Script renamed from '{old_name}' to '{new_filename}' successfully.",
                     data=serializer.data,
                     status_code=status.HTTP_200_OK
                 )
 
-        except requests.exceptions.Timeout:
+        except GoogleCloudError as e:
+            logger.error(f"GCS error during script rename for pk={pk}: {str(e)}")
             return api_response(
                 success=False,
-                message="Request to blob storage timed out.",
-                errors={"blob": ["Timeout error"]},
-                status_code=status.HTTP_504_GATEWAY_TIMEOUT
-            )
-        except requests.exceptions.RequestException as e:
-            logger.error(f"Blob storage error during rename: {str(e)}")
-            return api_response(
-                success=False,
-                message="Failed to rename script in blob storage.",
-                errors={"blob": [str(e)]},
+                message="Failed to rename script in cloud storage.",
+                errors={"storage": [str(e)]},
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
         except Exception as e:
-            logger.error(f"Unexpected error during rename: {str(e)}")
+            logger.error(f"Unexpected error during rename for pk={pk}: {str(e)}")
             return api_response(
                 success=False,
                 message="An unexpected error occurred.",

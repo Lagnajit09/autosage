@@ -702,7 +702,6 @@ export function useScriptEditor() {
   };
 
   const downloadFile = (file: ScriptFile) => {
-    toast.loading(`Downloading file: ${file.name}...`);
     const blob = new Blob([file.content], { type: "text/plain" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -710,7 +709,6 @@ export function useScriptEditor() {
     a.download = file.name;
     a.click();
     URL.revokeObjectURL(url);
-    toast.dismiss();
   };
 
   return {

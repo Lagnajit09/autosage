@@ -41,6 +41,9 @@ VERCEL_BLOB_TOKEN = config('BLOB_READ_WRITE_TOKEN', default='')
 EXEC_WORKER_URL = config('EXEC_WORKER_URL', default='')
 WORKER_API_KEY = config('WORKER_API_KEY', default='')
 
+# Google Cloud Storage
+GOOGLE_APPLICATION_CREDENTIALS = config('GOOGLE_APPLICATION_CREDENTIALS', default='')
+
 ALLOWED_HOSTS = ["http://localhost:5173", "http://127.0.0.1:5173", "localhost", "127.0.0.1"]
 
 
