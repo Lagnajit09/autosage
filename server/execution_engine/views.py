@@ -173,7 +173,11 @@ async def _stream_execution(execution_id: str, payload: dict):
                         yield _sse_event(chunk_type, {"data": chunk_data})
 
         # ── Execution finished successfully ──────────────────────────────
-        final_status = "completed" if (exit_code is None or exit_code == 0) else "failed"
+        if exit_code == -1:
+            final_status = "cancelled"
+            yield _sse_event("status", {"execution_id": execution_id, "status": "cancelled"})
+        else:
+            final_status = "completed" if (exit_code is None or exit_code == 0) else "failed"
 
     except asyncio.CancelledError:
         final_status = "cancelled"

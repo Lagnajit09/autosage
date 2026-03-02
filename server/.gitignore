@@ -21,3 +21,7 @@ venv.bak/
 # Editor directories
 .vscode/
 .idea/
+
+# Keys
+*.json
+
