@@ -23,6 +23,9 @@ from typing import AsyncGenerator, Dict, Any, Literal, Optional
 import uvicorn
 import bleach
 import httpx
+from google.cloud import storage
+from google.cloud.exceptions import GoogleCloudError
+from google.api_core.exceptions import NotFound
 import asyncio
 from datetime import datetime
 from dotenv import load_dotenv
@@ -35,7 +38,7 @@ from slowapi.util import get_remote_address
 
 from executors import ShellExecutor, PowerShellExecutor
 
-load_dotenv()
+load_dotenv(override=True)
 
 # ── Logging ───────────────────────────────────────────────────────────────────
 logging.basicConfig(level=logging.INFO)
@@ -239,22 +242,44 @@ async def execute_script(
     )
 
     async def generate() -> AsyncGenerator[str, None]:
-        # ── 1. Fetch script content from Vercel Blob ──────────────────────
+        # ── 1. Fetch script content from GCS ──────────────────────
         try:
-            async with httpx.AsyncClient(timeout=30.0) as http:
-                resp = await http.get(exec_request.script.blob_url)
-                if resp.status_code != 200:
-                    yield ndjson({
-                        "type": "error",
-                        "data": f"Failed to fetch script (HTTP {resp.status_code})",
-                    })
-                    return
-                script_content = resp.text
-        except httpx.TimeoutException:
-            yield ndjson({"type": "error", "data": "Timed out fetching script content."})
+            # blob_url format: https://storage.googleapis.com/bucket-name/path/to/blob
+            # Or we can use the pathname and assume a bucket if it's not in the URL
+            bucket_name = "autosagex-drive"
+            blob_url = exec_request.script.blob_url
+            
+            # Extract bucket and path from GCS URL if it's in that format
+            if "storage.googleapis.com" in blob_url:
+                parts = blob_url.replace("https://storage.googleapis.com/", "").split("/", 1)
+                if len(parts) == 2:
+                    bucket_name = parts[0]
+                    blob_path = parts[1]
+                else:
+                    blob_path = exec_request.script.pathname
+            else:
+                blob_path = exec_request.script.pathname
+
+            logger.info("Fetching script from GCS: bucket=%s path=%s", bucket_name, blob_path)
+            
+            # Initialize client (uses GOOGLE_APPLICATION_CREDENTIALS from env)
+            storage_client = storage.Client()
+            bucket = storage_client.bucket(bucket_name)
+            blob = bucket.blob(blob_path)
+            
+            # Use run_in_executor for synchronous storage call
+            loop = asyncio.get_event_loop()
+            script_content = await loop.run_in_executor(None, blob.download_as_text)
+
+        except NotFound:
+            yield ndjson({"type": "error", "data": "Script file not found in cloud storage."})
             return
-        except httpx.RequestError as e:
-            yield ndjson({"type": "error", "data": f"Failed to fetch script: {e}"})
+        except GoogleCloudError as e:
+            yield ndjson({"type": "error", "data": f"Cloud storage error: {e}"})
+            return
+        except Exception as e:
+            logger.exception("Failed to fetch script from GCS")
+            yield ndjson({"type": "error", "data": f"Unexpected error fetching script: {e}"})
             return
 
         logger.info(

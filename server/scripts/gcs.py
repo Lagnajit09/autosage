@@ -18,10 +18,14 @@ BUCKET_NAME = "autosagex-drive"
 def _get_client() -> storage.Client:
     """Return an authenticated GCS client."""
     credentials_path = getattr(settings, 'GOOGLE_APPLICATION_CREDENTIALS', '')
-    if credentials_path:
-        return storage.Client.from_service_account_json(credentials_path)
-    # Falls back to ADC (Application Default Credentials) if no explicit path
-    return storage.Client()
+    try:
+        if credentials_path:
+            return storage.Client.from_service_account_json(credentials_path)
+        return storage.Client()
+    except Exception as e:
+        logger.error(f"Failed to initialize GCS client: {e}")
+        raise GoogleCloudError(f"Cloud Storage authentication failed: {e}")
+
 
 
 def _get_bucket() -> storage.Bucket:
