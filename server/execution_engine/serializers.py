@@ -2,6 +2,9 @@ from rest_framework import serializers
 from .models import ScriptExecution
 
 
+from .gcs import generate_signed_url, get_blob_path_from_url
+
+
 class ScriptDetailsSerializer(serializers.Serializer):
     script_id = serializers.IntegerField()
     script_name = serializers.CharField(max_length=255)
@@ -22,25 +25,58 @@ class ScriptExecutionRequestSerializer(serializers.Serializer):
 
 
 class ScriptExecutionResponseSerializer(serializers.ModelSerializer):
+    stdout_signed_url = serializers.SerializerMethodField()
+    stderr_signed_url = serializers.SerializerMethodField()
+    logs_signed_url = serializers.SerializerMethodField()
+
     class Meta:
         model = ScriptExecution
         fields = [
-            'id', 'status', 'stdout_log_url', 'stderr_log_url', 'logs_url', 'exit_code',
-            'started_at', 'completed_at', 'duration',
+            'id', 'status', 'stdout_log_url', 'stderr_log_url', 'logs_url',
+            'stdout_signed_url', 'stderr_signed_url', 'logs_signed_url',
+            'exit_code', 'started_at', 'completed_at', 'duration',
             'created_at', 'updated_at',
         ]
         read_only_fields = fields
+
+    def get_stdout_signed_url(self, obj):
+        path = get_blob_path_from_url(obj.stdout_log_url)
+        return generate_signed_url(path) if path else ""
+
+    def get_stderr_signed_url(self, obj):
+        path = get_blob_path_from_url(obj.stderr_log_url)
+        return generate_signed_url(path) if path else ""
+
+    def get_logs_signed_url(self, obj):
+        path = get_blob_path_from_url(obj.logs_url)
+        return generate_signed_url(path) if path else ""
 
 
 class ScriptExecutionHistorySerializer(serializers.ModelSerializer):
     script_id = serializers.IntegerField(source='script.id', read_only=True)
     script_name = serializers.CharField(source='script.name', read_only=True)
+    stdout_signed_url = serializers.SerializerMethodField()
+    stderr_signed_url = serializers.SerializerMethodField()
+    logs_signed_url = serializers.SerializerMethodField()
 
     class Meta:
         model = ScriptExecution
         fields = [
-            'id', 'script_id', 'script_name', 'status', 'stdout_log_url', 'stderr_log_url',
-            'logs_url', 'exit_code', 'started_at', 'completed_at', 'duration',
+            'id', 'script_id', 'script_name', 'status',
+            'stdout_signed_url', 'stderr_signed_url', 'logs_signed_url',
+            'exit_code', 'started_at', 'completed_at', 'duration',
             'created_at', 'updated_at',
         ]
         read_only_fields = fields
+
+    def get_stdout_signed_url(self, obj):
+        path = get_blob_path_from_url(obj.stdout_log_url)
+        return generate_signed_url(path) if path else ""
+
+    def get_stderr_signed_url(self, obj):
+        path = get_blob_path_from_url(obj.stderr_log_url)
+        return generate_signed_url(path) if path else ""
+
+    def get_logs_signed_url(self, obj):
+        path = get_blob_path_from_url(obj.logs_url)
+        return generate_signed_url(path) if path else ""

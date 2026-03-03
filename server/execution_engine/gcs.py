@@ -85,6 +85,40 @@ def upload_execution_logs(user_id, execution_id: str, stdout: str, stderr: str, 
     }
 
 
+import datetime
+
+def generate_signed_url(blob_path: str, expiration_minutes: int = 30) -> str:
+    """
+    Generate a V4 signed URL for a log blob.
+    Note: Requires service account credentials with serviceaccounttokencreator role
+    if signing for another service account.
+    """
+    if not blob_path:
+        return ""
+    try:
+        bucket = _get_logs_bucket()
+        blob = bucket.blob(blob_path)
+        url = blob.generate_signed_url(
+            version="v4",
+            expiration=datetime.timedelta(minutes=expiration_minutes),
+            method="GET",
+        )
+        return url
+    except Exception as e:
+        logger.error(f"Failed to generate signed URL for {blob_path}: {e}")
+        return ""
+
+
+def get_blob_path_from_url(url: str) -> str:
+    """Extract the blob path from a standard GCS storage.googleapis.com URL."""
+    if not url:
+        return ""
+    prefix = f"https://storage.googleapis.com/{LOGS_BUCKET_NAME}/"
+    if url.startswith(prefix):
+        return url[len(prefix):]
+    return ""
+
+
 def download_log(blob_path: str) -> str:
     """
     Download log content from GCS and return as a string.
