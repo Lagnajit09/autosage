@@ -17,6 +17,7 @@ from vault.models import Vault, Server, Credential
 from scripts.models import Script
 from .models import ScriptExecution
 from .serializers import ScriptExecutionRequestSerializer, ScriptExecutionResponseSerializer
+from .gcs import upload_execution_logs
 from server.utils import api_response
 from server.rate_limiters import ExecutionBurstThrottle, ExecutionSustainedThrottle
 
@@ -48,7 +49,20 @@ def _json_response(success: bool, message: str, data=None, errors=None, status_c
 
 def _sse_event(event: str, data: dict) -> str:
     """Format a Server-Sent Event frame."""
-    return f"event: {event}\ndata: {json.dumps(data)}\n\n"
+    from django.core.serializers.json import DjangoJSONEncoder
+    return f"event: {event}\ndata: {json.dumps(data, cls=DjangoJSONEncoder)}\n\n"
+
+
+def _uuid_to_str(data):
+    """Recursively convert UUID objects to strings."""
+    import uuid
+    if isinstance(data, dict):
+        return {k: _uuid_to_str(v) for k, v in data.items()}
+    elif isinstance(data, list):
+        return [_uuid_to_str(v) for v in data]
+    elif isinstance(data, uuid.UUID):
+        return str(data)
+    return data
 
 
 def _check_throttle(request, throttle_class):
@@ -194,20 +208,38 @@ async def _stream_execution(execution_id: str, payload: dict):
         logger.exception("Execution %s failed: %s", execution_id, exc)
         yield _sse_event("error", {"execution_id": execution_id, "message": error_msg})
 
-    # ── Persist final state ──────────────────────────────────────────────
+    # ── Upload logs to GCS and persist final state ────────────────────────
     try:
         execution = await get_execution(id=execution_id)
+
+        stdout_text = "".join(stdout_chunks)
+        stderr_text = "".join(stderr_chunks)
+
+        # Upload logs to GCS in a thread (GCS SDK is synchronous)
+        loop = asyncio.get_event_loop()
+        user_id = execution.user_id
+        gcs_urls = await loop.run_in_executor(
+            None,
+            upload_execution_logs,
+            user_id,
+            execution_id,
+            stdout_text,
+            stderr_text,
+            logs,
+        )
+
         execution.status = final_status
-        execution.stdout = "".join(stdout_chunks)
-        execution.stderr = "".join(stderr_chunks)
+        execution.stdout_log_url = gcs_urls["stdout_log_url"]
+        execution.stderr_log_url = gcs_urls["stderr_log_url"]
+        execution.logs_url       = gcs_urls["logs_url"]
         execution.exit_code = exit_code
         execution.completed_at = dj_timezone.now()
         if execution.started_at:
             execution.duration = execution.completed_at - execution.started_at
-        execution.logs = logs
         await save_execution(execution)
+
     except Exception as exc:
-        logger.exception("Failed to persist execution %s: %s", execution_id, exc)
+        logger.exception("Failed to persist/upload execution %s: %s", execution_id, exc)
 
     yield _sse_event("status", {"execution_id": execution_id, "status": final_status})
     yield _sse_event("done", {"execution_id": execution_id})
@@ -259,7 +291,8 @@ async def execute_script(request):
     data = serializer.validated_data
     script_details = data["script_details"]
     vault_details = data["vault_details"]
-    inputs = data
+    # Convert UUIDs in inputs to strings to avoid JSON serialization errors in DB/Worker
+    inputs = _uuid_to_str(data)
 
     # ── Fetch and validate ownership (sync ORM via sync_to_async) ────────
     get_vault = sync_to_async(Vault.objects.get)

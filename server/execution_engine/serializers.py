@@ -6,7 +6,7 @@ class ScriptDetailsSerializer(serializers.Serializer):
     script_id = serializers.IntegerField()
     script_name = serializers.CharField(max_length=255)
     pathname = serializers.CharField(max_length=500)
-    url = serializers.URLField()  # Vercel Blob URL (blob_url)
+    url = serializers.URLField()  # GCS blob URL
 
 
 class VaultDetailsSerializer(serializers.Serializer):
@@ -25,8 +25,8 @@ class ScriptExecutionResponseSerializer(serializers.ModelSerializer):
     class Meta:
         model = ScriptExecution
         fields = [
-            'id', 'status', 'stdout', 'stderr', 'exit_code',
-            'started_at', 'completed_at', 'duration', 'logs',
+            'id', 'status', 'stdout_log_url', 'stderr_log_url', 'logs_url', 'exit_code',
+            'started_at', 'completed_at', 'duration',
             'created_at', 'updated_at',
         ]
         read_only_fields = fields
@@ -39,8 +39,8 @@ class ScriptExecutionHistorySerializer(serializers.ModelSerializer):
     class Meta:
         model = ScriptExecution
         fields = [
-            'id', 'script_id', 'script_name', 'status', 'stdout', 'stderr', 'exit_code',
-            'started_at', 'completed_at', 'duration', 'logs',
+            'id', 'script_id', 'script_name', 'status', 'stdout_log_url', 'stderr_log_url',
+            'logs_url', 'exit_code', 'started_at', 'completed_at', 'duration',
             'created_at', 'updated_at',
         ]
         read_only_fields = fields
