@@ -259,7 +259,7 @@ async def execute_script(request):
     data = serializer.validated_data
     script_details = data["script_details"]
     vault_details = data["vault_details"]
-    inputs = data.get("inputs", {})
+    inputs = data
 
     # ── Fetch and validate ownership (sync ORM via sync_to_async) ────────
     get_vault = sync_to_async(Vault.objects.get)

@@ -12,7 +12,7 @@ class ScriptExecutionAdmin(admin.ModelAdmin):
             'fields': ('script', 'vault', 'server', 'credential', 'user', 'status', 'inputs')
         }),
         ('Output', {
-            'fields': ('stdout', 'stderr', 'exit_code', 'logs')
+            'fields': ('stdout_log_url', 'stderr_log_url', 'exit_code', 'logs_url')
         }),
         ('Timestamps', {
             'fields': ('started_at', 'completed_at', 'duration')
