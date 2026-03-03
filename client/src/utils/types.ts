@@ -268,13 +268,16 @@ export interface ScriptExecution {
   script_id: number;
   script_name: string;
   status: "pending" | "running" | "completed" | "failed" | "cancelled";
-  stdout: string;
-  stderr: string;
+  stdout_log_url: string | null;
+  stderr_log_url: string | null;
+  logs_url: string | null;
+  stdout_signed_url?: string | null;
+  stderr_signed_url?: string | null;
+  logs_signed_url?: string | null;
   exit_code: number | null;
   started_at: string | null;
   completed_at: string | null;
   duration: string | null;
-  logs: any[];
   created_at: string;
   updated_at: string;
 }

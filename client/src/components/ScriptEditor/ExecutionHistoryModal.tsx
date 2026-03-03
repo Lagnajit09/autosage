@@ -86,35 +86,71 @@ export function ExecutionHistoryModal({
     toast.success(`${description} copied to clipboard`);
   };
 
-  const copyLogs = (execution: ScriptExecution) => {
-    const logs = `STDOUT:\n${execution.stdout || "None"}\n\nSTDERR:\n${
-      execution.stderr || "None"
-    }`;
-    copyToClipboard(logs, "Execution logs");
+  const fetchLogContent = async (url?: string | null) => {
+    if (!url) return "";
+    const response = await fetch(url);
+    console.log(response);
+    if (!response.ok) {
+      throw new Error(`Failed to fetch log: ${response.statusText}`);
+    }
+    return await response.text();
   };
 
-  const downloadLogs = (execution: ScriptExecution) => {
-    const logs = `Script: ${execution.script_name} (ID: ${execution.script_id})
+  const copyLogs = async (execution: ScriptExecution) => {
+    toast.promise(
+      (async () => {
+        const [stdout, stderr] = await Promise.all([
+          fetchLogContent(execution.stdout_signed_url),
+          fetchLogContent(execution.stderr_signed_url),
+        ]);
+        const logs = `STDOUT:\n${stdout || "None"}\n\nSTDERR:\n${
+          stderr || "None"
+        }`;
+        await navigator.clipboard.writeText(logs);
+      })(),
+      {
+        loading: "Fetching execution logs...",
+        success: "Execution logs copied to clipboard",
+        error: "Failed to fetch logs for copying",
+      },
+    );
+  };
+
+  const downloadLogs = async (execution: ScriptExecution) => {
+    toast.promise(
+      (async () => {
+        const [stdout, stderr] = await Promise.all([
+          fetchLogContent(execution.stdout_signed_url),
+          fetchLogContent(execution.stderr_signed_url),
+        ]);
+        const logs = `Script: ${execution.script_name} (ID: ${execution.script_id})
 Execution ID: ${execution.id}
 Date: ${execution.created_at}
 Status: ${execution.status}
 Exit Code: ${execution.exit_code}
 
 ================ STDOUT ================
-${execution.stdout || ""}
+${stdout || ""}
 
 ================ STDERR ================
-${execution.stderr || ""}
+${stderr || ""}
 `;
-    const blob = new Blob([logs], { type: "text/plain" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `execution_${execution.id.substring(0, 8)}.log`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+        const blob = new Blob([logs], { type: "text/plain" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `execution_${execution.id.substring(0, 8)}.log`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      })(),
+      {
+        loading: "Preparing logs for download...",
+        success: "Logs downloaded successfully",
+        error: "Failed to download logs",
+      },
+    );
   };
 
   const formatDate = (dateString: string) => {
