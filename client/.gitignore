@@ -29,3 +29,7 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+.firebase
+.firebase/**
+autosagex-firebase-adminsdk-*.json
