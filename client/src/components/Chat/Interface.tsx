@@ -268,8 +268,12 @@ const Interface = () => {
           >
             <div className="h-full flex flex-col p-4">
               <div className="flex items-center gap-2 mb-6 px-2">
-                <AutobotIcon size={24} />
-                <span className="font-bold text-lg dark:text-gray-100">
+                <img
+                  src="/icon.png"
+                  alt="AutoSage Icon"
+                  className="w-8 h-8 object-contain rounded-full shadow-sm"
+                />
+                <span className="font-bold text-lg dark:text-gray-100 tracking-tight">
                   AutoSage
                 </span>
               </div>
@@ -279,8 +283,14 @@ const Interface = () => {
         </Sheet>
 
         <div className="flex items-center gap-2">
-          <AutobotIcon size={20} />
-          <span className="font-semibold dark:text-gray-100">AutoSage</span>
+          <img
+            src="/icon.png"
+            alt="AutoSage Icon"
+            className="w-6 h-6 object-contain rounded-full shadow-sm"
+          />
+          <span className="font-semibold dark:text-gray-100 tracking-tight">
+            AutoSage
+          </span>
         </div>
 
         <SidebarTrigger className="lg:hidden" />

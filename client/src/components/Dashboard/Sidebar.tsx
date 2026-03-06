@@ -42,11 +42,18 @@ export const DashboardSidebar = () => {
     <Sidebar className="dark:border-gray-700">
       <SidebarHeader className="border-b border-sidebar-border p-4">
         <div className="flex items-center gap-3 px-2">
-          <div>
-            <h1 className="text-gray-950 dark:text-gray-100 font-semibold text-lg">
+          <img
+            src="/logo.png"
+            alt="AutoSage Logo"
+            className="w-10 h-10 object-contain shadow-sm"
+          />
+          <div className="flex flex-col">
+            <h1 className="text-gray-950 dark:text-gray-100 font-semibold text-lg tracking-tight leading-tight">
               Autosage
             </h1>
-            <p className="text-sidebar-foreground text-sm">Automation Hub</p>
+            <p className="text-sidebar-foreground text-xs font-medium">
+              Automation Hub
+            </p>
           </div>
         </div>
       </SidebarHeader>

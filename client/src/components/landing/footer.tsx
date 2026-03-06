@@ -5,9 +5,16 @@ const Footer = () => {
   return (
     <div className="flex items-center justify-between w-[90%] mx-auto pt-20 pb-10">
       <div className="flex flex-col">
-        <span className="text-2xl font-bold mb-2 text-gray-800 dark:text-gray-300">
-          AutoSage
-        </span>
+        <div className="flex items-end gap-2">
+          <img
+            src="/logo.png"
+            alt="AutoSage Logo"
+            className="h-10 w-auto object-contain mb-4"
+          />
+          <p className="text-gray-950 dark:text-gray-100 font-semibold text-xl tracking-tight leading-tight mb-4">
+            AUTOSAGE
+          </p>
+        </div>
         <span className="text-xs text-gray-600 dark:text-gray-500">
           Copyright © 2025 Autosage. All rights reserved.
           <br />

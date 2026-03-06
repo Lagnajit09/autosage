@@ -67,11 +67,16 @@ const Settings = () => {
                       >
                         <SheetHeader>
                           <div className="flex items-center gap-3">
+                            <img
+                              src="/icon.png"
+                              alt="AutoSage Icon"
+                              className="w-10 h-10 object-contain rounded-full shadow-sm"
+                            />
                             <div className="flex flex-col items-start">
-                              <h1 className="text-gray-950 dark:text-gray-100 font-semibold text-lg">
+                              <h1 className="text-gray-950 dark:text-gray-100 font-semibold text-xl tracking-tight leading-tight">
                                 Autosage
                               </h1>
-                              <p className="text-sidebar-foreground text-sm">
+                              <p className="text-sidebar-foreground text-xs font-medium">
                                 Automation Hub
                               </p>
                             </div>

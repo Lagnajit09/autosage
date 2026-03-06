@@ -140,7 +140,7 @@ export function VerifyEmail({
         await signIn.prepareFirstFactor({
           strategy: "email_code",
           emailAddressId: signIn.supportedFirstFactors?.find(
-            (factor) => factor.strategy === "email_code"
+            (factor) => factor.strategy === "email_code",
           )?.emailAddressId as string,
         });
       } else {
@@ -204,7 +204,7 @@ export function VerifyEmail({
         <Button
           type="submit"
           disabled={isLoading || otpForm.watch("otp").length !== 6}
-          className="w-full text-sm font-semibold text-gray-800 dark:text-gray-200 bg-gray-200 dark:bg-gray-800"
+          className="w-full text-sm font-semibold text-white bg-gradient-to-r from-purple-500 to-blue-500 hover:from-purple-600 hover:to-blue-600 border-none shadow-md transition-all hover:shadow-lg hover:-translate-y-0.5"
         >
           {isLoading ? (
             <div className="flex items-center justify-center">

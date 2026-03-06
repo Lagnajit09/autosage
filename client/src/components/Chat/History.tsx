@@ -86,7 +86,7 @@ const History: React.FC<HistoryProps> = ({
             );
           })
         : items,
-    [items, normalizedQuery]
+    [items, normalizedQuery],
   );
   return (
     <Sidebar
@@ -135,6 +135,11 @@ const History: React.FC<HistoryProps> = ({
                     Close sidebar
                   </TooltipContent>
                 </Tooltip>
+                <img
+                  src="/icon.png"
+                  alt="AutoSage Icon"
+                  className="w-8 h-8 object-contain rounded-full shadow-sm"
+                />
                 <p className="tracking-wider text-gray-950 dark:text-gray-100 font-semibold">
                   AutoSage
                 </p>

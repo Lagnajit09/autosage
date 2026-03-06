@@ -208,7 +208,12 @@ const Dashboard = () => {
                 recentScripts.length === 0 &&
                 recentExecutions.length === 0 ? (
                   <div className="lg:col-span-3 flex flex-col items-center justify-center min-h-[400px] text-center space-y-6 bg-white dark:bg-gray-800/40 rounded-xl border border-gray-200 dark:border-gray-700/50 border-dashed p-12">
-                    <div className="space-y-2">
+                    <div className="space-y-4 flex flex-col items-center">
+                      <img
+                        src="/logo.png"
+                        alt="AutoSage Logo"
+                        className="w-auto h-12 object-contain"
+                      />
                       <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
                         Welcome to AutoSage
                       </h2>

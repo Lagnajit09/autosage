@@ -74,7 +74,7 @@ export function SignInForm() {
 
       // Find the email code factor
       const emailCodeFactor = supportedFirstFactors?.find(
-        (factor) => factor.strategy === "email_code"
+        (factor) => factor.strategy === "email_code",
       );
 
       if (emailCodeFactor) {
@@ -145,7 +145,11 @@ export function SignInForm() {
                       </FormItem>
                     )}
                   />
-                  <Button type="submit" className="w-full" disabled={isLoading}>
+                  <Button
+                    type="submit"
+                    className="w-full bg-gradient-to-r from-purple-500 to-blue-500 hover:from-purple-600 hover:to-blue-600 text-white border-none shadow-md transition-all hover:shadow-lg hover:-translate-y-0.5"
+                    disabled={isLoading}
+                  >
                     {isLoading ? (
                       <div className="flex items-center justify-center">
                         <Spinner size="sm" variant="white" className="mr-2" />

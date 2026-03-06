@@ -140,7 +140,7 @@ const Templates = () => {
         .toLowerCase()
         .includes(debouncedSearchQuery.toLowerCase()) ||
       template.tags.some((tag) =>
-        tag.toLowerCase().includes(debouncedSearchQuery.toLowerCase())
+        tag.toLowerCase().includes(debouncedSearchQuery.toLowerCase()),
       );
 
     const matchesCategory =
@@ -180,11 +180,16 @@ const Templates = () => {
                       >
                         <SheetHeader>
                           <div className="flex items-center gap-3">
+                            <img
+                              src="/icon.png"
+                              alt="AutoSage Icon"
+                              className="w-10 h-10 object-contain rounded-full shadow-sm"
+                            />
                             <div className="flex flex-col items-start">
-                              <h1 className="text-gray-950 dark:text-gray-100 font-semibold text-lg">
+                              <h1 className="text-gray-950 dark:text-gray-100 font-semibold text-xl tracking-tight leading-tight">
                                 Autosage
                               </h1>
-                              <p className="text-sidebar-foreground text-sm">
+                              <p className="text-sidebar-foreground text-xs font-medium">
                                 Automation Hub
                               </p>
                             </div>
@@ -195,13 +200,20 @@ const Templates = () => {
                     </Sheet>
                   </div>
 
-                  <div>
-                    <h1 className="text-2xl md:text-3xl font-bold text-gray-900 dark:text-white tracking-tight">
-                      Templates
-                    </h1>
-                    <p className="text-sm md:text-lg text-gray-500 dark:text-gray-400 mt-1 hidden md:block">
-                      Explore and use pre-built automation templates.
-                    </p>
+                  <div className="flex items-center gap-4">
+                    <img
+                      src="/logo.png"
+                      alt="AutoSage Logo"
+                      className="h-10 md:h-12 w-auto rounded-full object-contain"
+                    />
+                    <div>
+                      <h1 className="text-2xl md:text-3xl font-bold text-gray-900 dark:text-white tracking-tight">
+                        Templates
+                      </h1>
+                      <p className="text-sm md:text-lg text-gray-500 dark:text-gray-400 mt-1 hidden md:block">
+                        Explore and use pre-built automation templates.
+                      </p>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -220,7 +232,7 @@ const Templates = () => {
                       "whitespace-nowrap rounded-full",
                       selectedCategory === category
                         ? "bg-purple-600 hover:bg-purple-700 text-white border-transparent"
-                        : "bg-white dark:bg-gray-800/50 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-700"
+                        : "bg-white dark:bg-gray-800/50 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-700",
                     )}
                   >
                     {category}
@@ -249,7 +261,7 @@ const Templates = () => {
                         "h-8 w-8 p-0 rounded-md transition-all",
                         viewMode === "grid"
                           ? "bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm"
-                          : "text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-800"
+                          : "text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-800",
                       )}
                     >
                       <LayoutGrid className="w-4 h-4" />
@@ -262,7 +274,7 @@ const Templates = () => {
                         "h-8 w-8 p-0 rounded-md transition-all",
                         viewMode === "list"
                           ? "bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm"
-                          : "text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-800"
+                          : "text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-800",
                       )}
                     >
                       <List className="w-4 h-4" />
@@ -278,7 +290,7 @@ const Templates = () => {
                 "animate-in fade-in slide-in-from-bottom-4 duration-500",
                 viewMode === "grid"
                   ? "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6"
-                  : "flex flex-col space-y-4"
+                  : "flex flex-col space-y-4",
               )}
             >
               {filteredTemplates.length > 0 ? (
@@ -287,7 +299,7 @@ const Templates = () => {
                     <TemplateCard key={template.id} template={template} />
                   ) : (
                     <TemplateListItem key={template.id} template={template} />
-                  )
+                  ),
                 )
               ) : (
                 <div className="col-span-full flex flex-col items-center justify-center py-12 text-center">

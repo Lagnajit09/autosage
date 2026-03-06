@@ -35,6 +35,11 @@ export function EditorHeader({
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <SidebarTrigger className="md:hidden" />
+          <img
+            src="/logo.png"
+            alt="AutoSage Logo"
+            className="h-6 md:h-8 w-auto rounded-full object-contain"
+          />
           <h1 className="text-lg font-semibold text-gray-900 dark:text-white tracking-tight">
             Script Editor
           </h1>

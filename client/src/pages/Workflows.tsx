@@ -195,11 +195,16 @@ const Workflows = () => {
                       >
                         <SheetHeader>
                           <div className="flex items-center gap-3">
+                            <img
+                              src="/icon.png"
+                              alt="AutoSage Icon"
+                              className="w-10 h-10 object-contain rounded-full shadow-sm"
+                            />
                             <div className="flex flex-col items-start">
-                              <h1 className="text-gray-950 dark:text-gray-100 font-semibold text-lg">
+                              <h1 className="text-gray-950 dark:text-gray-100 font-semibold text-xl tracking-tight leading-tight">
                                 Autosage
                               </h1>
-                              <p className="text-sidebar-foreground text-sm">
+                              <p className="text-sidebar-foreground text-xs font-medium">
                                 Automation Hub
                               </p>
                             </div>
@@ -210,13 +215,20 @@ const Workflows = () => {
                     </Sheet>
                   </div>
 
-                  <div>
-                    <h1 className="text-2xl md:text-3xl font-bold text-gray-900 dark:text-white tracking-tight">
-                      Workflows
-                    </h1>
-                    <p className="text-sm md:text-lg text-gray-500 dark:text-gray-400 mt-1 hidden md:block">
-                      Manage, monitor, and execute your automation workflows.
-                    </p>
+                  <div className="flex items-center gap-4">
+                    <img
+                      src="/logo.png"
+                      alt="AutoSage Logo"
+                      className="h-10 md:h-12 w-auto object-contain rounded-full"
+                    />
+                    <div>
+                      <h1 className="text-2xl md:text-3xl font-bold text-gray-900 dark:text-white tracking-tight">
+                        Workflows
+                      </h1>
+                      <p className="text-sm md:text-lg text-gray-500 dark:text-gray-400 mt-1 hidden md:block">
+                        Manage, monitor, and execute your automation workflows.
+                      </p>
+                    </div>
                   </div>
                 </div>
 
