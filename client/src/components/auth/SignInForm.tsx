@@ -17,7 +17,7 @@ import {
 import { Input } from "../ui/input";
 import { Button } from "../ui/button";
 import { Mail, ArrowRight } from "lucide-react";
-import { useLoading } from "../../contexts/LoadingContext";
+import { useLoading } from "../../contexts/loading/loading-context";
 import { Spinner } from "../ui/spinner";
 import { useNavigate } from "react-router-dom";
 import { toast } from "@/hooks/use-toast";
@@ -51,9 +51,12 @@ export function SignInForm() {
   });
 
   // Handle errors from Clerk
-  const handleError = (error: any) => {
+  const handleError = (error: unknown) => {
     console.error("Clerk Error:", error);
-    const msg = error.errors?.[0]?.message || "An unexpected error occurred.";
+    const msg =
+      (error as { errors?: { message: string }[] }).errors?.[0]?.message ||
+      (error as Error).message ||
+      "An unexpected error occurred.";
     toast({
       title: "Error",
       description: msg,
@@ -81,7 +84,8 @@ export function SignInForm() {
         // Prepare email code verification
         await signIn.prepareFirstFactor({
           strategy: "email_code",
-          emailAddressId: (emailCodeFactor as any).emailAddressId,
+          emailAddressId: (emailCodeFactor as { emailAddressId: string })
+            .emailAddressId,
         });
 
         setEmail(values.email);

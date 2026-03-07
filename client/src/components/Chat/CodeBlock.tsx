@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { Copy, Check } from "lucide-react";
-import { useTheme } from "@/provider/theme-provider";
+import { useTheme } from "@/contexts/theme/theme-context";
 import { getDarkTheme, getLightTheme } from "@/utils/getCodeTheme";
 
 export const CodeBlock = ({

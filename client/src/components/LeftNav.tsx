@@ -17,7 +17,7 @@ import {
 } from "lucide-react";
 import React from "react";
 import { Button } from "@/components/ui/button";
-import { useTheme } from "@/provider/theme-provider";
+import { useTheme } from "@/contexts/theme/theme-context";
 import { useNavigate } from "react-router-dom";
 import { AutobotIcon } from "./AutobotIcon";
 import { cn } from "@/lib/utils";
@@ -71,7 +71,7 @@ export const NavItems = ({ mobile = false }: { mobile?: boolean }) => {
         <Sun
           className={cn(
             "w-10 h-10 text-light-primary",
-            mobile ? "w-5 h-5 mr-2" : ""
+            mobile ? "w-5 h-5 mr-2" : "",
           )}
         />
       ) : (

@@ -1,5 +1,5 @@
 import LeftNav from "@/components/LeftNav";
-import { useTheme } from "@/provider/theme-provider";
+import { useTheme } from "@/contexts/theme/theme-context";
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar";
 import { FileExplorerSidebar } from "@/components/ScriptEditor/FileExplorerSidebar";
 import { AIScriptGeneratorSidebar } from "@/components/ScriptEditor/AIScriptGeneratorSidebar";
@@ -73,7 +73,7 @@ const ScriptEditor = () => {
     if (currentFile?.id) {
       clearLogs();
     }
-  }, [currentFile?.id]);
+  }, [currentFile?.id, clearLogs]);
 
   return (
     <SidebarProvider>

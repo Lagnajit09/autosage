@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Server, Credential } from "@/utils/types";
 import { apiRequest } from "@/lib/api-client";
 import { useAuth } from "@clerk/clerk-react";
@@ -20,11 +20,7 @@ export function useScriptExecution() {
   const [isStopping, setIsStopping] = useState(false);
   const [logs, setLogs] = useState<string[]>([]);
 
-  useEffect(() => {
-    fetchData();
-  }, []);
-
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     setIsLoadingData(true);
     try {
       const token = await getToken();
@@ -47,7 +43,11 @@ export function useScriptExecution() {
     } finally {
       setIsLoadingData(false);
     }
-  };
+  }, [getToken]);
+
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
 
   useEffect(() => {
     if (selectedServerId && servers.length > 0) {
@@ -58,7 +58,12 @@ export function useScriptExecution() {
     }
   }, [selectedServerId, servers]);
 
-  const executeScript = async (script: any) => {
+  const executeScript = async (script: {
+    id: string | number;
+    name: string;
+    pathname?: string;
+    blobUrl?: string;
+  }) => {
     if (!selectedServerId) {
       toast.error("Please select a server");
       return;
@@ -80,7 +85,7 @@ export function useScriptExecution() {
 
       const payload = {
         script_details: {
-          script_id: parseInt(script.id),
+          script_id: parseInt(String(script.id)),
           script_name: script.name,
           pathname: script.pathname || "",
           url: script.blobUrl || "",
@@ -153,10 +158,10 @@ export function useScriptExecution() {
           }
         }
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Execution error:", error);
-      setLogs((prev) => [...prev, `[ERROR] ${error.message}`]);
-      toast.error(error.message || "Failed to execute script");
+      setLogs((prev) => [...prev, `[ERROR] ${(error as Error).message}`]);
+      toast.error((error as Error).message || "Failed to execute script");
     } finally {
       setIsExecuting(false);
       setCurrentExecutionId(null);
@@ -176,14 +181,23 @@ export function useScriptExecution() {
       if (!token) throw new Error("No token");
       await executionsService.stopExecution(currentExecutionId, token);
       toast.success("Stop signal sent");
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Failed to stop execution:", error);
-      toast.error(error.message || "Failed to stop execution");
+      toast.error((error as Error).message || "Failed to stop execution");
       setIsStopping(false);
     }
   };
 
-  const handleSSEEvent = (event: string, data: any) => {
+  const handleSSEEvent = (
+    event: string,
+    data: {
+      data?: string;
+      execution_id?: string;
+      status?: string;
+      exit_code?: number;
+      message?: string;
+    },
+  ) => {
     switch (event) {
       case "stdout":
       case "stderr":

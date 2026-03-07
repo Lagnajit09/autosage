@@ -25,7 +25,7 @@ import { DecisionNode } from "./nodes/DecisionNode";
 import { AIWorkflowGenerator } from "./AIWorkflowGenerator";
 import GenieButton from "../GenieButton";
 import { Vault } from "../vault/Vault";
-import { useTheme } from "@/provider/theme-provider";
+import { useTheme } from "@/contexts/theme/theme-context";
 import Header from "./Header";
 import { toast } from "@/hooks/use-toast";
 import { toast as toast2 } from "sonner";
@@ -120,9 +120,7 @@ const WorkflowBuilderContent = ({
       const { name, nodes: importedNodes, edges: importedEdges } = workflowData;
 
       if (importedNodes && Array.isArray(importedNodes)) {
-        if (importedNodes && Array.isArray(importedNodes)) {
-          setNodes(importedNodes);
-        }
+        setNodes(importedNodes);
       }
 
       if (importedEdges && Array.isArray(importedEdges)) {
@@ -441,7 +439,9 @@ const WorkflowBuilderContent = ({
         return;
       }
       const clerkToken = await getToken();
-      let response: any;
+      let response:
+        | { data?: { id?: string }; success?: boolean; message?: string }
+        | undefined;
       if (workflowId) {
         // Update existing workflow
         response = await updateWorkflow(workflowId, workflow, clerkToken);

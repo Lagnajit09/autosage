@@ -87,9 +87,14 @@ export const JSONSchemaModal: React.FC<JSONSchemaModalProps> = ({
                 <div className="w-32">
                   <Select
                     value={field.type}
-                    onValueChange={(value: any) =>
-                      updateField(index, { type: value })
-                    }
+                    onValueChange={(
+                      value:
+                        | "string"
+                        | "number"
+                        | "boolean"
+                        | "array"
+                        | "object",
+                    ) => updateField(index, { type: value })}
                   >
                     <SelectTrigger className="bg-white dark:bg-gray-950 border-gray-300 dark:border-gray-700">
                       <SelectValue />

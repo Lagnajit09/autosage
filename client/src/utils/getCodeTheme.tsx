@@ -2,7 +2,7 @@ import {
   oneDark,
   oneLight,
 } from "react-syntax-highlighter/dist/esm/styles/prism";
-import { useTheme } from "@/provider/theme-provider";
+import { useTheme } from "@/contexts/theme/theme-context";
 
 const oneDarkTheme = oneDark as Record<string, React.CSSProperties>;
 const oneLightTheme = oneLight as Record<string, React.CSSProperties>;

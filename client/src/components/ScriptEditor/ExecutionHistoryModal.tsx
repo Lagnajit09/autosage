@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { formatInTimeZone } from "date-fns-tz";
 import {
   Dialog,
@@ -48,23 +48,26 @@ export function ExecutionHistoryModal({
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
 
-  const fetchHistory = async (pageNumber: number) => {
-    setIsLoading(true);
-    try {
-      const token = await getToken();
-      if (!token) throw new Error("No authentication token");
+  const fetchHistory = useCallback(
+    async (pageNumber: number) => {
+      setIsLoading(true);
+      try {
+        const token = await getToken();
+        if (!token) throw new Error("No authentication token");
 
-      const response = await executionsService.getHistory(token, pageNumber);
-      setExecutions(response.executions);
-      setTotalPages(response.total_pages);
-      setPage(response.current_page);
-    } catch (error) {
-      console.error("Failed to fetch execution history:", error);
-      toast.error("Failed to load execution history.");
-    } finally {
-      setIsLoading(false);
-    }
-  };
+        const response = await executionsService.getHistory(token, pageNumber);
+        setExecutions(response.executions);
+        setTotalPages(response.total_pages);
+        setPage(response.current_page);
+      } catch (error) {
+        console.error("Failed to fetch execution history:", error);
+        toast.error("Failed to load execution history.");
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    [getToken],
+  );
 
   useEffect(() => {
     if (isOpen) {
@@ -74,7 +77,7 @@ export function ExecutionHistoryModal({
       setPage(1);
       setTotalPages(1);
     }
-  }, [isOpen]);
+  }, [isOpen, fetchHistory]);
 
   const copyToClipboard = (text: string, description: string) => {
     navigator.clipboard.writeText(text);

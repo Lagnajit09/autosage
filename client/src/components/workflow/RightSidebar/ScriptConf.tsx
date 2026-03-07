@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
   Code,
   Upload,
@@ -42,16 +42,7 @@ export const ScriptConf: React.FC<BaseConfigProps> = ({
   const [savedScripts, setSavedScripts] = useState<ScriptFile[]>([]);
   const [isLoadingScripts, setIsLoadingScripts] = useState(false);
 
-  useEffect(() => {
-    if (isSignedIn) {
-      if (selectedNode.data?.executionMode === "remote") {
-        fetchVaults();
-      }
-      fetchScripts();
-    }
-  }, [selectedNode.data?.executionMode, isSignedIn]);
-
-  const fetchScripts = async () => {
+  const fetchScripts = useCallback(async () => {
     setIsLoadingScripts(true);
     try {
       const token = await getToken();
@@ -66,9 +57,9 @@ export const ScriptConf: React.FC<BaseConfigProps> = ({
     } finally {
       setIsLoadingScripts(false);
     }
-  };
+  }, [getToken]);
 
-  const fetchVaults = async () => {
+  const fetchVaults = useCallback(async () => {
     setIsLoadingVaults(true);
     try {
       const token = await getToken();
@@ -82,12 +73,21 @@ export const ScriptConf: React.FC<BaseConfigProps> = ({
     } finally {
       setIsLoadingVaults(false);
     }
-  };
+  }, [getToken]);
+
+  useEffect(() => {
+    if (isSignedIn) {
+      if (selectedNode.data?.executionMode === "remote") {
+        fetchVaults();
+      }
+      fetchScripts();
+    }
+  }, [selectedNode.data?.executionMode, isSignedIn, fetchVaults, fetchScripts]);
 
   const allServers = vaults.flatMap((v) => v.servers || []);
   const allCredentials = vaults.flatMap((v) => v.credentials || []);
 
-  const handleInputChange = (field: string, value: any) => {
+  const handleInputChange = (field: string, value: string | undefined) => {
     onUpdateNode(selectedNode.id, { [field]: value });
   };
 
@@ -144,9 +144,13 @@ export const ScriptConf: React.FC<BaseConfigProps> = ({
                 scriptId: createdScript.id.toString(),
               },
             });
-          } catch (error: any) {
+          } catch (error: unknown) {
             console.error("Upload failed", error);
-            toast.error(error.message || "Failed to upload script");
+            const errorMessage =
+              error instanceof Error
+                ? error.message
+                : "Failed to upload script";
+            toast.error(errorMessage);
           }
         };
         reader.readAsText(file);
@@ -181,7 +185,7 @@ export const ScriptConf: React.FC<BaseConfigProps> = ({
   const handleScriptTypeChange = (type: string) => {
     onUpdateNode(selectedNode.id, {
       selectedScript: {
-        type: type as any,
+        type: type as "Python Script" | "Powershell Script" | "Shell Script",
         scriptId: "", // Reset selection on type change
       },
     });

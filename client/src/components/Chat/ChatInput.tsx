@@ -28,7 +28,7 @@ import {
   CommandList,
 } from "@/components/ui/command";
 // import { categories, subCategories, quickActions } from "@/utils/categories";
-import { useLoading } from "@/contexts/LoadingContext";
+import { useLoading } from "@/contexts/loading/loading-context";
 // import SuggestedQuestions from "./SuggestedQuestions";
 // import { useSuggestedQuestions } from "@/contexts/SuggestedQuestionsContext";
 import { useParams } from "react-router-dom";

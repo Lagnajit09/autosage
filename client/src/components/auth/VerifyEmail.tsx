@@ -15,7 +15,7 @@ import {
 import { Button } from "../ui/button";
 import { Spinner } from "../ui/spinner";
 import { toast } from "@/hooks/use-toast";
-import { useLoading } from "../../contexts/LoadingContext";
+import { useLoading } from "../../contexts/loading/loading-context";
 import {
   InputOTP,
   InputOTPGroup,
@@ -60,9 +60,9 @@ export function VerifyEmail({
   });
 
   // Handle errors from Clerk
-  const handleError = (error: any) => {
+  const handleError = (error: unknown) => {
     console.error("Clerk Error:", error);
-    const msg = error.message || "An unexpected error occurred.";
+    const msg = (error as Error).message || "An unexpected error occurred.";
     toast({
       title: "Failed to verify email!",
       description: msg,

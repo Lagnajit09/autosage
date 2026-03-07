@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useAuth } from "@clerk/clerk-react";
 import { OnMount } from "@monaco-editor/react";
@@ -49,7 +49,7 @@ export function useScriptEditor() {
 
   // ── File fetching ────────────────────────────────────────────────────────────
 
-  const fetchFiles = async () => {
+  const fetchFiles = useCallback(async () => {
     setIsLoading(true);
     toast.loading("Fetching scripts...");
     try {
@@ -79,11 +79,11 @@ export function useScriptEditor() {
       setIsLoading(false);
       toast.dismiss();
     }
-  };
+  }, [getToken, clientToast]);
 
   useEffect(() => {
     if (token) fetchFiles();
-  }, [token]);
+  }, [token, fetchFiles]);
 
   // Open file fetched by URL param
   useEffect(() => {
@@ -91,6 +91,7 @@ export function useScriptEditor() {
       const script = files.find((f) => f.name === name);
       if (script) selectFile(script);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [name, files]);
 
   // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -165,6 +166,7 @@ export function useScriptEditor() {
       currentFile?.language || "javascript",
       {
         provideCompletionItems: () => {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const suggestions: any[] = [];
 
           if (currentFile?.language === "python") {
@@ -309,12 +311,12 @@ export function useScriptEditor() {
         title: "Saved",
         description: "Script saved successfully.",
       });
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Failed to save file:", error);
       clientToast({
         variant: "destructive",
         title: "Save Failed",
-        description: error.message || "Failed to save script.",
+        description: (error as Error).message || "Failed to save script.",
       });
     } finally {
       setIsLoading(false);
@@ -460,12 +462,12 @@ export function useScriptEditor() {
         title: "Created",
         description: "Script created successfully.",
       });
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Failed to create file:", error);
       clientToast({
         variant: "destructive",
         title: "Create Failed",
-        description: error.message || "Failed to create script.",
+        description: (error as Error).message || "Failed to create script.",
       });
     } finally {
       setIsLoading(false);
@@ -537,12 +539,12 @@ export function useScriptEditor() {
         title: "Renamed",
         description: "Script renamed successfully.",
       });
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Failed to rename file:", error);
       clientToast({
         variant: "destructive",
         title: "Rename Failed",
-        description: error.message || "Failed to rename script.",
+        description: (error as Error).message || "Failed to rename script.",
       });
     } finally {
       setIsLoading(false);
@@ -588,12 +590,12 @@ export function useScriptEditor() {
         title: "Deleted",
         description: "Script deleted successfully.",
       });
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Failed to delete file:", error);
       clientToast({
         variant: "destructive",
         title: "Delete Failed",
-        description: error.message || "Failed to delete script.",
+        description: (error as Error).message || "Failed to delete script.",
       });
     } finally {
       setIsLoading(false);
@@ -648,12 +650,13 @@ export function useScriptEditor() {
         title: "Success",
         description: "Script generated and saved successfully.",
       });
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Failed to save generated script:", error);
       clientToast({
         variant: "destructive",
         title: "Error",
-        description: error.message || "Failed to save generated script.",
+        description:
+          (error as Error).message || "Failed to save generated script.",
       });
     }
   };
@@ -688,12 +691,12 @@ export function useScriptEditor() {
         title: "Duplicated",
         description: "Script duplicated successfully.",
       });
-    } catch (e: any) {
+    } catch (e: unknown) {
       console.error("Duplicate failed", e);
       clientToast({
         variant: "destructive",
         title: "Error",
-        description: e.message || "Failed to duplicate script.",
+        description: (e as Error).message || "Failed to duplicate script.",
       });
     } finally {
       setIsLoading(false);

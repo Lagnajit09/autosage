@@ -64,17 +64,27 @@ const Workflows = () => {
 
           // Map server response to client Workflow type with default values
           const mappedWorkflows: Workflow[] = Array.isArray(data)
-            ? data.map((item: any) => ({
-                id: item.id,
-                title: item.name || "Untitled Workflow",
-                description: item.description || "Autosage Workflow",
-                lastRun: formatDate(item.created_at) || "Never",
-                runs: typeof item.runs === "number" ? item.runs : 0,
-                total_nodes:
-                  typeof item.total_nodes === "number" ? item.total_nodes : 0,
-                total_edges:
-                  typeof item.total_edges === "number" ? item.total_edges : 0,
-              }))
+            ? data.map(
+                (item: {
+                  id: string;
+                  name?: string;
+                  description?: string;
+                  created_at: string;
+                  runs?: number;
+                  total_nodes?: number;
+                  total_edges?: number;
+                }) => ({
+                  id: item.id,
+                  title: item.name || "Untitled Workflow",
+                  description: item.description || "Autosage Workflow",
+                  lastRun: formatDate(item.created_at) || "Never",
+                  runs: typeof item.runs === "number" ? item.runs : 0,
+                  total_nodes:
+                    typeof item.total_nodes === "number" ? item.total_nodes : 0,
+                  total_edges:
+                    typeof item.total_edges === "number" ? item.total_edges : 0,
+                }),
+              )
             : [];
 
           setWorkflows(mappedWorkflows);

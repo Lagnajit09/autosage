@@ -16,7 +16,7 @@ interface CircularTextProps {
 const getRotationTransition = (
   duration: number,
   from: number,
-  loop: boolean = true
+  loop: boolean = true,
 ) => ({
   from,
   to: from + 360,
@@ -52,7 +52,7 @@ const CircularText: React.FC<CircularTextProps> = ({
       scale: 1,
       transition: getTransition(spinDuration, start),
     });
-  }, [spinDuration, text, onHover, controls]);
+  }, [spinDuration, text, onHover, controls, rotation]);
 
   const handleHoverStart = () => {
     const start = rotation.get();

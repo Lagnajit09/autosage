@@ -68,7 +68,7 @@ export function CredentialsManager({
 
     setIsSaving(true);
     try {
-      const payload: any = {
+      const payload: Record<string, unknown> = {
         vault: vaultId,
         name,
         credential_type: type,
@@ -184,7 +184,12 @@ export function CredentialsManager({
               </div>
               <div className="space-y-2">
                 <Label className="text-gray-700 dark:text-gray-300">Type</Label>
-                <Select value={type} onValueChange={(v: any) => setType(v)}>
+                <Select
+                  value={type}
+                  onValueChange={(v: Credential["credential_type"]) =>
+                    setType(v)
+                  }
+                >
                   <SelectTrigger className="bg-white dark:bg-gray-950 border-gray-300 dark:border-gray-700 text-gray-900 dark:text-gray-100">
                     <SelectValue />
                   </SelectTrigger>

@@ -34,7 +34,7 @@ const Dashboard = () => {
       }
     };
     getClerkToken();
-  }, []);
+  }, [getToken]);
 
   useEffect(() => {
     if (showFirstVisitWelcome) {

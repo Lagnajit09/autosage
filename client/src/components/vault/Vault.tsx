@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import {
   Dialog,
   DialogContent,
@@ -50,13 +50,7 @@ export function Vault({
 
   const selectedVault = vaults.find((v) => v.id === selectedVaultId);
 
-  useEffect(() => {
-    if (isOpen && isSignedIn) {
-      fetchVaults();
-    }
-  }, [isOpen, isSignedIn]);
-
-  const fetchVaults = async () => {
+  const fetchVaults = useCallback(async () => {
     setIsLoading(true);
     try {
       const token = await getToken();
@@ -70,7 +64,13 @@ export function Vault({
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [getToken]);
+
+  useEffect(() => {
+    if (isOpen && isSignedIn) {
+      fetchVaults();
+    }
+  }, [isOpen, isSignedIn, fetchVaults]);
 
   const handleCreateVault = async () => {
     if (!newVaultName.trim()) return;

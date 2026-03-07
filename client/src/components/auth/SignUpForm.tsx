@@ -18,7 +18,7 @@ import { Mail, ArrowRight } from "lucide-react";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { Checkbox } from "../ui/checkbox";
-import { useLoading } from "../../contexts/LoadingContext";
+import { useLoading } from "../../contexts/loading/loading-context";
 import { Spinner } from "../ui/spinner";
 import { useNavigate, Link } from "react-router-dom";
 import { toast } from "@/hooks/use-toast";
@@ -60,9 +60,12 @@ export function SignUpForm() {
   });
 
   // Handle errors from Clerk
-  const handleError = (error: any) => {
+  const handleError = (error: unknown) => {
     console.error("Clerk Error:", error);
-    const msg = error.errors?.[0]?.message || "An unexpected error occurred.";
+    const msg =
+      (error as { errors?: { message: string }[] }).errors?.[0]?.message ||
+      (error as Error).message ||
+      "An unexpected error occurred.";
     toast({
       title: "Error",
       description: msg,

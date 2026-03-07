@@ -5,7 +5,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { DecisionConfigProps, ConditionItem, Node, Edge } from "@/utils/types";
+import {
+  DecisionConfigProps,
+  ConditionItem,
+  Node,
+  ComparisonOperator,
+} from "@/utils/types";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -108,7 +113,7 @@ export const DecisionConf: React.FC<DecisionConfigProps> = ({
                 <div className="flex items-center gap-2 mb-2">
                   <Select
                     value={cond.logicalOperator}
-                    onValueChange={(val: any) =>
+                    onValueChange={(val: "&&" | "||") =>
                       updateCondition(cond.id, { logicalOperator: val })
                     }
                   >
@@ -134,7 +139,7 @@ export const DecisionConf: React.FC<DecisionConfigProps> = ({
                       </span>
                       <Select
                         value={cond.fieldSource}
-                        onValueChange={(val: any) =>
+                        onValueChange={(val: "manual" | "output") =>
                           updateCondition(cond.id, {
                             fieldSource: val,
                             field: "",
@@ -224,7 +229,7 @@ export const DecisionConf: React.FC<DecisionConfigProps> = ({
                   {/* Operator Section */}
                   <Select
                     value={cond.operator}
-                    onValueChange={(val: any) =>
+                    onValueChange={(val: ComparisonOperator) =>
                       updateCondition(cond.id, { operator: val })
                     }
                   >
@@ -250,7 +255,7 @@ export const DecisionConf: React.FC<DecisionConfigProps> = ({
                       </span>
                       <Select
                         value={cond.valueSource}
-                        onValueChange={(val: any) =>
+                        onValueChange={(val: "manual" | "output") =>
                           updateCondition(cond.id, {
                             valueSource: val,
                             value: "",

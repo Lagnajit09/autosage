@@ -14,7 +14,7 @@ import {
   Search,
   Sun,
 } from "lucide-react";
-import { useTheme } from "@/provider/theme-provider";
+import { useTheme } from "@/contexts/theme/theme-context";
 import { Input } from "@/components/ui/input";
 import {
   DropdownMenu,

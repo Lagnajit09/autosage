@@ -17,7 +17,7 @@ import {
   Mail,
   Menu,
 } from "lucide-react";
-import { useTheme } from "@/provider/theme-provider";
+import { useTheme } from "@/contexts/theme/theme-context";
 import {
   Sheet,
   SheetContent,

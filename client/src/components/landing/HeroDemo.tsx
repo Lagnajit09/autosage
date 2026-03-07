@@ -10,7 +10,7 @@ import {
   ReactFlowInstance,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import { useTheme } from "@/provider/theme-provider";
+import { useTheme } from "@/contexts/theme/theme-context";
 import { Editor } from "@monaco-editor/react";
 import {
   Copy,
@@ -212,7 +212,7 @@ const ServerMonitoringWorkflow = () => {
         type: "custom",
       },
     ],
-    []
+    [],
   );
 
   const [nodes, , onNodesChange] = useNodesState(initialNodes);
@@ -315,7 +315,7 @@ const ServerMonitoringWorkflow = () => {
         markerEnd: { type: MarkerType.ArrowClosed, color: "#f97316" },
       },
     ],
-    []
+    [],
   );
 
   return (

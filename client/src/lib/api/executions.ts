@@ -26,7 +26,10 @@ export const executionsService = {
   },
 
   // Stop a running execution
-  stopExecution: async (executionId: string, token: string): Promise<any> => {
+  stopExecution: async (
+    executionId: string,
+    token: string,
+  ): Promise<Record<string, unknown>> => {
     const response = await apiRequest(
       `${BASE_URL}/${executionId}/stop/`,
       { method: "POST" },

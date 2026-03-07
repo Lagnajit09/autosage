@@ -1,6 +1,6 @@
 import * as React from "react";
 import { cn } from "@/lib/utils"; // optional: Tailwind class merge helper
-import { useTheme } from "@/provider/theme-provider";
+import { useTheme } from "@/contexts/theme/theme-context";
 
 interface AutobotIconProps extends React.SVGProps<SVGSVGElement> {
   dark?: boolean;
@@ -23,7 +23,7 @@ const AutobotIcon = React.forwardRef<SVGSVGElement, AutobotIconProps>(
         <image href={src} width={size} height={size} />
       </svg>
     );
-  }
+  },
 );
 
 AutobotIcon.displayName = "AutobotIcon";

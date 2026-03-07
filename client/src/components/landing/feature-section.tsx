@@ -1,6 +1,6 @@
 import { Code2Icon, Workflow } from "lucide-react";
 import { BentoCard, BentoGrid } from "@/components/ui/bento-grid";
-import { useTheme } from "@/provider/theme-provider";
+import { useTheme } from "@/contexts/theme/theme-context";
 import { LampContainer } from "../ui/lamp";
 import { motion } from "motion/react";
 

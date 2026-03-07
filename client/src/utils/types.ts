@@ -183,7 +183,7 @@ export interface SignInData {
 export interface AuthResponse {
   success: boolean;
   message: string;
-  user?: any;
+  user?: Record<string, unknown>;
 }
 
 export interface Vault {

@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import {
   Dialog,
   DialogContent,
@@ -27,18 +27,14 @@ export function CredentialRevealModal({
 }: CredentialRevealModalProps) {
   const { getToken } = useAuth();
   const [loading, setLoading] = useState(false);
-  const [data, setData] = useState<any>(null);
+  const [data, setData] = useState<{
+    username?: string;
+    password?: string;
+    ssh_key?: string;
+  } | null>(null);
   const [copiedField, setCopiedField] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (isOpen && credentialId) {
-      revealCredential();
-    } else {
-      setData(null);
-    }
-  }, [isOpen, credentialId]);
-
-  const revealCredential = async () => {
+  const revealCredential = useCallback(async () => {
     setLoading(true);
     try {
       const token = await getToken();
@@ -57,7 +53,15 @@ export function CredentialRevealModal({
     } finally {
       setLoading(false);
     }
-  };
+  }, [credentialId, getToken, onClose]);
+
+  useEffect(() => {
+    if (isOpen && credentialId) {
+      revealCredential();
+    } else {
+      setData(null);
+    }
+  }, [isOpen, credentialId, revealCredential]);
 
   const copyToClipboard = (text: string, field: string) => {
     navigator.clipboard.writeText(text);

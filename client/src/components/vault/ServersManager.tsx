@@ -64,7 +64,7 @@ export function ServersManager({
 
     setIsSaving(true);
     try {
-      const payload: any = {
+      const payload: Record<string, unknown> = {
         vault: vaultId,
         name,
         host,
@@ -197,7 +197,12 @@ export function ServersManager({
                 <Label className="text-gray-700 dark:text-gray-300">
                   Connection
                 </Label>
-                <Select value={method} onValueChange={(v: any) => setMethod(v)}>
+                <Select
+                  value={method}
+                  onValueChange={(v: Server["connection_method"]) =>
+                    setMethod(v)
+                  }
+                >
                   <SelectTrigger className="bg-white dark:bg-gray-950 border-gray-300 dark:border-gray-700 text-gray-900 dark:text-gray-100">
                     <SelectValue />
                   </SelectTrigger>

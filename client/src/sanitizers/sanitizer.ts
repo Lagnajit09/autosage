@@ -1,10 +1,10 @@
+/* eslint-disable no-control-regex */
 export const sanitizeString = (
   str: string,
   options: { stripHtml?: boolean } = {},
 ): string => {
   if (typeof str !== "string") return str;
   // Remove control characters (excluding newlines and tabs which are valid in text/code)
-  // eslint-disable-next-line no-control-regex
   str = str.replace(
     /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F]/g,
     "",

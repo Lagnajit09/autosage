@@ -12,7 +12,7 @@ export function SocialAuth({ isLoading, mode }: SocialAuthProps) {
   const { signUp } = useSignUp();
 
   const handleSocialAuth = async (
-    strategy: "oauth_github" | "oauth_google"
+    strategy: "oauth_github" | "oauth_google",
   ) => {
     try {
       const authObject = mode === "signin" ? signIn : signUp;
@@ -32,12 +32,13 @@ export function SocialAuth({ isLoading, mode }: SocialAuthProps) {
         redirectUrl: "/sso-callback",
         redirectUrlComplete: "/dashboard",
       });
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Social auth error:", error);
       toast({
         title: "Authentication Error",
         description:
-          error.errors?.[0]?.message ||
+          (error as { errors?: { message: string }[] }).errors?.[0]?.message ||
+          (error as Error).message ||
           "Failed to authenticate. Please try again.",
         variant: "destructive",
       });

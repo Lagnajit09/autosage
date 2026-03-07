@@ -3,7 +3,7 @@ import Footer from "@/components/landing/footer";
 import Hero from "@/components/landing/hero-section";
 import PricingSection from "@/components/landing/pricing-section";
 import { Button } from "@/components/ui/button";
-import { useTheme } from "@/provider/theme-provider";
+import { useTheme } from "@/contexts/theme/theme-context";
 import { Moon, Sun } from "lucide-react";
 
 const Landing = () => {
