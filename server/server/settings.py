@@ -34,9 +34,6 @@ CLERK_SECRET_KEY = config('CLERK_SECRET_KEY', default='')
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = config('DEBUG', default=True, cast=bool)
 
-# Vercel Blob Token
-VERCEL_BLOB_TOKEN = config('BLOB_READ_WRITE_TOKEN', default='')
-
 # Cloud Run URL
 EXEC_WORKER_URL = config('EXEC_WORKER_URL', default='')
 WORKER_API_KEY = config('WORKER_API_KEY', default='')
@@ -44,7 +41,7 @@ WORKER_API_KEY = config('WORKER_API_KEY', default='')
 # Google Cloud Storage
 GOOGLE_APPLICATION_CREDENTIALS = config('GOOGLE_APPLICATION_CREDENTIALS', default='')
 
-ALLOWED_HOSTS = ["http://localhost:5173", "http://127.0.0.1:5173", "localhost", "127.0.0.1"]
+ALLOWED_HOSTS = ["http://localhost:5173", "http://127.0.0.1:5173", "localhost", "127.0.0.1", "autosagex.web.app"]
 
 
 # Application definition
@@ -185,7 +182,7 @@ USE_TZ = True
 STATIC_URL = 'static/'
 
 # CORS Configuration
-CORS_ALLOW_ALL_ORIGINS = True # For development
+CORS_ALLOW_ALL_ORIGINS = ["http://localhost:5173", "http://127.0.0.1:5173", "localhost", "127.0.0.1", "autosagex.web.app", "https://autosagex.web.app"]
 CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOW_METHODS = [
     "DELETE",
