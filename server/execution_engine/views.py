@@ -36,6 +36,10 @@ from django.conf import settings
 EXEC_WORKER_URL = getattr(settings, "EXEC_WORKER_URL", os.getenv("EXEC_WORKER_URL", ""))
 WORKER_API_KEY = getattr(settings, "WORKER_API_KEY", os.getenv("WORKER_API_KEY", ""))
 
+# Ensure the URL always has a scheme (guard against bare host/IP in env vars)
+if EXEC_WORKER_URL and not EXEC_WORKER_URL.startswith(("http://", "https://")):
+    EXEC_WORKER_URL = f"http://{EXEC_WORKER_URL}"
+
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -331,6 +335,10 @@ async def execute_script(request):
         status="pending",
     )
 
+    server_host = server.host.strip()
+    if server_host and not server_host.startswith(('http://', 'https://')):
+        server_host = f'http://{server_host}'
+
     # ── Build payload for exec-worker ─────────────────────────────────────
     worker_payload = {
         "execution_id": str(execution.id),
@@ -342,7 +350,7 @@ async def execute_script(request):
         },
         "server": {
             "id": str(server.id),
-            "host": server.host,
+            "host": server_host,
             "port": server.port or 22,
             "connection_method": server.connection_method,
             "os_type": "windows" if server.connection_method == "winrm" else "linux",
