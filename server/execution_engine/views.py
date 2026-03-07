@@ -211,9 +211,8 @@ async def _stream_execution(execution_id: str, payload: dict):
     # ── Upload logs to GCS and persist final state ────────────────────────
     try:
         execution = await get_execution(id=execution_id)
-
-        stdout_text = "".join(stdout_chunks)
-        stderr_text = "".join(stderr_chunks)
+        stdout_text = "\n".join(stdout_chunks)
+        stderr_text = "\n".join(stderr_chunks)
 
         # Upload logs to GCS in a thread (GCS SDK is synchronous)
         loop = asyncio.get_event_loop()

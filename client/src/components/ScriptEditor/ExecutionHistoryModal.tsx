@@ -1,9 +1,10 @@
-import React, { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { formatInTimeZone } from "date-fns-tz";
 import {
   Dialog,
   DialogContent,
   DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -31,12 +32,6 @@ import { useAuth } from "@clerk/clerk-react";
 import { executionsService } from "@/lib/api/executions";
 import { ScriptExecution } from "@/utils/types";
 import { toast } from "sonner";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 
 interface ExecutionHistoryModalProps {
   isOpen: boolean;
@@ -280,7 +275,7 @@ ${stderr || ""}
                   </TableCell>
                 </TableRow>
               ) : (
-                <TooltipProvider>
+                <>
                   {executions.map((execution) => (
                     <TableRow
                       key={execution.id}
@@ -361,7 +356,7 @@ ${stderr || ""}
                       </TableCell>
                     </TableRow>
                   ))}
-                </TooltipProvider>
+                </>
               )}
             </TableBody>
           </Table>
@@ -399,6 +394,12 @@ ${stderr || ""}
             </div>
           </div>
         )}
+        <DialogFooter>
+          <DialogDescription className="text-zinc-400 dark:text-zinc-500">
+            Note: Logs are retained for 30 days. After that, they will be
+            permanently deleted.
+          </DialogDescription>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );
