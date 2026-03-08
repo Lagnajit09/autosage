@@ -1,0 +1,25 @@
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environment
+venv/
+.venv/
+env/
+
+# Secrets & Keys (NEVER BAKE THESE INTO IMAGES)
+.env
+*.json
+
+# Docker artifacts
+Dockerfile
+.dockerignore
+
+# Git
+.git
+.gitignore
+
+# OS files
+.DS_Store
+Thumbs.db
