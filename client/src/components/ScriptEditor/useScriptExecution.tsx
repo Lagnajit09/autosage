@@ -132,29 +132,49 @@ export function useScriptExecution() {
       const decoder = new TextDecoder();
       let buffer = "";
 
+      // SSE line-by-line parser, following the WHATWG EventSource spec:
+      // Each frame is delimited by a blank line (\n\n).
+      // Within a frame, each line is "field: value".
+      // We accumulate `event` and `data` fields separately so that
+      // multi-line frames are never mangled by a greedy regex.
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
 
         buffer += decoder.decode(value, { stream: true });
 
-        const lines = buffer.split("\n\n");
-        buffer = lines.pop() || "";
+        // Normalise any \r\n → \n so the split works cross-platform
+        buffer = buffer.replace(/\r\n/g, "\n");
 
-        for (const line of lines) {
-          if (!line.trim()) continue;
+        // SSE frames are separated by blank lines (\n\n)
+        const frames = buffer.split("\n\n");
+        // Keep the last (potentially incomplete) frame in the buffer
+        buffer = frames.pop() ?? "";
 
-          const eventMatch = line.match(/event:\s*(.+)/);
-          const dataMatch = line.match(/data:\s*(.+)/);
+        for (const frame of frames) {
+          if (!frame.trim()) continue;
 
-          if (eventMatch && dataMatch) {
-            const event = eventMatch[1].trim();
-            try {
-              const data = JSON.parse(dataMatch[1].trim());
-              handleSSEEvent(event, data);
-            } catch (e) {
-              console.error("Failed to parse SSE data", e);
+          let eventName = "message"; // SSE default
+          let dataStr = "";
+
+          for (const line of frame.split("\n")) {
+            if (line.startsWith("event:")) {
+              eventName = line.slice("event:".length).trim();
+            } else if (line.startsWith("data:")) {
+              // Concatenate multi-line data fields with a newline
+              if (dataStr) dataStr += "\n";
+              dataStr += line.slice("data:".length).trim();
             }
+            // Ignore id: and retry: fields
+          }
+
+          if (!dataStr) continue;
+
+          try {
+            const data = JSON.parse(dataStr);
+            handleSSEEvent(eventName, data);
+          } catch (e) {
+            console.error("Failed to parse SSE data:", e, "raw:", dataStr);
           }
         }
       }
@@ -219,7 +239,11 @@ export function useScriptExecution() {
         ]);
         break;
       case "error":
-        setLogs((prev) => [...prev, `[ERROR] ${data.message}`]);
+        // Server emits {message} for top-level errors, {data} for worker errors
+        setLogs((prev) => [
+          ...prev,
+          `[ERROR] ${data.message ?? data.data ?? "Unknown error"}`,
+        ]);
         break;
       case "done":
         setLogs((prev) => [...prev, "> Execution finished."]);
@@ -235,7 +259,7 @@ export function useScriptExecution() {
     toast.success("Servers and credentials refreshed");
   };
 
-  const clearLogs = () => setLogs([]);
+  const clearLogs = useCallback(() => setLogs([]), []);
 
   return {
     servers,
