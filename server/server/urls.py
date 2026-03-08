@@ -16,6 +16,11 @@ Including another URLconf
 """
 from django.contrib import admin
 from django.urls import path, include
+from django.http import JsonResponse
+from django.utils import timezone
+
+def health_check(request):
+    return JsonResponse({'status': 'healthy', 'service': 'main-server', 'version': '1.0.0', 'message': 'Main server is healthy!', 'timestamp': timezone.now().isoformat()})
 
 urlpatterns = [
     path('admin/', admin.site.urls),
@@ -23,4 +28,5 @@ urlpatterns = [
     path('api/vault/', include('vault.urls')),
     path('api/scripts/', include('scripts.urls')),
     path('api/execution-engine/', include('execution_engine.urls')),
+    path('api/health/', health_check),
 ]

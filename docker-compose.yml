@@ -1,0 +1,127 @@
+# ── autosage – Docker Compose ──────────────────────────────────────────────────
+#
+# Services
+# ────────
+#   exec-worker  FastAPI NDJSON streaming microservice  → localhost:8020
+#   server       Django ASGI / SSE streaming server     → localhost:8000
+#
+# Usage
+# ─────
+#   1. Copy docker-compose.env.example → .env.server  and fill in real values.
+#   2. Copy docker-compose.env.example → .env.worker  and fill in real values.
+#   3. Place your GCS service-account JSON at:  ./gcs-key.json
+#      (it is bind-mounted read-only into both containers — never baked in)
+#   4. docker compose up --build
+#
+# Streaming notes
+# ───────────────
+# • Both services run Uvicorn with --http h11 to lock HTTP/1.1 for SSE/NDJSON.
+# • exec-worker uses --timeout-graceful-shutdown 30; compose stop_grace_period
+#   is set to 35 s to give in-flight streams time to finish.
+# • PYTHONUNBUFFERED=1 is set in both Dockerfiles; it is re-stated here as a
+#   belt-and-braces guard against any override.
+# • X-Accel-Buffering: no is set at the application layer (views.py / main.py).
+
+version: "3.9"
+
+networks:
+  # Dedicated bridge so the two services can reach each other by service name
+  # (e.g., http://exec-worker:8020) without exposing internal traffic to the
+  # host network.
+  autosage-net:
+    driver: bridge
+
+services:
+  # ── exec-worker ─────────────────────────────────────────────────────────────
+  exec-worker:
+    build:
+      context: ./exec-worker
+      dockerfile: Dockerfile
+    image: autosage-exec-worker:latest
+    container_name: autosage-exec-worker
+
+    # Load worker secrets from a local env file (never committed to git)
+    env_file:
+      - .env.worker
+
+    # Belt-and-braces: ensure Python never buffers stdout/stderr
+    environment:
+      PYTHONUNBUFFERED: "1"
+
+    # Bind-mount GCS service-account key read-only.
+    # Inside the container the path is /run/secrets/gcs-key.json.
+    # Point GOOGLE_APPLICATION_CREDENTIALS to this path in .env.worker.
+    volumes:
+      - ./gcs-key.json:/run/secrets/gcs-key.json:ro
+
+    ports:
+      - "8020:8020"
+
+    networks:
+      - autosage-net
+
+    # Graceful shutdown: allow 35 s (> uvicorn --timeout-graceful-shutdown 30)
+    # so that in-flight NDJSON streams can finish before the container is killed.
+    stop_grace_period: 35s
+
+    restart: unless-stopped
+
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://localhost:8020/api/health')",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  # ── server (Django / Uvicorn SSE) ───────────────────────────────────────────
+  server:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    image: autosage-server:latest
+    container_name: autosage-server
+
+    env_file:
+      - .env.server
+
+    environment:
+      PYTHONUNBUFFERED: "1"
+      # Override EXEC_WORKER_URL to use Docker-internal DNS instead of localhost.
+      # The exec-worker service is reachable by its service name on autosage-net.
+      EXEC_WORKER_URL: "http://exec-worker:8020/api/worker/execute"
+
+    volumes:
+      - ./gcs-key.json:/run/secrets/gcs-key.json:ro
+
+    ports:
+      - "8000:8000"
+
+    networks:
+      - autosage-net
+
+    depends_on:
+      exec-worker:
+        condition: service_healthy
+
+    stop_grace_period: 35s
+
+    restart: unless-stopped
+
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health/')",
+        ]
+      interval: 20s
+      timeout: 5s
+      retries: 3
+      start_period: 30s

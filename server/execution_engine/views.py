@@ -336,8 +336,8 @@ async def execute_script(request):
     )
 
     server_host = server.host.strip()
-    if server_host and not server_host.startswith(('http://', 'https://')):
-        server_host = f'http://{server_host}'
+    if server_host.startswith(('http://', 'https://')):
+        server_host = server_host.split('://', 1)[1]
 
     # ── Build payload for exec-worker ─────────────────────────────────────
     worker_payload = {

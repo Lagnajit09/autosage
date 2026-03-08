@@ -52,6 +52,8 @@ CMD ["sh", "-c", \
     --port ${PORT} \
     --workers 1 \
     --loop asyncio \
+    --http h11 \
     --log-level info \
     --timeout-keep-alive 60 \
+    --timeout-graceful-shutdown 30 \
     --proxy-headers"]
