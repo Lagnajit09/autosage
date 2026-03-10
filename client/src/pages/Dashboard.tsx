@@ -28,7 +28,7 @@ const Dashboard = () => {
     const getClerkToken = async () => {
       try {
         const clerkToken = await getToken({ template: "LongLivedJWT" });
-        console.log("LongLivedJWT clerkToken", clerkToken);
+        // console.log("LongLivedJWT clerkToken", clerkToken);
       } catch (error) {
         console.error("Failed to get token:", error);
       }

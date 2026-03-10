@@ -42,10 +42,12 @@ jobs:
       - name: Install & Build client
         env:
           VITE_CLERK_PUBLISHABLE_KEY: ${{ secrets.VITE_CLERK_PUBLISHABLE_KEY }}
+          VITE_API_URL: ${{ secrets.VITE_API_URL }}
         run: |
           cd client
           npm ci
           echo "VITE_CLERK_PUBLISHABLE_KEY=$VITE_CLERK_PUBLISHABLE_KEY" > .env.production
+          echo "VITE_API_URL=$VITE_API_URL" >> .env.production
           npx vite build
 
       - name: Deploy to Firebase Hosting
