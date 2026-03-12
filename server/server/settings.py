@@ -32,12 +32,14 @@ VAULT_ENCRYPTION_KEY = config('VAULT_ENCRYPTION_KEY', default='django-insecure-W
 CLERK_PUBLISHABLE_KEY = config('CLERK_PUBLISHABLE_KEY', default='')
 CLERK_SECRET_KEY = config('CLERK_SECRET_KEY', default='')
 
-# SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = config('DEBUG', default=True, cast=bool)
-
-# Cloud Run URL
+# Cloud Run Configuration
+ENVIRONMENT = config('ENVIRONMENT', default='DEV').upper()
 EXEC_WORKER_URL = config('EXEC_WORKER_URL', default='')
 WORKER_API_KEY = config('WORKER_API_KEY', default='')
+EXEC_WORKER_AUDIENCE = config('EXEC_WORKER_AUDIENCE', default='')
+
+# SECURITY WARNING: don't run with debug turned on in production!
+DEBUG = config('DEBUG', default=True, cast=bool)
 
 # Google Cloud Storage
 GOOGLE_APPLICATION_CREDENTIALS = config('GOOGLE_APPLICATION_CREDENTIALS', default='')

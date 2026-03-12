@@ -35,10 +35,48 @@ from django.conf import settings
 
 EXEC_WORKER_URL = getattr(settings, "EXEC_WORKER_URL", os.getenv("EXEC_WORKER_URL", ""))
 WORKER_API_KEY = getattr(settings, "WORKER_API_KEY", os.getenv("WORKER_API_KEY", ""))
+# ENVIRONMENT=PROD  → attach an OIDC identity token (Google Cloud IAM).
+# ENVIRONMENT=DEV   → skip OIDC; plain X-API-Key is enough on localhost.
+ENVIRONMENT = getattr(settings, "ENVIRONMENT", os.getenv("ENVIRONMENT", ""))
+# Audience must equal the Cloud Run service root URL (no trailing path).
+EXEC_WORKER_AUDIENCE = getattr(settings, "EXEC_WORKER_AUDIENCE", os.getenv("EXEC_WORKER_AUDIENCE", ""))
 
 # Ensure the URL always has a scheme (guard against bare host/IP in env vars)
 if EXEC_WORKER_URL and not EXEC_WORKER_URL.startswith(("http://", "https://")):
     EXEC_WORKER_URL = f"http://{EXEC_WORKER_URL}"
+
+def _get_oidc_token(audience: str) -> str:
+    """
+    Fetch a short-lived OIDC identity token for the given audience using
+    Application Default Credentials (ADC).
+
+    On a GCE VM this is served by the metadata server and requires no key
+    files.  The google-auth library caches and auto-refreshes the token.
+    """
+    from google.auth.transport.requests import Request as GoogleAuthRequest
+    from google.oauth2 import id_token
+
+    return id_token.fetch_id_token(GoogleAuthRequest(), audience)
+
+
+def _build_worker_headers(include_content_type: bool = True) -> dict:
+    """
+    Build the HTTP headers for a call to the exec-worker.
+
+    PROD: adds  Authorization: Bearer <OIDC token>  so Cloud Run accepts
+          the request from the VM service account.
+    DEV:  plain X-API-Key header only (no metadata server available locally).
+    """
+    headers: dict = {"X-API-Key": WORKER_API_KEY}
+    if include_content_type:
+        headers["Content-Type"] = "application/json"
+    if ENVIRONMENT == "PROD":
+        try:
+            token = _get_oidc_token(EXEC_WORKER_AUDIENCE)
+            headers["Authorization"] = f"Bearer {token}"
+        except Exception:
+            logger.exception("Failed to fetch OIDC token for exec-worker; request will likely be rejected by Cloud Run")
+    return headers
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -116,17 +154,17 @@ async def _stream_execution(execution_id: str, payload: dict):
 
     try:
         # ── Call exec-worker ──────────────────────────────────────────
-        headers = {
-            "Content-Type": "application/json",
-            "X-API-Key": WORKER_API_KEY,
-        }
+        # Build headers on a thread so the synchronous google-auth call
+        # doesn't block the event loop in PROD.
+        from asgiref.sync import sync_to_async
+        worker_headers = await sync_to_async(_build_worker_headers)()
 
         async with httpx.AsyncClient(timeout=None) as client:
             async with client.stream(
                 "POST",
                 EXEC_WORKER_URL,
                 json=payload,
-                headers=headers,
+                headers=worker_headers,
             ) as response:
                 if response.status_code != 200:
                     error_body = await response.aread()
@@ -517,9 +555,12 @@ def stop_execution(request, execution_id):
     stop_endpoint = f"{base_url}/api/worker/stop/{execution_id}"
 
     try:
-        # We use a synchronous httpx call here
+        # We use a synchronous httpx call here.
+        # Headers include the OIDC token in PROD (no Content-Type needed for a
+        # body-less stop signal).
+        stop_headers = _build_worker_headers(include_content_type=False)
         with httpx.Client(timeout=5.0) as client:
-            resp = client.post(stop_endpoint, headers={"X-API-Key": WORKER_API_KEY})
+            resp = client.post(stop_endpoint, headers=stop_headers)
             
             if resp.status_code == 200:
                 logger.info("Sent stop signal to worker for execution %s", execution_id)
