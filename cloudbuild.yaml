@@ -1,0 +1,63 @@
+steps:
+  # Build the image from source
+  - name: "gcr.io/cloud-builders/docker"
+    args:
+      [
+        "build",
+        "-t",
+        "us-central1-docker.pkg.dev/$PROJECT_ID/autosage-exec-worker/execution-worker:$COMMIT_SHA",
+        "-t",
+        "us-central1-docker.pkg.dev/$PROJECT_ID/autosage-exec-worker/execution-worker:latest",
+        "./exec-worker",
+      ]
+
+  # Push commit SHA tag
+  - name: "gcr.io/cloud-builders/docker"
+    args:
+      [
+        "push",
+        "us-central1-docker.pkg.dev/$PROJECT_ID/autosage-exec-worker/execution-worker:$COMMIT_SHA",
+      ]
+
+  # Push latest tag
+  - name: "gcr.io/cloud-builders/docker"
+    args:
+      [
+        "push",
+        "us-central1-docker.pkg.dev/$PROJECT_ID/autosage-exec-worker/execution-worker:latest",
+      ]
+
+  # Deploy to Cloud Run
+  - name: "gcr.io/google.com/cloudsdktool/cloud-sdk"
+    entrypoint: gcloud
+    args:
+      [
+        "run",
+        "deploy",
+        "execution-worker",
+        "--image",
+        "us-central1-docker.pkg.dev/$PROJECT_ID/autosage-exec-worker/execution-worker:$COMMIT_SHA",
+        "--region",
+        "us-central1",
+        "--platform",
+        "managed",
+        "--no-allow-unauthenticated",
+        "--cpu",
+        "1",
+        "--memory",
+        "512Mi",
+        "--max-instances",
+        "2",
+        "--min-instances",
+        "0",
+        "--port",
+        "8020",
+        "--service-account",
+        "execution-worker-sa@autosagex01.iam.gserviceaccount.com",
+        "--set-secrets",
+        "WORKER_API_KEY=WORKER_API_KEY:latest,ENVIRONMENT=ENVIRONMENT:latest",
+      ]
+
+images:
+  - "us-central1-docker.pkg.dev/$PROJECT_ID/autosage-exec-worker/execution-worker:$COMMIT_SHA"
+  - "us-central1-docker.pkg.dev/$PROJECT_ID/autosage-exec-worker/execution-worker:latest"
