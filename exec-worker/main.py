@@ -48,6 +48,39 @@ logger = logging.getLogger(__name__)
 WORKER_API_KEY = os.getenv("WORKER_API_KEY", "")
 STOP_EVENTS: Dict[str, asyncio.Event] = {}
 
+# ── Environment ───────────────────────────────────────────────────────────────
+ENVIRONMENT = os.getenv("ENVIRONMENT", "DEV").upper()
+
+
+def build_gcs_client() -> storage.Client:
+    """
+    Return an authenticated GCS client.
+
+    PROD  → Application Default Credentials (ADC).
+            Cloud Run automatically provides the credentials of the service
+            account attached to the revision — no key file needed.
+
+    DEV   → Explicit service-account JSON key file located at the path
+            set in GOOGLE_APPLICATION_CREDENTIALS.
+    """
+    if ENVIRONMENT == "PROD":
+        logger.info("GCS auth: using Application Default Credentials (PROD)")
+        return storage.Client()
+    else:
+        key_path = os.getenv("GOOGLE_APPLICATION_CREDENTIALS", "")
+        if not key_path:
+            raise RuntimeError(
+                "GOOGLE_APPLICATION_CREDENTIALS is not set. "
+                "Set it to the path of your service-account JSON key file for DEV."
+            )
+        logger.info("GCS auth: using key file at %s (DEV)", key_path)
+        from google.oauth2 import service_account
+        credentials = service_account.Credentials.from_service_account_file(
+            key_path,
+            scopes=["https://www.googleapis.com/auth/cloud-platform"],
+        )
+        return storage.Client(credentials=credentials)
+
 
 async def verify_api_key(x_api_key: str = Header(..., alias="X-API-Key")):
     """Verify the inter-service API key from the Django server."""
@@ -261,9 +294,9 @@ async def execute_script(
                 blob_path = exec_request.script.pathname
 
             logger.info("Fetching script from GCS: bucket=%s path=%s", bucket_name, blob_path)
-            
-            # Initialize client (uses GOOGLE_APPLICATION_CREDENTIALS from env)
-            storage_client = storage.Client()
+
+            # Initialize client based on current environment
+            storage_client = build_gcs_client()
             bucket = storage_client.bucket(bucket_name)
             blob = bucket.blob(blob_path)
             
