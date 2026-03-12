@@ -61,3 +61,6 @@ steps:
 images:
   - "us-central1-docker.pkg.dev/$PROJECT_ID/autosage-exec-worker/execution-worker:$COMMIT_SHA"
   - "us-central1-docker.pkg.dev/$PROJECT_ID/autosage-exec-worker/execution-worker:latest"
+
+options:
+  logging: CLOUD_LOGGING_ONLY
