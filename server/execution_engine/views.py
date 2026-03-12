@@ -23,7 +23,7 @@ from server.rate_limiters import ExecutionBurstThrottle, ExecutionSustainedThrot
 
 # For non-streaming endpoints still using DRF decorators
 from rest_framework.decorators import api_view, permission_classes
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.response import Response
 from rest_framework.request import Request as DRFRequest
 
@@ -37,7 +37,7 @@ EXEC_WORKER_URL = getattr(settings, "EXEC_WORKER_URL", os.getenv("EXEC_WORKER_UR
 WORKER_API_KEY = getattr(settings, "WORKER_API_KEY", os.getenv("WORKER_API_KEY", ""))
 # ENVIRONMENT=PROD  → attach an OIDC identity token (Google Cloud IAM).
 # ENVIRONMENT=DEV   → skip OIDC; plain X-API-Key is enough on localhost.
-ENVIRONMENT = getattr(settings, "ENVIRONMENT", os.getenv("ENVIRONMENT", ""))
+ENVIRONMENT = getattr(settings, "ENVIRONMENT", os.getenv("ENVIRONMENT", "")).upper().strip()
 # Audience must equal the Cloud Run service root URL (no trailing path).
 EXEC_WORKER_AUDIENCE = getattr(settings, "EXEC_WORKER_AUDIENCE", os.getenv("EXEC_WORKER_AUDIENCE", ""))
 
@@ -45,16 +45,26 @@ EXEC_WORKER_AUDIENCE = getattr(settings, "EXEC_WORKER_AUDIENCE", os.getenv("EXEC
 if EXEC_WORKER_URL and not EXEC_WORKER_URL.startswith(("http://", "https://")):
     EXEC_WORKER_URL = f"http://{EXEC_WORKER_URL}"
 
+logger.info("Execution Engine initialized: ENVIRONMENT=%s, WORKER_URL=%s", ENVIRONMENT, EXEC_WORKER_URL)
+
+
 def _get_oidc_token(audience: str) -> str:
     """
     Fetch a short-lived OIDC identity token for the given audience using
     Application Default Credentials (ADC).
-
-    On a GCE VM this is served by the metadata server and requires no key
-    files.  The google-auth library caches and auto-refreshes the token.
     """
     from google.auth.transport.requests import Request as GoogleAuthRequest
     from google.oauth2 import id_token
+
+    if not audience and EXEC_WORKER_URL:
+        # Auto-derive audience from the worker URL if not explicitly provided
+        from urllib.parse import urlparse
+        parsed = urlparse(EXEC_WORKER_URL)
+        audience = f"{parsed.scheme}://{parsed.netloc}"
+        logger.info("Derived OIDC audience from worker URL: %s", audience)
+
+    if not audience:
+        raise ValueError("Cannot fetch OIDC token: audience is missing and could not be derived.")
 
     return id_token.fetch_id_token(GoogleAuthRequest(), audience)
 
@@ -62,20 +72,21 @@ def _get_oidc_token(audience: str) -> str:
 def _build_worker_headers(include_content_type: bool = True) -> dict:
     """
     Build the HTTP headers for a call to the exec-worker.
-
-    PROD: adds  Authorization: Bearer <OIDC token>  so Cloud Run accepts
-          the request from the VM service account.
-    DEV:  plain X-API-Key header only (no metadata server available locally).
     """
     headers: dict = {"X-API-Key": WORKER_API_KEY}
     if include_content_type:
         headers["Content-Type"] = "application/json"
+    
     if ENVIRONMENT == "PROD":
         try:
             token = _get_oidc_token(EXEC_WORKER_AUDIENCE)
             headers["Authorization"] = f"Bearer {token}"
-        except Exception:
-            logger.exception("Failed to fetch OIDC token for exec-worker; request will likely be rejected by Cloud Run")
+            logger.debug("Attached OIDC token to request headers (PROD)")
+        except Exception as e:
+            logger.error("Failed to fetch OIDC token for exec-worker: %s", str(e))
+    else:
+        logger.warning("Skipping OIDC token (ENVIRONMENT=%r) — requests to Cloud Run will be unauthenticated", ENVIRONMENT)
+        
     return headers
 
 
@@ -582,4 +593,55 @@ def stop_execution(request, execution_id):
             success=False,
             message=f"Failed to communicate with worker: {str(e)}",
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+
+
+@api_view(["GET"])
+@permission_classes([AllowAny])
+def health_check(request):
+    """
+    GET /api/execution-engine/health/
+    Proxies a health check request to the execution worker.
+    """
+    if not EXEC_WORKER_URL:
+        return api_response(
+            success=False,
+            message="Execution worker URL not configured.",
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+
+    # Derived health endpoint from EXEC_WORKER_URL
+    base_url = EXEC_WORKER_URL.split("/api/worker/execute")[0].rstrip("/")
+    health_endpoint = f"{base_url}/api/health"
+
+    try:
+        # Get headers (OIDC in PROD, plain X-API-Key in DEV)
+        # Note: Health endpoint on worker doesn't strictly need X-API-Key,
+        # but the OIDC token in Authorization header is required for Cloud Run IAM.
+        headers = _build_worker_headers(include_content_type=False)
+        
+        with httpx.Client(timeout=5.0) as client:
+            resp = client.get(health_endpoint, headers=headers)
+            
+            if resp.status_code == 200:
+                worker_data = resp.json()
+                return api_response(
+                    success=True,
+                    message="Execution worker is healthy.",
+                    data=worker_data
+                )
+            else:
+                return api_response(
+                    success=False,
+                    message=f"Worker health check failed with status {resp.status_code}.",
+                    errors=resp.text,
+                    status_code=status.HTTP_502_BAD_GATEWAY
+                )
+
+    except Exception as e:
+        logger.exception("Failed to connect to execution worker for health check")
+        return api_response(
+            success=False,
+            message=f"Could not reach execution worker: {str(e)}",
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE
         )

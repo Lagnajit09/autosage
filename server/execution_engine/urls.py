@@ -15,4 +15,6 @@ urlpatterns = [
 
     # Stop execution endpoint
     path("<uuid:execution_id>/stop/", views.stop_execution, name="stop-execution"),
+
+    path("health/", views.health_check, name="exec-worker-health-check"),
 ]
