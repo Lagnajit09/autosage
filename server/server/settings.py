@@ -197,7 +197,13 @@ else:
     # PRODUCTION - Lock down
     print("Production-Server")
     CORS_ALLOW_ALL_ORIGINS = False
-    CORS_ALLOWED_ORIGINS = config('CORS_ALLOWED_ORIGINS', default='http://localhost:5173,http://127.0.0.1:5173', cast=Csv())
+    
+# Always allow these specific origins just in case
+CORS_ALLOWED_ORIGINS = config(
+    'CORS_ALLOWED_ORIGINS', 
+    default='http://localhost:5173,http://127.0.0.1:5173,https://autosagex.web.app,https://34.9.123.216', 
+    cast=Csv()
+)
 
 CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOW_METHODS = [

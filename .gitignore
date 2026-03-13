@@ -6,4 +6,7 @@ node_modules
 .env.production.local
 .env.server
 .env.worker
+.env.traefik
 gcs-key.json
+# Let's Encrypt certificate storage — never commit
+acme.json

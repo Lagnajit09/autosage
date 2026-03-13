@@ -1,0 +1,114 @@
+# ── Deploy Django Server ───────────────────────────────────────────────────────
+#
+# Triggers when code in server/ is pushed to main.
+#
+# Flow
+# ────
+#   1. build-and-push  Build server/Dockerfile → GHCR (ghcr.io/lagnajit09/autosage/autosage-server)
+#   2. deploy          SSH into VM → pull new image → rolling restart via Traefik
+#
+# Required GitHub Secrets (Settings → Secrets and variables → Actions)
+# ─────────────────────────────────────────────────────────────────────
+#   VM_HOST          IP or hostname of your VM
+#   VM_USER          SSH user on the VM (e.g. ubuntu)
+#   VM_SSH_KEY       Private SSH key (PEM, no passphrase)
+#   VM_SSH_PORT      SSH port (usually 22)
+#   VM_DEPLOY_PATH   Absolute path to the repo on the VM (e.g. /home/ubuntu/autogen)
+
+name: Deploy Server
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "server/**"
+  workflow_dispatch:     # Allow manual trigger from GitHub UI
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ghcr.io/lagnajit09/autosage/autosage-server
+
+jobs:
+  # ── Job 1: Build image and push to GHCR ─────────────────────────────────────
+  build-and-push:
+    name: Build & Push to GHCR
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write   # Required to push to GHCR
+
+    outputs:
+      image_tag: ${{ steps.meta.outputs.version }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          # GITHUB_TOKEN automatically has packages:write on the repo's packages
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract Docker metadata (tags & labels)
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.IMAGE_NAME }}
+          tags: |
+            # sha-<short-commit> for traceability
+            type=sha,prefix=sha-,format=short
+            # :latest always tracks main
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Build and push image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./server
+          file: ./server/Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          # Layer cache backed by GitHub Actions cache for fast rebuilds
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # ── Job 2: Deploy to VM ──────────────────────────────────────────────────────
+  deploy:
+    name: Deploy to VM (Zero Downtime)
+    runs-on: ubuntu-latest
+    needs: build-and-push   # Only runs after a successful build
+    environment: production  # Optional: gates on environment protection rules
+
+    steps:
+      - name: SSH into VM and deploy
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.VM_HOST }}
+          username: ${{ secrets.VM_USER }}
+          key: ${{ secrets.VM_SSH_KEY }}
+          port: ${{ secrets.VM_SSH_PORT }}
+          # script runs on the VM; each line is a separate command
+          script: |
+            set -e   # Exit immediately on any error
+
+            cd ${{ secrets.VM_DEPLOY_PATH }}
+
+            echo "==> Pulling latest server image from GHCR..."
+            docker compose -f server/docker-compose.traefik.yml pull server
+
+            echo "==> Rolling update: starting new container (waits for healthcheck)..."
+            # --wait    : blocks until the new container's healthcheck reports healthy.
+            #             If healthcheck fails, this command exits non-zero → job fails
+            #             and the OLD container keeps serving traffic. Zero-downtime guaranteed.
+            docker compose -f server/docker-compose.traefik.yml up -d --wait server
+
+            echo "==> Pruning old/dangling images to free disk space..."
+            docker image prune -f
+
+            echo "==> Deploy complete. New server container is healthy and live."

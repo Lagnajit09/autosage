@@ -11,6 +11,7 @@ db.sqlite3-journal
 
 # Environments
 .env
+.env.traefik
 .venv
 env/
 venv/
