@@ -48,6 +48,7 @@ if EXEC_WORKER_URL and not EXEC_WORKER_URL.startswith(("http://", "https://")):
 logger.info("Execution Engine initialized: ENVIRONMENT=%s, WORKER_URL=%s", ENVIRONMENT, EXEC_WORKER_URL)
 
 
+# Generate OIDC token for Cloud Run authentication
 def _get_oidc_token(audience: str) -> str:
     """
     Fetch a short-lived OIDC identity token for the given audience using

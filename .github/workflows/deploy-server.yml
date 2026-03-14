@@ -1,114 +1,127 @@
-# ── Deploy Django Server ───────────────────────────────────────────────────────
-#
-# Triggers when code in server/ is pushed to main.
-#
-# Flow
-# ────
-#   1. build-and-push  Build server/Dockerfile → GHCR (ghcr.io/lagnajit09/autosage/autosage-server)
-#   2. deploy          SSH into VM → pull new image → rolling restart via Traefik
-#
-# Required GitHub Secrets (Settings → Secrets and variables → Actions)
-# ─────────────────────────────────────────────────────────────────────
-#   VM_HOST          IP or hostname of your VM
-#   VM_USER          SSH user on the VM (e.g. ubuntu)
-#   VM_SSH_KEY       Private SSH key (PEM, no passphrase)
-#   VM_SSH_PORT      SSH port (usually 22)
-#   VM_DEPLOY_PATH   Absolute path to the repo on the VM (e.g. /home/ubuntu/autogen)
-
-name: Deploy Server
+name: Build and Deploy Server
 
 on:
   push:
-    branches: [main]
+    branches:
+      - main
     paths:
       - "server/**"
-  workflow_dispatch:     # Allow manual trigger from GitHub UI
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: ghcr.io/lagnajit09/autosage/autosage-server
+  IMAGE_NAME: lagnajit09/autosage/autosage-server
+  CONTAINER_NAME: autosage-server
 
 jobs:
-  # ── Job 1: Build image and push to GHCR ─────────────────────────────────────
   build-and-push:
-    name: Build & Push to GHCR
+    name: Build & Push Docker Image
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      packages: write   # Required to push to GHCR
+      packages: write
 
     outputs:
-      image_tag: ${{ steps.meta.outputs.version }}
+      image_digest: ${{ steps.build.outputs.digest }}
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Log in to GHCR
+      - name: Log in to GitHub Container Registry
         uses: docker/login-action@v3
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
-          # GITHUB_TOKEN automatically has packages:write on the repo's packages
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Extract Docker metadata (tags & labels)
+      - name: Extract Docker metadata
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ${{ env.IMAGE_NAME }}
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
-            # sha-<short-commit> for traceability
-            type=sha,prefix=sha-,format=short
-            # :latest always tracks main
-            type=raw,value=latest,enable={{is_default_branch}}
+            type=raw,value=latest
 
-      - name: Build and push image
-        uses: docker/build-push-action@v6
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push Docker image
+        id: build
+        uses: docker/build-push-action@v5
         with:
           context: ./server
-          file: ./server/Dockerfile
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          # Layer cache backed by GitHub Actions cache for fast rebuilds
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-  # ── Job 2: Deploy to VM ──────────────────────────────────────────────────────
   deploy:
-    name: Deploy to VM (Zero Downtime)
+    name: Deploy to GCP VM
     runs-on: ubuntu-latest
-    needs: build-and-push   # Only runs after a successful build
-    environment: production  # Optional: gates on environment protection rules
+    needs: build-and-push
 
     steps:
-      - name: SSH into VM and deploy
-        uses: appleboy/ssh-action@v1.2.0
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.VM_HOST }}
           username: ${{ secrets.VM_USER }}
           key: ${{ secrets.VM_SSH_KEY }}
           port: ${{ secrets.VM_SSH_PORT }}
-          # script runs on the VM; each line is a separate command
+          script_stop: true
           script: |
-            set -e   # Exit immediately on any error
+            set -e
 
-            cd ${{ secrets.VM_DEPLOY_PATH }}
+            echo ">>> Logging into GHCR..."
+            echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
 
-            echo "==> Pulling latest server image from GHCR..."
-            docker compose -f server/docker-compose.traefik.yml pull server
+            echo ">>> Pulling latest image..."
+            docker pull ghcr.io/${{ env.IMAGE_NAME }}:latest
 
-            echo "==> Rolling update: starting new container (waits for healthcheck)..."
-            # --wait    : blocks until the new container's healthcheck reports healthy.
-            #             If healthcheck fails, this command exits non-zero → job fails
-            #             and the OLD container keeps serving traffic. Zero-downtime guaranteed.
-            docker compose -f server/docker-compose.traefik.yml up -d --wait server
+            echo ">>> Stopping and removing existing container (if any)..."
+            docker stop ${{ env.CONTAINER_NAME }} 2>/dev/null || true
+            docker remove ${{ env.CONTAINER_NAME }} 2>/dev/null || true
 
-            echo "==> Pruning old/dangling images to free disk space..."
+            echo ">>> Starting new container..."
+            docker run -d \
+              -p 8000:8000 \
+              --env-file ~/autosage-server/server.env \
+              -e GOOGLE_APPLICATION_CREDENTIALS=/app/creds/service-account.json \
+              -v ~/autosage-server/gcs_key.json:/app/creds/service-account.json:ro \
+              --name ${{ env.CONTAINER_NAME }} \
+              --restart unless-stopped \
+              ghcr.io/${{ env.IMAGE_NAME }}:latest
+
+            echo ">>> Removing dangling images to free disk space..."
             docker image prune -f
 
-            echo "==> Deploy complete. New server container is healthy and live."
+            echo ">>> Container started successfully."
+
+  health-check:
+    name: Health Check
+    runs-on: ubuntu-latest
+    needs: deploy
+
+    steps:
+      - name: Wait 30 seconds for server to warm up
+        run: sleep 30
+
+      - name: Check /api/health endpoint
+        run: |
+          HEALTH_URL="https://${{ secrets.VM_HOST }}/api/health"
+          echo ">>> Hitting health endpoint: $HEALTH_URL"
+
+          RESPONSE=$(curl --silent --max-time 15 --write-out "\n%{http_code}" "$HEALTH_URL")
+          HTTP_BODY=$(echo "$RESPONSE" | head -n -1)
+          HTTP_CODE=$(echo "$RESPONSE" | tail -n 1)
+
+          echo "Response body : $HTTP_BODY"
+          echo "HTTP status   : $HTTP_CODE"
+
+          if [ "$HTTP_CODE" -ne 200 ]; then
+            echo "Health check FAILED — expected 200, got $HTTP_CODE"
+            exit 1
+          fi
+
+          echo "Health check PASSED."
