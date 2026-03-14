@@ -70,6 +70,9 @@ def _get_oidc_token(audience: str) -> str:
     return id_token.fetch_id_token(GoogleAuthRequest(), audience)
 
 
+# Build the HTTP headers for a call to the exec-worker accoring to Environment (PROD or DEV)
+# PROD → attach an OIDC identity token (Google Cloud IAM).
+# DEV → skip OIDC; plain X-API-Key is enough on localhost.
 def _build_worker_headers(include_content_type: bool = True) -> dict:
     """
     Build the HTTP headers for a call to the exec-worker.

@@ -7,6 +7,8 @@ on:
     paths:
       - "server/**"
 
+  workflow_dispatch:
+
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: lagnajit09/autosage/autosage-server
@@ -32,7 +34,7 @@ jobs:
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          password: ${{ secrets.GHCR_PAT }}
 
       - name: Extract Docker metadata
         id: meta
@@ -74,14 +76,14 @@ jobs:
             set -e
 
             echo ">>> Logging into GHCR..."
-            echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+            echo "${{ secrets.GHCR_PAT }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
 
             echo ">>> Pulling latest image..."
             docker pull ghcr.io/${{ env.IMAGE_NAME }}:latest
 
             echo ">>> Stopping and removing existing container (if any)..."
             docker stop ${{ env.CONTAINER_NAME }} 2>/dev/null || true
-            docker remove ${{ env.CONTAINER_NAME }} 2>/dev/null || true
+            docker rm ${{ env.CONTAINER_NAME }} 2>/dev/null || true
 
             echo ">>> Starting new container..."
             docker run -d \
@@ -104,24 +106,28 @@ jobs:
     needs: deploy
 
     steps:
-      - name: Wait 30 seconds for server to warm up
-        run: sleep 30
+      - name: Health check inside VM
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VM_HOST }}
+          username: ${{ secrets.VM_USER }}
+          key: ${{ secrets.VM_SSH_KEY }}
+          port: ${{ secrets.VM_SSH_PORT }}
+          script: |
+            echo ">>> Waiting 30s for server to warm up..."
+            sleep 30
 
-      - name: Check /api/health endpoint
-        run: |
-          HEALTH_URL="https://${{ secrets.VM_HOST }}/api/health"
-          echo ">>> Hitting health endpoint: $HEALTH_URL"
+            echo ">>> Hitting health endpoint..."
+            RESPONSE=$(curl --silent --max-time 15 --write-out "\n%{http_code}" http://localhost:8000/api/health/)
+            HTTP_BODY=$(echo "$RESPONSE" | head -n -1)
+            HTTP_CODE=$(echo "$RESPONSE" | tail -n 1)
 
-          RESPONSE=$(curl --silent --max-time 15 --write-out "\n%{http_code}" "$HEALTH_URL")
-          HTTP_BODY=$(echo "$RESPONSE" | head -n -1)
-          HTTP_CODE=$(echo "$RESPONSE" | tail -n 1)
+            echo "Response body : $HTTP_BODY"
+            echo "HTTP status   : $HTTP_CODE"
 
-          echo "Response body : $HTTP_BODY"
-          echo "HTTP status   : $HTTP_CODE"
+            if [ "$HTTP_CODE" -ne 200 ]; then
+              echo "Health check FAILED — expected 200, got $HTTP_CODE"
+              exit 1
+            fi
 
-          if [ "$HTTP_CODE" -ne 200 ]; then
-            echo "Health check FAILED — expected 200, got $HTTP_CODE"
-            exit 1
-          fi
-
-          echo "Health check PASSED."
+            echo "Health check PASSED."
