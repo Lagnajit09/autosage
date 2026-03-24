@@ -1,5 +1,9 @@
 # Autosage Django Server — Deployment Guide
 
+**Project**: autosagex01 (us-central1)  
+**Repo**: lagnajit09/autosage  
+**Trigger path**: `server/**`
+
 ## Complete Deployment Flow
 
 **From local Django code → Production HTTPS endpoint on GCP Always-Free VM. $0/month.**
@@ -27,7 +31,7 @@ flowchart TD
 
 ---
 
-## 🔄 Full CI/CD Flow
+## Full CI/CD Flow
 
 ```mermaid
 flowchart LR
@@ -44,7 +48,7 @@ flowchart LR
 
 ---
 
-## 📋 Phase-by-Phase Deployment
+## Phase-by-Phase Deployment
 
 ### Phase 1 — Local Preparation
 
@@ -224,7 +228,7 @@ flowchart LR
 
 ---
 
-## ✅ Final Verification Checklist
+## Final Verification Checklist
 
 ```
 ☐ VM: e2-micro running in us-central1-a (Always Free region)

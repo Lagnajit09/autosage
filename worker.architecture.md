@@ -1,11 +1,12 @@
-# Complete Cloud Run Deployment Guide: execution-worker CI/CD Pipeline
+# Autosage Execution Worker — Deployment Guide
 
-**Date**: March 2026  
 **Project**: autosagex01 (us-central1)  
 **Repo**: lagnajit09/autosage  
 **Trigger path**: `exec-worker/**`
 
-This document captures the **end-to-end deployment flow** for the `execution-worker` service using **Cloud Build CI/CD**.
+## Complete Deployment Flow
+
+**From local FastAPI code → Production HTTPS endpoint on GCP Always-Free Cloud Run. $0/month.**
 
 ## Architecture Overview
 
