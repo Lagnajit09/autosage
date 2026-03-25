@@ -14,19 +14,23 @@
 
 ```mermaid
 flowchart TD
-    A[👨‍💻 Developer Laptop] --> B[Build Docker Image Locally]
-    B --> C[Push to GHCR\nghcr.io/autosage/autosage-server]
+    classDef github fill:#24292e,stroke:#24292e,color:#fff
+    classDef gcp fill:#4285f4,stroke:#1565c0,color:#fff
+    classDef firebase fill:#ffca28,stroke:#f57c00,color:#000
+    classDef server fill:#e3f2fd,stroke:#1e88e5,color:#0d47a1
 
-    C -->|docker pull| D[GCP e2-micro VM\nus-central1-a\n34.9.123.216]
+    A[👨‍💻 Developer Laptop]:::github --> B[Build Docker Image Locally]:::github
+    B --> C[Push to GHCR\nghcr.io/autosage/autosage-server]:::github
+
+    C -->|docker pull| D[GCP e2-micro VM\nus-central1-a\n34.9.123.216]:::gcp
 
     subgraph VM [GCP Always-Free VM]
-        D --> E[Docker Container\nGunicorn on :8000]
-        E --> F[Nginx Reverse Proxy\nSSL + SSE Optimized\n443 → 8000]
+        D --> E[Docker Container\nGunicorn on :8000]:::server
+        E --> F[Nginx Reverse Proxy\nSSL + SSE Optimized\n443 → 8000]:::server
     end
 
-    F -->|HTTPS| G[Public Endpoint\nhttps://34.9.123.216/api/]
-    H[Firebase Hosting\nautosagex.web.app] -.->|HTTPS API + SSE| G
-
+    F -->|HTTPS| G[Public Endpoint\nhttps://34.9.123.216/api/]:::server
+    H[Firebase Hosting\nautosagex.web.app]:::firebase -.->|HTTPS API + SSE| G
 ```
 
 ---
@@ -35,20 +39,24 @@ flowchart TD
 
 ```mermaid
 flowchart LR
-    A[Git Push to main\nserver/ changes] --> B[GitHub Actions\nTriggered]
-    B --> C[Build Docker Image\nfrom server/Dockerfile]
-    C --> D[Push to GHCR\nghcr.io/autosage/autosage-server:latest]
-    D --> E[SSH into GCP VM]
-    E --> F[Pull Latest Image\nfrom GHCR]
-    F --> G[Restart Container\nwith new image]
-    G --> H[Nginx Forwards\nHTTPS Traffic]
-    H --> I[Live ✅\nhttps://34.9.123.216]
+    classDef github fill:#24292e,stroke:#24292e,color:#fff
+    classDef gcp fill:#4285f4,stroke:#1565c0,color:#fff
+    classDef server fill:#e3f2fd,stroke:#1e88e5,color:#0d47a1
 
+    A[Git Push to main\nserver/ changes]:::github --> B[GitHub Actions\nTriggered]:::github
+    B --> C[Build Docker Image\nfrom server/Dockerfile]:::github
+    C --> D[Push to GHCR\nghcr.io/autosage/autosage-server:latest]:::github
+    D --> E[SSH into GCP VM]:::gcp
+    E --> F[Pull Latest Image\nfrom GHCR]:::gcp
+    F --> G[Restart Container\nwith new image]:::server
+    G --> H[Nginx Forwards\nHTTPS Traffic]:::server
+    H --> I[Live ✅\nhttps://34.9.123.216]:::server
 ```
 
 ---
 
 ## Phase-by-Phase Deployment
+...
 
 ### Phase 1 — Local Preparation
 

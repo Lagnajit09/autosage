@@ -14,18 +14,22 @@
 
 ```mermaid
 flowchart TD
-    A[👨‍💻 Developer Laptop] --> B[npm run build\nVite + Tailwind]
-    B --> C[Build Artifacts\n/client/dist]
+    classDef github fill:#24292e,stroke:#24292e,color:#fff
+    classDef firebase fill:#ffca28,stroke:#f57c00,color:#000
+    classDef server fill:#e3f2fd,stroke:#1e88e5,color:#0d47a1
 
-    C -->|firebase deploy| D[Firebase Hosting\nGlobal CDN]
+    A[👨‍💻 Developer Laptop]:::github --> B[npm run build\nVite + Tailwind]:::github
+    B --> C[Build Artifacts\n/client/dist]:::github
+
+    C -->|firebase deploy| D[Firebase Hosting\nGlobal CDN]:::firebase
 
     subgraph Firebase [Firebase Hosting]
-        D --> E[Statics Hosting\nindex.html, assets/]
-        E --> F[SSL Managed by Google\nHTTPS by default]
+        D --> E[Statics Hosting\nindex.html, assets/]:::firebase
+        E --> F[SSL Managed by Google\nHTTPS by default]:::firebase
     end
 
-    F -->|HTTPS| G[Public Endpoint\nhttps://autosagex.web.app]
-    G -.->|HTTPS API + SSE| H[Django Backend\nhttps://34.9.123.216/api/]
+    F -->|HTTPS| G[Public Endpoint\nhttps://autosagex.web.app]:::firebase
+    G -.->|HTTPS API + SSE| H[Django Backend\nhttps://34.9.123.216/api/]:::server
 ```
 
 ---
@@ -34,14 +38,18 @@ flowchart TD
 
 ```mermaid
 flowchart LR
-    A[Git Push to main\nclient/ changes] --> B[GitHub Actions\nTriggered]
-    B --> C[Setup Node.js 20]
-    C --> D[npm ci && Build\nInject Secrets]
-    D --> E[Firebase Action\nDeploy to Live/Preview]
-    E --> F[Live ✅\nhttps://autosagex.web.app]
+    classDef github fill:#24292e,stroke:#24292e,color:#fff
+    classDef firebase fill:#ffca28,stroke:#f57c00,color:#000
+
+    A[Git Push to main\nclient/ changes]:::github --> B[GitHub Actions\nTriggered]:::github
+    B --> C[Setup Node.js 20]:::github
+    C --> D[npm ci && Build\nInject Secrets]:::github
+    D --> E[Firebase Action\nDeploy to Live/Preview]:::firebase
+    E --> F[Live ✅\nhttps://autosagex.web.app]:::firebase
 ```
 
 ---
+...
 
 ## Phase-by-Phase Deployment
 

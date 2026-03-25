@@ -10,25 +10,22 @@
 
 ## Architecture Overview
 
-```
-Mermaid diagram of complete flow:
-```
-
 ```mermaid
 graph TD
-    A[GitHub: lagnajit09/autosage] -->|push exec-worker/| B[Cloud Build Trigger]
-    B --> C[cloudbuild-trigger-sa<br/>Cloud Build Service Account<br/>Cloudbuild Build Editor<br/>Cloud Run Admin<br/>Artifact Registry Writer<br/>Logs Writer<br/>Storage Object Admin]
-    C --> D[Cloud Build Steps]
-    D --> E1[Docker build ./exec-worker]
-    D --> E2[Docker push Artifact Registry<br/>us-central1-docker.pkg.dev/autosagex01/autosage-exec-worker]
-    D --> E3[gcloud run deploy execution-worker]
-    E3 --> F[Cloud Run Service<br/>execution-worker<br/>us-central1<br/>port: 8020<br/>min:0 max:2<br/>execution-worker-sa]
-    F --> G[Secrets injected<br/>WORKER_API_KEY:latest<br/>ENVIRONMENT:latest]
-    G --> H[Django VM<br/>calls via IAM or public URL]
+    classDef github fill:#24292e,stroke:#24292e,color:#fff
+    classDef gcp fill:#4285f4,stroke:#1565c0,color:#fff
+    classDef worker fill:#e8f5e9,stroke:#43a047,color:#1b5e20
+    classDef server fill:#e3f2fd,stroke:#1e88e5,color:#0d47a1
 
-    style A fill:#ff9999
-    style F fill:#99ff99
-    style H fill:#9999ff
+    A[GitHub: lagnajit09/autosage]:::github -->|push exec-worker/| B[Cloud Build Trigger]:::gcp
+    B --> C[cloudbuild-trigger-sa<br/>Cloud Build Service Account]:::gcp
+    C --> D[Cloud Build Steps]:::gcp
+    D --> E1[Docker build ./exec-worker]:::gcp
+    D --> E2[Docker push Artifact Registry]:::gcp
+    D --> E3[gcloud run deploy execution-worker]:::gcp
+    E3 --> F[Cloud Run Service<br/>execution-worker]:::worker
+    F --> G[Secrets injected]:::worker
+    G --> H[Django VM<br/>calls via IAM or public URL]:::server
 ```
 
 ## Complete Deployment Flow (From Scratch)
