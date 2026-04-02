@@ -19,19 +19,52 @@ import ExecutionLogs from "@/components/Execution/ExecutionLogs";
 import ExecutionHistory from "@/components/Execution/ExecutionHistory";
 import ExecutionResponse from "@/components/Execution/ExecutionResponse";
 import ExecutionParameters from "@/components/Execution/ExecutionParameters";
+import { useEffect } from "react";
+import { useAuth } from "@clerk/clerk-react";
+import { apiRequest } from "@/lib/api-client";
+import Loader from "@/components/Loader";
+import { WorkflowData } from "@/utils/types";
 
 const WorkflowExecution = () => {
   const { id } = useParams();
   const [activeTab, setActiveTab] = useState("terminal");
   const [isExecuting, setIsExecuting] = useState(false);
+  const [workflow, setWorkflow] = useState<WorkflowData | null>(null);
+  const [loading, setLoading] = useState(true);
 
+  const { getToken, isSignedIn } = useAuth();
   const navigate = useNavigate();
+
+  useEffect(() => {
+    const fetchWorkflow = async () => {
+      if (!id || !isSignedIn) return;
+      try {
+        const token = await getToken();
+        const response = await apiRequest(`/api/workflows/${id}/`, {}, token);
+        setWorkflow(response?.data || response);
+      } catch (error) {
+        console.error("Failed to fetch workflow:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchWorkflow();
+  }, [id, isSignedIn, getToken]);
 
   const handleExecute = () => {
     setIsExecuting(true);
     // Simulate execution
     setTimeout(() => setIsExecuting(false), 3000);
   };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-100 dark:bg-workflow-void/90">
+        <Loader />
+      </div>
+    );
+  }
 
   return (
     <div className="flex w-full h-screen bg-gray-100 dark:bg-workflow-void/90 overflow-hidden">
@@ -42,8 +75,10 @@ const WorkflowExecution = () => {
         <header className="h-16 border-b border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900/50 flex items-center justify-between px-6 shrink-0">
           <div className="flex items-center gap-4">
             <h1 className="text-xl font-semibold text-gray-900 dark:text-gray-100">
-              Data Scraper Pro{" "}
-              <span className="text-gray-400 dark:text-gray-600">#{id}</span>
+              {workflow?.name || "Untitled Workflow"}{" "}
+              <span className="text-gray-400 dark:text-gray-600 text-sm">
+                #{id}
+              </span>
             </h1>
             <div className="px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400">
               Active
@@ -85,7 +120,7 @@ const WorkflowExecution = () => {
                 </CardTitle>
               </CardHeader>
               <CardContent className="p-0 max-h-[300px] overflow-y-auto">
-                <ExecutionParameters />
+                <ExecutionParameters workflow={workflow} />
               </CardContent>
             </Card>
 
@@ -98,7 +133,7 @@ const WorkflowExecution = () => {
                 </CardTitle>
               </CardHeader>
               <CardContent className="flex-1 p-0 overflow-y-auto">
-                <ExecutionNodes />
+                <ExecutionNodes workflow={workflow} />
               </CardContent>
             </Card>
           </div>
