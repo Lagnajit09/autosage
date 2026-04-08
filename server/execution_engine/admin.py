@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import ScriptExecution
+from .models import ScriptExecution, WorkflowNodeRun, WorkflowRun
 
 @admin.register(ScriptExecution)
 class ScriptExecutionAdmin(admin.ModelAdmin):
@@ -28,3 +28,21 @@ class ScriptExecutionAdmin(admin.ModelAdmin):
     
     def has_delete_permission(self, request, obj=None):
         return False
+
+
+@admin.register(WorkflowRun)
+class WorkflowRunAdmin(admin.ModelAdmin):
+    list_display = ("id", "workflow", "user", "status", "created_at", "started_at", "finished_at")
+    list_filter = ("status",)
+    search_fields = ("id", "workflow__name", "celery_task_id")
+    readonly_fields = ("id", "created_at", "started_at", "finished_at")
+    ordering = ("-created_at",)
+
+
+@admin.register(WorkflowNodeRun)
+class WorkflowNodeRunAdmin(admin.ModelAdmin):
+    list_display = ("id", "workflow_run", "node_label", "node_id", "status", "execution_order", "exit_code", "started_at", "finished_at")
+    list_filter = ("status",)
+    search_fields = ("node_id", "node_label", "workflow_run__id")
+    readonly_fields = ("id", "started_at", "finished_at")
+    ordering = ("workflow_run", "execution_order")
