@@ -60,11 +60,6 @@ class WorkflowRun(models.Model):
     # Celery task ID — used for revocation/cancellation
     celery_task_id = models.CharField(max_length=255, blank=True)
 
-    # Snapshot of execution context (vault/server/credential UUIDs at the time of the run)
-    vault_id = models.UUIDField()
-    server_id = models.UUIDField()
-    credential_id = models.UUIDField()
-
     # Global workflow-level input overrides
     inputs = models.JSONField(default=dict, blank=True)
 
@@ -105,6 +100,11 @@ class WorkflowNodeRun(models.Model):
 
     # Script bound to this node at execution time (nullable for input/output-only nodes)
     script_id = models.UUIDField(null=True, blank=True)
+
+    # Snapshot of execution context for this specific node
+    vault_id = models.UUIDField(null=True, blank=True)
+    server_id = models.UUIDField(null=True, blank=True)
+    credential_id = models.UUIDField(null=True, blank=True)
 
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
 

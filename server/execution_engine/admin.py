@@ -41,8 +41,8 @@ class WorkflowRunAdmin(admin.ModelAdmin):
 
 @admin.register(WorkflowNodeRun)
 class WorkflowNodeRunAdmin(admin.ModelAdmin):
-    list_display = ("id", "workflow_run", "node_label", "node_id", "status", "execution_order", "exit_code", "started_at", "finished_at")
+    list_display = ("id", "workflow_run", "node_label", "node_id", "status", "execution_order", "server_id", "exit_code", "started_at", "finished_at")
     list_filter = ("status",)
-    search_fields = ("node_id", "node_label", "workflow_run__id")
+    search_fields = ("node_id", "node_label", "workflow_run__id", "server_id")
     readonly_fields = ("id", "started_at", "finished_at")
     ordering = ("workflow_run", "execution_order")
