@@ -1,0 +1,135 @@
+{
+  "name": "WF-002",
+  "nodes": [
+    {
+      "id": "trigger-1771310584576",
+      "data": {
+        "type": "manual",
+        "label": "Manual Trigger",
+        "description": ""
+      },
+      "type": "trigger",
+      "position": { "x": -514.2958361774744, "y": 38.37389761092143 },
+      "measured": { "width": 160, "height": 160 }
+    },
+    {
+      "id": "action-1771310603866",
+      "data": {
+        "type": "script",
+        "label": "CheckMEMORY",
+        "jsonSchema": [{ "name": "MEMORY", "type": "number" }],
+        "parameters": [
+          {
+            "id": "param-1771310702179-0.5436742152871394",
+            "name": "THRESHOLD",
+            "type": "number",
+            "value": "80",
+            "sourceType": "manual",
+            "description": ""
+          }
+        ],
+        "description": "Check Memory Consumption at 12:00 HRS",
+        "outputFormat": "json",
+        "vaultDetails": {
+          "vaultId": "85aed794-7b5d-4779-a0ba-438373e5c912",
+          "serverId": "999a9736-f066-4af3-a700-5e835746816b",
+          "credentialId": "bf821482-7538-4171-848b-e49430fb2fb8"
+        },
+        "executionMode": "remote",
+        "selectedScript": { "type": "Powershell Script", "scriptId": "19" }
+      },
+      "type": "action",
+      "position": { "x": -396.3279152523617, "y": 255.3273257987862 },
+      "measured": { "width": 190, "height": 102 }
+    },
+    {
+      "id": "decision-1771310615633",
+      "data": {
+        "label": "Condition Check",
+        "trueLabel": ["action-1771310622803"],
+        "conditions": [
+          {
+            "id": "cond-1771310811053-0.9614538125335137",
+            "field": "{{action-1771310603866.output.MEMORY}}",
+            "value": "80",
+            "operator": ">=",
+            "fieldSource": "output",
+            "valueSource": "manual"
+          }
+        ],
+        "falseLabel": ["action-1771310629189"],
+        "parameters": [
+          {
+            "id": "param-1771310790430-0.5614646481121536",
+            "name": "MEMORY",
+            "type": "number",
+            "value": "{{action-1771310603866.output.MEMORY}}",
+            "sourceType": "output",
+            "description": ""
+          },
+          {
+            "id": "param-1775151985225-0.3959100659205089",
+            "name": "IS_ADMIN",
+            "type": "boolean",
+            "value": "",
+            "sourceType": "manual",
+            "description": ""
+          }
+        ],
+        "description": ""
+      },
+      "type": "decision",
+      "position": { "x": -102.61450705308155, "y": 103.73385298023268 },
+      "measured": { "width": 160, "height": 160 }
+    },
+    {
+      "id": "action-1771310622803",
+      "data": { "type": "email", "label": "Send Email", "description": "" },
+      "type": "action",
+      "position": { "x": 145.4080068259386, "y": -4.302361774744092 },
+      "measured": { "width": 180, "height": 102 }
+    },
+    {
+      "id": "action-1771310629189",
+      "data": { "type": "email", "label": "Send Email", "description": "" },
+      "type": "action",
+      "position": { "x": 141.85165187713312, "y": 303.32234129692824 },
+      "measured": { "width": 180, "height": 102 }
+    }
+  ],
+  "edges": [
+    {
+      "id": "xy-edge__trigger-1771310584576-action-1771310603866",
+      "type": "smoothstep",
+      "style": { "stroke": "#9CA3AF", "strokeWidth": 2 },
+      "source": "trigger-1771310584576",
+      "target": "action-1771310603866"
+    },
+    {
+      "id": "xy-edge__action-1771310603866-decision-1771310615633",
+      "type": "smoothstep",
+      "style": { "stroke": "#9CA3AF", "strokeWidth": 2 },
+      "source": "action-1771310603866",
+      "target": "decision-1771310615633"
+    },
+    {
+      "id": "decision-1771310615633-action-1771310622803-true",
+      "type": "smoothstep",
+      "label": "True",
+      "style": { "stroke": "#10b981", "strokeWidth": 2 },
+      "source": "decision-1771310615633",
+      "target": "action-1771310622803",
+      "sourceHandle": "true"
+    },
+    {
+      "id": "decision-1771310615633-action-1771310629189-false",
+      "type": "smoothstep",
+      "label": "False",
+      "style": { "stroke": "#ef4444", "strokeWidth": 2 },
+      "source": "decision-1771310615633",
+      "target": "action-1771310629189",
+      "sourceHandle": "false"
+    }
+  ],
+  "timestamp": "2026-04-10T06:02:36.579Z"
+}
