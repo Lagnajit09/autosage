@@ -5,6 +5,7 @@
 Autosage already supports executing **individual scripts** via the `execution_engine` app (Django → exec-worker SSE stream). The goal is to extend this to execute **entire workflows** — where a workflow is a directed acyclic graph (DAG) of script nodes connected by edges.
 
 Execution must be:
+
 - **Fully asynchronous** — Django returns immediately after queuing
 - **DAG-aware** — nodes execute in topological order; parallel-ready independent nodes
 - **Resilient** — per-node status tracking, full audit trail
@@ -76,6 +77,7 @@ React Client (polling)
 Add two new models to the `workflows` app:
 
 **`WorkflowRun`** — top-level workflow run record:
+
 ```python
 class WorkflowRun(models.Model):
     STATUS_CHOICES = [
@@ -102,6 +104,7 @@ class WorkflowRun(models.Model):
 ```
 
 **`WorkflowNodeRun`** — per-node execution record:
+
 ```python
 class WorkflowNodeRun(models.Model):
     STATUS_CHOICES = [('pending','Pending'),('running','Running'),
@@ -124,6 +127,7 @@ class WorkflowNodeRun(models.Model):
 ```
 
 #### [NEW] Migration file
+
 Auto-generated via `python manage.py makemigrations workflows`.
 
 ---
@@ -187,6 +191,7 @@ app.autodiscover_tasks()
 #### [MODIFY] [settings.py](file:///d:/codingISFun/autogen/server/server/settings.py)
 
 Add Celery + Redis configuration block:
+
 ```python
 # Celery / Redis
 CELERY_BROKER_URL        = env('CELERY_BROKER_URL', default='redis://localhost:6379/0')
@@ -200,7 +205,7 @@ CELERY_TASK_SOFT_TIME_LIMIT = 3600   # 1 hour per workflow
 CELERY_TASK_TIME_LIMIT      = 7200   # hard kill after 2 hours
 ```
 
-#### [MODIFY] [__init__.py](file:///d:/codingISFun/autogen/server/server/__init__.py)
+#### [MODIFY] [**init**.py](file:///d:/codingISFun/autogen/server/server/__init__.py)
 
 ```python
 from .celery import app as celery_app
@@ -213,11 +218,11 @@ __all__ = ('celery_app',)
 
 ---
 
-#### [NEW] [tasks.py](file:///d:/codingISFun/autogen/server/workflows/tasks.py)
+#### [NEW] [tasks.py](file:///d:/codingISFun/autogen/server/execution_engine/tasks.py)
 
 This is the **heart** of the implementation. The Celery task:
 
-1. Loads the `WorkflowRun` and its parent `Workflow`
+1. Loads the `WorkflowRun` and its parent `Workflow` (from workflows app)
 2. Builds the DAG via `graph.py`
 3. Iterates nodes in topological order
 4. For each node: calls exec-worker (`/api/worker/execute`), consumes the NDJSON stream synchronously (httpx sync client in the Celery worker), collects logs, uploads to GCS, updates `WorkflowNodeRun`
@@ -256,15 +261,16 @@ def execute_workflow(self, workflow_run_id: str):
 
 New REST endpoints for workflow execution lifecycle:
 
-| Method | URL | Description |
-|--------|-----|-------------|
-| `POST` | `/api/workflows/{id}/run/` | Trigger a workflow run (returns immediately) |
-| `GET` | `/api/workflows/runs/` | List all workflow runs for the user |
-| `GET` | `/api/workflows/runs/{run_id}/` | Get WorkflowRun status + metadata |
-| `GET` | `/api/workflows/runs/{run_id}/nodes/` | Get all WorkflowNodeRun statuses |
-| `POST` | `/api/workflows/runs/{run_id}/cancel/` | Revoke the Celery task (cancel run) |
+| Method | URL                                    | Description                                  |
+| ------ | -------------------------------------- | -------------------------------------------- |
+| `POST` | `/api/workflows/{id}/run/`             | Trigger a workflow run (returns immediately) |
+| `GET`  | `/api/workflows/runs/`                 | List all workflow runs for the user          |
+| `GET`  | `/api/workflows/runs/{run_id}/`        | Get WorkflowRun status + metadata            |
+| `GET`  | `/api/workflows/runs/{run_id}/nodes/`  | Get all WorkflowNodeRun statuses             |
+| `POST` | `/api/workflows/runs/{run_id}/cancel/` | Revoke the Celery task (cancel run)          |
 
 **POST `/api/workflows/{id}/run/`** flow:
+
 ```
 1. Validate user owns workflow
 2. Validate nodes+edges form a valid DAG (graph.py)
@@ -309,6 +315,7 @@ Add `WorkflowRunSerializer` and `WorkflowNodeRunSerializer`.
 ```
 
 The `WorkflowRun` request body must include:
+
 ```json
 {
   "vault_id": "uuid",
@@ -317,6 +324,7 @@ The `WorkflowRun` request body must include:
   "inputs": {}
 }
 ```
+
 (Server + credential are applied globally to all nodes for now; per-node overrides can be Phase 2.)
 
 ---
@@ -344,6 +352,7 @@ Currently shows workflow details statically. Update to:
 #### [MODIFY] [requirements.txt](file:///d:/codingISFun/autogen/server/requirements.txt)
 
 Add:
+
 ```
 celery==5.3.6
 redis==5.0.3
@@ -353,6 +362,7 @@ networkx==3.2.1
 #### [MODIFY] [docker-compose.yml](file:///d:/codingISFun/autogen/docker-compose.yml)
 
 Add Redis service + Celery worker service:
+
 ```yaml
 redis:
   image: redis:7-alpine
@@ -373,6 +383,7 @@ Add a build step for the Celery worker Docker image (separate deployment target 
 #### [MODIFY] [.env.server](file:///d:/codingISFun/autogen/.env.server)
 
 Add:
+
 ```
 CELERY_BROKER_URL=redis://<redis-host>:6379/0
 CELERY_RESULT_BACKEND=redis://<redis-host>:6379/0
@@ -403,11 +414,13 @@ CELERY_RESULT_BACKEND=redis://<redis-host>:6379/0
 ## Verification Plan
 
 ### Automated Tests
+
 - `pytest server/workflows/tests/test_graph.py` — DAG construction, cycle detection, topo sort
 - `pytest server/workflows/tests/test_tasks.py` — mock exec-worker, verify node run state transitions
 - `pytest server/workflows/tests/test_run_views.py` — API endpoint integration tests
 
 ### Manual Verification
+
 1. Start Redis + Celery worker locally (`celery -A server worker --loglevel=debug`)
 2. Create a 3-node workflow in the UI (A → B → C)
 3. Hit "Run Workflow" — confirm immediate response with `workflow_run_id`
@@ -416,6 +429,7 @@ CELERY_RESULT_BACKEND=redis://<redis-host>:6379/0
 6. Test failure: use a script that exits with code 1 — confirm node fails, run fails, remaining nodes skipped
 
 ### Migration
+
 ```bash
 python manage.py makemigrations workflows
 python manage.py migrate
