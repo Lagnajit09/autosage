@@ -24,6 +24,7 @@ Public API
   resolve_parameters(parameters, node_outputs) -> dict[str, Any]
   resolve_condition_value(raw_value, node_outputs) -> Any
   resolve_template_string(raw, node_outputs) -> str
+  resolve_template_variables(script, resolved_params) -> str
 """
 
 from __future__ import annotations
@@ -33,6 +34,10 @@ from typing import Any
 
 # ── Template pattern — matches {{node-id.output.FIELD}} ──────────────────────
 _OUTPUT_REF_RE = re.compile(r"\{\{([\w-]+)\.output\.([\w]+)\}\}")
+
+# ── Script variable pattern — matches {{VARIABLE_NAME}} (no dot / output qualifier)
+#    Case-insensitive flag applied at call sites via re.IGNORECASE.
+_SCRIPT_VAR_RE = re.compile(r"\{\{([\w]+)\}\}")
 
 # ── Source type constants ─────────────────────────────────────────────────────
 SOURCE_MANUAL = "manual"
@@ -313,3 +318,63 @@ def resolve_parameters(
             )
 
     return resolved
+
+
+def resolve_template_variables(
+    script: str,
+    resolved_params: dict[str, Any],
+) -> str:
+    """
+    Replace ``{{variable_name}}`` placeholders inside a *script string* with
+    their corresponding parameter values from ``resolved_params``.
+
+    This is distinct from the output-reference resolver: it operates on the
+    **script body** (the raw text that will be sent to the exec-worker) rather
+    than on the parameter list.
+
+    Matching is **case-insensitive** — ``{{threshold}}``, ``{{THRESHOLD}}``,
+    and ``{{Threshold}}`` all match a parameter named ``THRESHOLD`` (or any
+    casing thereof).  The lookup is performed against the lowercased keys of
+    ``resolved_params`` so both sides are normalised.
+
+    Placeholders that have no matching parameter are left **unchanged** so that
+    output references (``{{node-id.output.FIELD}}``) embedded in the same
+    script string are never accidentally mangled by this step.
+
+    Args:
+        script:          The raw script string, potentially containing one or
+                         more ``{{VAR}}`` template placeholders.
+        resolved_params: Flat ``{name: value}`` dict produced by
+                         :func:`resolve_parameters`.  Values are already
+                         coerced to their declared Python types.
+
+    Returns:
+        The script string with all matching ``{{VAR}}`` references replaced by
+        their ``str()``-cast parameter values.
+
+    Example::
+
+        script = "if memory > {{THRESHOLD}}: alert()"
+        params = {"THRESHOLD": 80, "HOST": "prod-1"}
+
+        resolve_template_variables(script, params)
+        # -> "if memory > 80: alert()"
+    """
+    if not script or not resolved_params:
+        return script
+
+    # Build a lowercased lookup dict once for O(1) access per substitution.
+    lower_params: dict[str, Any] = {k.lower(): v for k, v in resolved_params.items()}
+
+    def _replace(match: re.Match) -> str:
+        var_name = match.group(1)  # raw casing from the script
+        key = var_name.lower()
+        if key in lower_params:
+            return str(lower_params[key])
+        # No matching parameter — leave the placeholder intact so that other
+        # resolvers (e.g. output-ref substitution) can still handle it.
+        return match.group(0)
+
+    # Use re.IGNORECASE so the pattern itself is case-insensitive, and combine
+    # with the per-match lowercased lookup for the parameter dict.
+    return re.sub(r"\{\{([\w]+)\}\}", _replace, script, flags=re.IGNORECASE)
