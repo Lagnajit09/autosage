@@ -17,7 +17,7 @@ from vault.models import Vault, Server, Credential
 from scripts.models import Script
 from .models import ScriptExecution
 from .serializers import ScriptExecutionRequestSerializer, ScriptExecutionResponseSerializer
-from .gcs import upload_execution_logs
+from .helpers.gcs import upload_execution_logs
 from server.utils import api_response
 from server.rate_limiters import ExecutionBurstThrottle, ExecutionSustainedThrottle
 

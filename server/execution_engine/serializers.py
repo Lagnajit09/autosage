@@ -2,7 +2,7 @@ from rest_framework import serializers
 from .models import ScriptExecution
 
 
-from .gcs import generate_signed_url, get_blob_path_from_url
+from .helpers.gcs import generate_signed_url, get_blob_path_from_url
 
 
 class ScriptDetailsSerializer(serializers.Serializer):
