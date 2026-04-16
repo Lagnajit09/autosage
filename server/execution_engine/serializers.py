@@ -1,8 +1,8 @@
 from rest_framework import serializers
-from .models import ScriptExecution
+from execution_engine.models import ScriptExecution, WorkflowRun, WorkflowNodeRun
 
 
-from .helpers.gcs import generate_signed_url, get_blob_path_from_url
+from execution_engine.helpers.gcs import generate_signed_url, get_blob_path_from_url
 
 
 class ScriptDetailsSerializer(serializers.Serializer):
@@ -80,3 +80,45 @@ class ScriptExecutionHistorySerializer(serializers.ModelSerializer):
     def get_logs_signed_url(self, obj):
         path = get_blob_path_from_url(obj.logs_url)
         return generate_signed_url(path) if path else ""
+
+
+class WorkflowRunRequestSerializer(serializers.Serializer):
+    inputs = serializers.DictField(required=False, default=dict)
+
+
+class WorkflowNodeRunSerializer(serializers.ModelSerializer):
+    stdout_signed_url = serializers.SerializerMethodField()
+    stderr_signed_url = serializers.SerializerMethodField()
+    logs_signed_url = serializers.SerializerMethodField()
+
+    class Meta:
+        model = WorkflowNodeRun
+        fields = [
+            'id', 'workflow_run_id', 'node_id', 'node_label', 'status',
+            'execution_order', 'stdout_log_url', 'stderr_log_url', 'logs_url',
+            'stdout_signed_url', 'stderr_signed_url', 'logs_signed_url',
+            'exit_code', 'error_message', 'started_at', 'finished_at'
+        ]
+        read_only_fields = fields
+
+    def get_stdout_signed_url(self, obj):
+        path = get_blob_path_from_url(obj.stdout_log_url)
+        return generate_signed_url(path) if path else ""
+
+    def get_stderr_signed_url(self, obj):
+        path = get_blob_path_from_url(obj.stderr_log_url)
+        return generate_signed_url(path) if path else ""
+
+    def get_logs_signed_url(self, obj):
+        path = get_blob_path_from_url(obj.logs_url)
+        return generate_signed_url(path) if path else ""
+
+
+class WorkflowRunSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = WorkflowRun
+        fields = [
+            'id', 'workflow_id', 'user_id', 'status', 'error_message',
+            'started_at', 'finished_at', 'created_at', 'inputs'
+        ]
+        read_only_fields = fields

@@ -1,0 +1,233 @@
+import logging
+from django.utils import timezone
+from rest_framework.decorators import api_view, permission_classes, throttle_classes
+from rest_framework.permissions import IsAuthenticated
+from rest_framework import status
+
+from server.utils import api_response
+from server.rate_limiters import ExecutionBurstThrottle, ExecutionSustainedThrottle
+from workflows.models import Workflow
+from execution_engine.models import WorkflowRun, WorkflowNodeRun
+from execution_engine.serializers import (
+    WorkflowRunRequestSerializer,
+    WorkflowRunSerializer,
+    WorkflowNodeRunSerializer,
+)
+from execution_engine.helpers.graph import (
+    build_dag,
+    topological_order,
+    validate_executable_nodes,
+    NODE_TYPE_ACTION,
+)
+from execution_engine.tasks import execute_workflow
+
+logger = logging.getLogger(__name__)
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+@throttle_classes([ExecutionBurstThrottle, ExecutionSustainedThrottle])
+def trigger_workflow_run(request, workflow_id):
+    """POST /api/execution-engine/workflows/<workflow_id>/run/"""
+    try:
+        workflow = Workflow.objects.get(id=workflow_id, user=request.user)
+    except Workflow.DoesNotExist:
+        return api_response(
+            success=False,
+            message="Workflow not found or access denied.",
+            status_code=status.HTTP_404_NOT_FOUND,
+        )
+
+    serializer = WorkflowRunRequestSerializer(data=request.data)
+    if not serializer.is_valid():
+        return api_response(
+            success=False,
+            message="Invalid request data.",
+            errors=serializer.errors,
+            status_code=status.HTTP_400_BAD_REQUEST,
+        )
+
+    inputs = serializer.validated_data.get("inputs", {})
+
+    try:
+        G = build_dag(workflow.nodes, workflow.edges)
+        topo_order = topological_order(G)
+    except ValueError as e:
+        return api_response(
+            success=False,
+            message=str(e),
+            status_code=status.HTTP_400_BAD_REQUEST,
+        )
+
+    # Secondary validation: Enforce vault/server credentials presence for scripts
+    missing_bindings = validate_executable_nodes(workflow.nodes)
+    if missing_bindings:
+        return api_response(
+            success=False,
+            message=f"Missing script or credential bindings in nodes: {missing_bindings}",
+            status_code=status.HTTP_400_BAD_REQUEST,
+        )
+
+    # Look for missing vault details
+    for node in workflow.nodes:
+        if node.get("type") == NODE_TYPE_ACTION and node.get("data", {}).get("type") == "script":
+            vault_details = node.get("data", {}).get("vaultDetails", {})
+            if not all([vault_details.get("vaultId"), vault_details.get("serverId"), vault_details.get("credentialId")]):
+                return api_response(
+                    success=False,
+                    message=f"Missing vault/server/credential details in action node: {node.get('id')}",
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                )
+
+    # Create WorkflowRun
+    workflow_run = WorkflowRun.objects.create(
+        workflow=workflow,
+        user=request.user,
+        status="queued",
+        inputs=inputs
+    )
+
+    # Create WorkflowNodeRuns
+    execution_order = 0
+    for node_id in topo_order:
+        node_data = G.nodes[node_id]
+        
+        script_id = None
+        vault_id = None
+        server_id = None
+        credential_id = None
+
+        if node_data.get("type") == NODE_TYPE_ACTION and node_data.get("data", {}).get("type") == "script":
+            data_dict = node_data.get("data", {})
+            script_id = data_dict.get("selectedScript", {}).get("scriptId")
+            vault_details = data_dict.get("vaultDetails", {})
+            vault_id = vault_details.get("vaultId")
+            server_id = vault_details.get("serverId")
+            credential_id = vault_details.get("credentialId")
+
+        WorkflowNodeRun.objects.create(
+            workflow_run=workflow_run,
+            node_id=node_id,
+            node_label=node_data.get("data", {}).get("label", node_id),
+            script_id=script_id,
+            vault_id=vault_id,
+            server_id=server_id,
+            credential_id=credential_id,
+            status="pending",
+            execution_order=execution_order,
+        )
+        execution_order += 1
+
+    # Dispatch Celery task
+    task = execute_workflow.delay(str(workflow_run.id))
+    workflow_run.celery_task_id = task.id
+    workflow_run.save(update_fields=['celery_task_id'])
+
+    return api_response(
+        success=True,
+        message="Workflow execution queued successfully.",
+        data={"workflow_run_id": str(workflow_run.id), "status": "queued"},
+        status_code=status.HTTP_202_ACCEPTED
+    )
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+@throttle_classes([ExecutionBurstThrottle, ExecutionSustainedThrottle])
+def list_workflow_runs(request):
+    """GET /api/execution-engine/workflows/runs/"""
+    runs = WorkflowRun.objects.filter(user=request.user).order_by('-created_at')
+    serializer = WorkflowRunSerializer(runs, many=True)
+    return api_response(
+        success=True,
+        message="Workflow runs retrieved successfully.",
+        data=serializer.data
+    )
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+@throttle_classes([ExecutionBurstThrottle, ExecutionSustainedThrottle])
+def get_workflow_run(request, run_id):
+    """GET /api/execution-engine/workflows/runs/<run_id>/"""
+    try:
+        run = WorkflowRun.objects.get(id=run_id, user=request.user)
+    except WorkflowRun.DoesNotExist:
+        return api_response(
+            success=False,
+            message="Workflow run not found.",
+            status_code=status.HTTP_404_NOT_FOUND
+        )
+
+    serializer = WorkflowRunSerializer(run)
+    return api_response(
+        success=True,
+        message="Workflow run retrieved successfully.",
+        data=serializer.data
+    )
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+@throttle_classes([ExecutionBurstThrottle, ExecutionSustainedThrottle])
+def get_workflow_node_runs(request, run_id):
+    """GET /api/execution-engine/workflows/runs/<run_id>/nodes/"""
+    try:
+        run = WorkflowRun.objects.get(id=run_id, user=request.user)
+    except WorkflowRun.DoesNotExist:
+        return api_response(
+            success=False,
+            message="Workflow run not found.",
+            status_code=status.HTTP_404_NOT_FOUND
+        )
+
+    node_runs = WorkflowNodeRun.objects.filter(workflow_run=run).order_by('execution_order')
+    serializer = WorkflowNodeRunSerializer(node_runs, many=True)
+    return api_response(
+        success=True,
+        message="Node runs retrieved successfully.",
+        data=serializer.data
+    )
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+@throttle_classes([ExecutionBurstThrottle, ExecutionSustainedThrottle])
+def cancel_workflow_run(request, run_id):
+    """POST /api/execution-engine/workflows/runs/<run_id>/cancel/"""
+    from server.celery import app as celery_app
+    
+    try:
+        run = WorkflowRun.objects.get(id=run_id, user=request.user)
+    except WorkflowRun.DoesNotExist:
+        return api_response(
+            success=False,
+            message="Workflow run not found.",
+            status_code=status.HTTP_404_NOT_FOUND
+        )
+
+    if run.status not in ["queued", "running"]:
+        return api_response(
+            success=False,
+            message=f"Cannot cancel run in '{run.status}' state.",
+            status_code=status.HTTP_400_BAD_REQUEST
+        )
+
+    if run.celery_task_id:
+        celery_app.control.revoke(run.celery_task_id, terminate=True)
+        logger.info(f"Revoked Celery task {run.celery_task_id} for WorkflowRun {run.id}")
+
+    # Mark as cancelled
+    run.status = "cancelled"
+    run.finished_at = timezone.now()
+    run.save(update_fields=['status', 'finished_at'])
+    
+    # Mark running/pending nodes as cancelled
+    WorkflowNodeRun.objects.filter(workflow_run=run, status__in=['pending', 'running']).update(
+        status='cancelled', 
+        finished_at=timezone.now()
+    )
+
+    return api_response(
+        success=True,
+        message="Workflow execution cancelled successfully."
+    )

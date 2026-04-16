@@ -261,34 +261,35 @@ def execute_workflow(self, workflow_run_id: str):
 
 New REST endpoints for workflow execution lifecycle:
 
-| Method | URL                                    | Description                                  |
-| ------ | -------------------------------------- | -------------------------------------------- |
-| `POST` | `/api/workflows/{id}/run/`             | Trigger a workflow run (returns immediately) |
-| `GET`  | `/api/workflows/runs/`                 | List all workflow runs for the user          |
-| `GET`  | `/api/workflows/runs/{run_id}/`        | Get WorkflowRun status + metadata            |
-| `GET`  | `/api/workflows/runs/{run_id}/nodes/`  | Get all WorkflowNodeRun statuses             |
-| `POST` | `/api/workflows/runs/{run_id}/cancel/` | Revoke the Celery task (cancel run)          |
+| Method | URL                                                     | Description                                  |
+| ------ | ------------------------------------------------------- | -------------------------------------------- |
+| `POST` | `/api/execution-engine/workflows/{id}/run/`             | Trigger a workflow run (returns immediately) |
+| `GET`  | `/api/execution-engine/workflows/runs/`                 | List all workflow runs for the user          |
+| `GET`  | `/api/execution-engine/workflows/runs/{run_id}/`        | Get WorkflowRun status + metadata            |
+| `GET`  | `/api/execution-engine/workflows/runs/{run_id}/nodes/`  | Get all WorkflowNodeRun statuses             |
+| `POST` | `/api/execution-engine/workflows/runs/{run_id}/cancel/` | Revoke the Celery task (cancel run)          |
 
-**POST `/api/workflows/{id}/run/`** flow:
+**POST `/api/execution-engine/workflows/{id}/run/`** flow:
 
-```
-1. Validate user owns workflow
-2. Validate nodes+edges form a valid DAG (graph.py)
-3. Validate all nodes have script_id, server and credentials specified
-4. Create WorkflowRun (status=queued)
-5. Create WorkflowNodeRun for each node (status=pending, execution_order=topo_index)
-6. task = execute_workflow.delay(str(workflow_run.id))
-7. workflow_run.celery_task_id = task.id; workflow_run.save()
-8. Return {workflow_run_id, status: 'queued'}
-```
+1. Validate user owns workflow.
+2. The Frontend only provides `{"inputs": {"node-id": {"param": "value"}}}` if any runtime parameters exist.
+3. Validate nodes+edges form a valid DAG (`graph.py`).
+4. Iterate over executable nodes in topological order:
+   - Extract `script_id`, `vault_id` (or `vault_details`), `server_id`, `credential_id` natively from the `Workflow` object's node JSON definition.
+   - Throw validation error if any action node lacks these bindings.
+5. Create `WorkflowRun` (status=queued).
+6. Create `WorkflowNodeRun` for each node (status=pending, execution_order=topo_index), mapping the extracted `script_id`, `vault_id`, `server_id`, `credential_id` individually to each node run.
+7. Call `task = execute_workflow.delay(str(workflow_run.id))`
+8. `workflow_run.celery_task_id = task.id; workflow_run.save()`
+9. Return `{workflow_run_id, status: 'queued'}`
 
 #### [MODIFY] [urls.py](file:///d:/codingISFun/autogen/server/execution_engine/urls.py)
 
-Add new URL patterns for the run endpoints.
+Add new URL patterns for the run endpoints under `execution-engine/`.
 
 #### [MODIFY] [serializers.py](file:///d:/codingISFun/autogen/server/execution_engine/serializers.py)
 
-Add `WorkflowRunSerializer` and `WorkflowNodeRunSerializer`.
+Add `WorkflowRunSerializer`, `WorkflowNodeRunSerializer`, and a `WorkflowRunRequestSerializer` (for validating the `inputs` payload).
 
 ---
 
@@ -314,18 +315,19 @@ Add `WorkflowRunSerializer` and `WorkflowNodeRunSerializer`.
 }
 ```
 
-The `WorkflowRun` request body must include:
+The `WorkflowRun` request body from the frontend will simply be:
 
 ```json
 {
-  "vault_id": "uuid",
-  "server_id": "uuid",
-  "credential_id": "uuid",
-  "inputs": {}
+  "inputs": {
+    "node_id_xyz": {
+      "my_param": "value"
+    }
+  }
 }
 ```
 
-(Server + credential are applied globally to all nodes for now; per-node overrides can be Phase 2.)
+(The backend will extract script, vault, and server credentials by parsing the stored Workflow JSON rather than trusting frontend requests to supply authentication identifiers).
 
 ---
 

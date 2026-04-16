@@ -4,11 +4,11 @@ import httpx
 from django.utils import timezone as dj_timezone
 from celery import shared_task
 
-from .models import WorkflowRun, WorkflowNodeRun
+from execution_engine.models import WorkflowRun, WorkflowNodeRun
 from vault.models import Vault, Server, Credential
 from scripts.models import Script
 
-from .helpers.graph import (
+from execution_engine.helpers.graph import (
     build_dag,
     topological_order,
     get_node_data,
@@ -20,12 +20,12 @@ from .helpers.graph import (
     EDGE_HANDLE_TRUE,
     EDGE_HANDLE_FALSE
 )
-from .helpers.params import (
+from execution_engine.helpers.params import (
     resolve_parameters,
     resolve_condition_value
 )
-from .helpers.gcs import upload_execution_logs
-from .views import _build_worker_headers, EXEC_WORKER_URL
+from execution_engine.helpers.gcs import upload_execution_logs
+from execution_engine.helpers.script_execution.worker import build_worker_headers, EXEC_WORKER_URL
 
 logger = logging.getLogger(__name__)
 
@@ -219,7 +219,7 @@ def execute_workflow(self, workflow_run_id: str):
                 "inputs": resolved_params,
             }
 
-            headers = _build_worker_headers()
+            headers = build_worker_headers()
             
             stdout_text = ""
             stderr_text = ""
