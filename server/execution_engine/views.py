@@ -1,305 +1,39 @@
 import json
 import logging
-import asyncio
-from datetime import datetime, timezone
-
-import httpx
-from django.http import StreamingHttpResponse, JsonResponse
-from django.utils import timezone as dj_timezone
+from django.http import StreamingHttpResponse
 from django.contrib.auth.models import AnonymousUser
-from django.views import View
-from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_exempt
-from rest_framework.throttling import UserRateThrottle
 from rest_framework import status
+from asgiref.sync import sync_to_async
 
 from vault.models import Vault, Server, Credential
 from scripts.models import Script
-from .models import ScriptExecution
-from .serializers import ScriptExecutionRequestSerializer, ScriptExecutionResponseSerializer
-from .helpers.gcs import upload_execution_logs
+from execution_engine.models import ScriptExecution
+from execution_engine.serializers import (
+    ScriptExecutionRequestSerializer, 
+    ScriptExecutionResponseSerializer,
+    ScriptExecutionHistorySerializer
+)
 from server.utils import api_response
 from server.rate_limiters import ExecutionBurstThrottle, ExecutionSustainedThrottle
 
 # For non-streaming endpoints still using DRF decorators
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated, AllowAny
-from rest_framework.response import Response
-from rest_framework.request import Request as DRFRequest
+
+# Modular helpers
+from execution_engine.helpers.script_execution.worker import EXEC_WORKER_URL, build_worker_headers
+from execution_engine.helpers.script_execution.utils import (
+    json_response, 
+    sse_event, 
+    uuid_to_str, 
+    check_throttle
+)
+from execution_engine.helpers.script_execution.executor import stream_execution
+
+import httpx
 
 logger = logging.getLogger(__name__)
-
-# Execution Worker endpoint
-import os
-from django.conf import settings
-
-EXEC_WORKER_URL = getattr(settings, "EXEC_WORKER_URL", os.getenv("EXEC_WORKER_URL", ""))
-WORKER_API_KEY = getattr(settings, "WORKER_API_KEY", os.getenv("WORKER_API_KEY", ""))
-# ENVIRONMENT=PROD  → attach an OIDC identity token (Google Cloud IAM).
-# ENVIRONMENT=DEV   → skip OIDC; plain X-API-Key is enough on localhost.
-ENVIRONMENT = getattr(settings, "ENVIRONMENT", os.getenv("ENVIRONMENT", "")).upper().strip()
-# Audience must equal the Cloud Run service root URL (no trailing path).
-EXEC_WORKER_AUDIENCE = getattr(settings, "EXEC_WORKER_AUDIENCE", os.getenv("EXEC_WORKER_AUDIENCE", ""))
-
-# Ensure the URL always has a scheme (guard against bare host/IP in env vars)
-if EXEC_WORKER_URL and not EXEC_WORKER_URL.startswith(("http://", "https://")):
-    EXEC_WORKER_URL = f"http://{EXEC_WORKER_URL}"
-
-logger.info("Execution Engine initialized: ENVIRONMENT=%s, WORKER_URL=%s", ENVIRONMENT, EXEC_WORKER_URL)
-
-
-# Generate OIDC token for Cloud Run authentication
-def _get_oidc_token(audience: str) -> str:
-    """
-    Fetch a short-lived OIDC identity token for the given audience using
-    Application Default Credentials (ADC).
-    """
-    from google.auth.transport.requests import Request as GoogleAuthRequest
-    from google.oauth2 import id_token
-
-    if not audience and EXEC_WORKER_URL:
-        # Auto-derive audience from the worker URL if not explicitly provided
-        from urllib.parse import urlparse
-        parsed = urlparse(EXEC_WORKER_URL)
-        audience = f"{parsed.scheme}://{parsed.netloc}"
-        logger.info("Derived OIDC audience from worker URL: %s", audience)
-
-    if not audience:
-        raise ValueError("Cannot fetch OIDC token: audience is missing and could not be derived.")
-
-    return id_token.fetch_id_token(GoogleAuthRequest(), audience)
-
-
-# Build the HTTP headers for a call to the exec-worker accoring to Environment (PROD or DEV)
-# PROD → attach an OIDC identity token (Google Cloud IAM).
-# DEV → skip OIDC; plain X-API-Key is enough on localhost.
-def _build_worker_headers(include_content_type: bool = True) -> dict:
-    """
-    Build the HTTP headers for a call to the exec-worker.
-    """
-    headers: dict = {"X-API-Key": WORKER_API_KEY}
-    if include_content_type:
-        headers["Content-Type"] = "application/json"
-    
-    if ENVIRONMENT == "PROD":
-        try:
-            token = _get_oidc_token(EXEC_WORKER_AUDIENCE)
-            headers["Authorization"] = f"Bearer {token}"
-            logger.debug("Attached OIDC token to request headers (PROD)")
-        except Exception as e:
-            logger.error("Failed to fetch OIDC token for exec-worker: %s", str(e))
-    else:
-        logger.warning("Skipping OIDC token (ENVIRONMENT=%r) — requests to Cloud Run will be unauthenticated", ENVIRONMENT)
-        
-    return headers
-
-
-# ── Helpers ───────────────────────────────────────────────────────────────────
-
-def _json_response(success: bool, message: str, data=None, errors=None, status_code: int = 200) -> JsonResponse:
-    """Async-safe replacement for api_response() that returns JsonResponse."""
-    return JsonResponse(
-        {"success": success, "message": message, "data": data, "errors": errors},
-        status=status_code,
-    )
-
-
-def _sse_event(event: str, data: dict) -> str:
-    """Format a Server-Sent Event frame."""
-    from django.core.serializers.json import DjangoJSONEncoder
-    return f"event: {event}\ndata: {json.dumps(data, cls=DjangoJSONEncoder)}\n\n"
-
-
-def _uuid_to_str(data):
-    """Recursively convert UUID objects to strings."""
-    import uuid
-    if isinstance(data, dict):
-        return {k: _uuid_to_str(v) for k, v in data.items()}
-    elif isinstance(data, list):
-        return [_uuid_to_str(v) for v in data]
-    elif isinstance(data, uuid.UUID):
-        return str(data)
-    return data
-
-
-def _check_throttle(request, throttle_class):
-    """
-    Run a DRF throttle against the raw Django request.
-    Returns True when the request is allowed.
-    """
-    throttle = throttle_class()
-    # DRF throttles need a DRF Request wrapper; we build a minimal one.
-    drf_request = DRFRequest(request)
-    drf_request._user = request.user
-    return throttle.allow_request(drf_request, None)
-
-
-# ── Core async SSE generator ──────────────────────────────────────────────────
-
-async def _stream_execution(execution_id: str, payload: dict):
-    """
-    Async generator that:
-    1. Sends the execution request to the exec-worker (streaming response).
-    2. Yields SSE events for each chunk / status update received.
-    3. Persists final result to the ScriptExecution record.
-    """
-    from asgiref.sync import sync_to_async
-
-    get_execution = sync_to_async(ScriptExecution.objects.get)
-    save_execution = sync_to_async(lambda obj: obj.save())
-
-    # ── Initial "started" event ──────────────────────────────────────────
-    yield _sse_event("status", {"execution_id": execution_id, "status": "running"})
-
-    # Update DB: mark as running
-    try:
-        execution = await get_execution(id=execution_id)
-        execution.status = "running"
-        execution.started_at = dj_timezone.now()
-        await save_execution(execution)
-    except ScriptExecution.DoesNotExist:
-        yield _sse_event("error", {"message": "Execution record not found."})
-        return
-
-    stdout_chunks = []
-    stderr_chunks = []
-    logs = []
-    exit_code = None
-    final_status = "failed"
-
-    try:
-        # ── Call exec-worker ──────────────────────────────────────────
-        # Build headers on a thread so the synchronous google-auth call
-        # doesn't block the event loop in PROD.
-        from asgiref.sync import sync_to_async
-        worker_headers = await sync_to_async(_build_worker_headers)()
-
-        async with httpx.AsyncClient(timeout=None) as client:
-            async with client.stream(
-                "POST",
-                EXEC_WORKER_URL,
-                json=payload,
-                headers=worker_headers,
-            ) as response:
-                if response.status_code != 200:
-                    error_body = await response.aread()
-                    raise RuntimeError(
-                        f"Exec worker returned {response.status_code}: {error_body.decode()}"
-                    )
-
-                async for line in response.aiter_lines():
-                    if not line.strip():
-                        continue
-
-                    # ── Parse NDJSON line from exec-worker ───────────────
-                    try:
-                        chunk: dict = json.loads(line)
-                    except json.JSONDecodeError:
-                        # Bare text (shouldn't happen) – treat as stdout
-                        chunk = {"type": "stdout", "data": line}
-
-                    chunk_type = chunk.get("type", "stdout")
-                    raw_data   = chunk.get("data", "")
-
-                    # ── Normalise data per chunk type ─────────────────────
-                    if chunk_type == "exit_code":
-                        # data is an int from the worker
-                        try:
-                            exit_code = int(raw_data)
-                        except (TypeError, ValueError):
-                            exit_code = -1
-                        yield _sse_event("exit_code", {"exit_code": exit_code})
-                        continue
-
-                    # For stdout / stderr / error: data is a string
-                    # The string may itself be JSON-formatted output from the
-                    # user's script – we pass it through as-is so the
-                    # frontend can decide whether to pretty-print it.
-                    chunk_data = str(raw_data) if not isinstance(raw_data, str) else raw_data
-                    ts = dj_timezone.now().isoformat()
-
-                    if chunk_type == "stdout":
-                        stdout_chunks.append(chunk_data)
-                        logs.append({"type": "stdout", "data": chunk_data, "ts": ts})
-                        yield _sse_event("stdout", {"data": chunk_data})
-
-                    elif chunk_type == "stderr":
-                        stderr_chunks.append(chunk_data)
-                        logs.append({"type": "stderr", "data": chunk_data, "ts": ts})
-                        yield _sse_event("stderr", {"data": chunk_data})
-
-                    elif chunk_type == "error":
-                        # Worker-level errors (SSH failure, fetch error, etc.)
-                        # Surface as stderr so they appear in the terminal
-                        stderr_chunks.append(chunk_data)
-                        logs.append({"type": "error", "data": chunk_data, "ts": ts})
-                        yield _sse_event("stderr", {"data": chunk_data})
-
-                    elif chunk_type == "log":
-                        logs.append({"type": "log", "data": chunk_data, "ts": ts})
-                        yield _sse_event("log", {"data": chunk_data})
-
-                    else:
-                        # Forward unknown event types transparently
-                        yield _sse_event(chunk_type, {"data": chunk_data})
-
-        # ── Execution finished successfully ──────────────────────────────
-        if exit_code == -1:
-            final_status = "cancelled"
-            yield _sse_event("status", {"execution_id": execution_id, "status": "cancelled"})
-        else:
-            final_status = "completed" if (exit_code is None or exit_code == 0) else "failed"
-
-    except asyncio.CancelledError:
-        final_status = "cancelled"
-        logger.warning("Execution %s was cancelled.", execution_id)
-        yield _sse_event("status", {"execution_id": execution_id, "status": "cancelled"})
-
-    except Exception as exc:
-        final_status = "failed"
-        error_msg = f"Worker Error: {str(exc)}"
-        stderr_chunks.append(error_msg)
-        ts = dj_timezone.now().isoformat()
-        logs.append({"type": "error", "data": error_msg, "ts": ts})
-        
-        logger.exception("Execution %s failed: %s", execution_id, exc)
-        yield _sse_event("error", {"execution_id": execution_id, "message": error_msg})
-
-    # ── Upload logs to GCS and persist final state ────────────────────────
-    try:
-        execution = await get_execution(id=execution_id)
-        stdout_text = "\n".join(stdout_chunks)
-        stderr_text = "\n".join(stderr_chunks)
-
-        # Upload logs to GCS in a thread (GCS SDK is synchronous)
-        loop = asyncio.get_event_loop()
-        user_id = execution.user_id
-        gcs_urls = await loop.run_in_executor(
-            None,
-            upload_execution_logs,
-            user_id,
-            execution_id,
-            stdout_text,
-            stderr_text,
-            logs,
-        )
-
-        execution.status = final_status
-        execution.stdout_log_url = gcs_urls["stdout_log_url"]
-        execution.stderr_log_url = gcs_urls["stderr_log_url"]
-        execution.logs_url       = gcs_urls["logs_url"]
-        execution.exit_code = exit_code
-        execution.completed_at = dj_timezone.now()
-        if execution.started_at:
-            execution.duration = execution.completed_at - execution.started_at
-        await save_execution(execution)
-
-    except Exception as exc:
-        logger.exception("Failed to persist/upload execution %s: %s", execution_id, exc)
-
-    yield _sse_event("status", {"execution_id": execution_id, "status": final_status})
-    yield _sse_event("done", {"execution_id": execution_id})
-
 
 # ── Async execute view (SSE streaming) ───────────────────────────────────────
 
@@ -312,32 +46,31 @@ async def execute_script(request):
     the async generator directly (requires ASGI server, e.g. uvicorn/daphne).
     """
     if request.method != "POST":
-        return _json_response(False, "Method not allowed.", status_code=405)
+        return json_response(False, "Method not allowed.", status_code=405)
 
     # ── Auth check ────────────────────────────────────────────────────────
     user = getattr(request, "user", None)
     if not user or isinstance(user, AnonymousUser) or not user.is_authenticated:
-        return _json_response(False, "Authentication required.", status_code=401)
+        return json_response(False, "Authentication required.", status_code=401)
 
     # ── Throttling ────────────────────────────────────────────────────────
-    from asgiref.sync import sync_to_async
-    check_burst = sync_to_async(_check_throttle)
-    check_sustained = sync_to_async(_check_throttle)
+    check_burst = sync_to_async(check_throttle)
+    check_sustained = sync_to_async(check_throttle)
 
     if not await check_burst(request, ExecutionBurstThrottle):
-        return _json_response(False, "Rate limit exceeded.", status_code=429)
+        return json_response(False, "Rate limit exceeded.", status_code=429)
     if not await check_sustained(request, ExecutionSustainedThrottle):
-        return _json_response(False, "Rate limit exceeded.", status_code=429)
+        return json_response(False, "Rate limit exceeded.", status_code=429)
 
     # ── Parse & validate request body ────────────────────────────────────
     try:
         body = json.loads(request.body)
     except (json.JSONDecodeError, Exception):
-        return _json_response(False, "Invalid JSON body.", status_code=400)
+        return json_response(False, "Invalid JSON body.", status_code=400)
 
     serializer = ScriptExecutionRequestSerializer(data=body)
     if not serializer.is_valid():
-        return _json_response(
+        return json_response(
             False,
             "Invalid request data.",
             errors=serializer.errors,
@@ -348,7 +81,7 @@ async def execute_script(request):
     script_details = data["script_details"]
     vault_details = data["vault_details"]
     # Convert UUIDs in inputs to strings to avoid JSON serialization errors in DB/Worker
-    inputs = _uuid_to_str(data)
+    inputs = uuid_to_str(data)
 
     # ── Fetch and validate ownership (sync ORM via sync_to_async) ────────
     get_vault = sync_to_async(Vault.objects.get)
@@ -360,22 +93,22 @@ async def execute_script(request):
     try:
         vault = await get_vault(id=vault_details["vault_id"], owner=user)
     except Vault.DoesNotExist:
-        return _json_response(False, "Vault not found or access denied.", status_code=404)
+        return json_response(False, "Vault not found or access denied.", status_code=404)
 
     try:
         server = await get_server(id=vault_details["server_id"], vault=vault)
     except Server.DoesNotExist:
-        return _json_response(False, "Server not found in vault.", status_code=404)
+        return json_response(False, "Server not found in vault.", status_code=404)
 
     try:
         credential = await get_credential(id=vault_details["credential_id"], vault=vault)
     except Credential.DoesNotExist:
-        return _json_response(False, "Credential not found in vault.", status_code=404)
+        return json_response(False, "Credential not found in vault.", status_code=404)
 
     try:
         script = await get_script(id=script_details["script_id"], owner=user)
     except Script.DoesNotExist:
-        return _json_response(False, "Script not found or access denied.", status_code=404)
+        return json_response(False, "Script not found or access denied.", status_code=404)
 
     # ── Create execution record ───────────────────────────────────────────
     execution = await create_execution(
@@ -426,7 +159,7 @@ async def execute_script(request):
         execution.status = "failed"
         execution.stderr = "EXEC_WORKER_URL is not configured."
         await save_execution(execution)
-        return _json_response(
+        return json_response(
             False,
             "Execution worker URL is not configured.",
             status_code=503,
@@ -434,7 +167,7 @@ async def execute_script(request):
 
     # ── Return async SSE stream ───────────────────────────────────────────
     streaming_response = StreamingHttpResponse(
-        _stream_execution(str(execution.id), worker_payload),
+        stream_execution(str(execution.id), worker_payload),
         content_type="text/event-stream",
     )
     streaming_response["Cache-Control"] = "no-cache"
@@ -519,8 +252,6 @@ def execution_history(request):
             data={'executions': [], 'total_count': paginator.count, 'total_pages': paginator.num_pages, 'current_page': page_number}
         )
 
-    from .serializers import ScriptExecutionHistorySerializer
-    
     serializer = ScriptExecutionHistorySerializer(page_obj.object_list, many=True)
     return api_response(
         success=True,
@@ -573,7 +304,7 @@ def stop_execution(request, execution_id):
         # We use a synchronous httpx call here.
         # Headers include the OIDC token in PROD (no Content-Type needed for a
         # body-less stop signal).
-        stop_headers = _build_worker_headers(include_content_type=False)
+        stop_headers = build_worker_headers(include_content_type=False)
         with httpx.Client(timeout=5.0) as client:
             resp = client.post(stop_endpoint, headers=stop_headers)
             
@@ -622,7 +353,7 @@ def health_check(request):
         # Get headers (OIDC in PROD, plain X-API-Key in DEV)
         # Note: Health endpoint on worker doesn't strictly need X-API-Key,
         # but the OIDC token in Authorization header is required for Cloud Run IAM.
-        headers = _build_worker_headers(include_content_type=False)
+        headers = build_worker_headers(include_content_type=False)
         
         with httpx.Client(timeout=5.0) as client:
             resp = client.get(health_endpoint, headers=headers)
