@@ -99,7 +99,7 @@ class WorkflowNodeRun(models.Model):
     node_label = models.CharField(max_length=255, blank=True)
 
     # Script bound to this node at execution time (nullable for input/output-only nodes)
-    script_id = models.UUIDField(null=True, blank=True)
+    script_id = models.CharField(max_length=255, null=True, blank=True)
 
     # Snapshot of execution context for this specific node
     vault_id = models.UUIDField(null=True, blank=True)

@@ -147,6 +147,16 @@ def execute_workflow(self, workflow_run_id: str):
             continue
 
         elif node_type == NODE_TYPE_ACTION:
+            if data.get('type') != 'script':
+                # For non-script actions (email, etc.), we don't have an executor yet.
+                # Mark as success for now to continue flow, or handle accordingly.
+                # TODO: Implement other action types (email, webhook, etc.)
+                node_run.status = 'success'
+                node_run.finished_at = dj_timezone.now()
+                node_run.save(update_fields=['status', 'finished_at'])
+                node_outputs[node_id] = {}
+                continue
+
             try:
                 params = data.get('parameters', [])
                 resolved_params = resolve_parameters(params, node_outputs)

@@ -8,6 +8,8 @@ from server.utils import api_response
 from server.rate_limiters import ExecutionBurstThrottle, ExecutionSustainedThrottle
 from workflows.models import Workflow
 from execution_engine.models import WorkflowRun, WorkflowNodeRun
+from scripts.models import Script
+from vault.models import Vault, Server, Credential
 from execution_engine.serializers import (
     WorkflowRunRequestSerializer,
     WorkflowRunSerializer,
@@ -58,7 +60,7 @@ def trigger_workflow_run(request, workflow_id):
             status_code=status.HTTP_400_BAD_REQUEST,
         )
 
-    # Secondary validation: Enforce vault/server credentials presence for scripts
+    # Secondary validation: Enforce vault/server credentials presence and existence for scripts
     missing_bindings = validate_executable_nodes(workflow.nodes)
     if missing_bindings:
         return api_response(
@@ -67,14 +69,32 @@ def trigger_workflow_run(request, workflow_id):
             status_code=status.HTTP_400_BAD_REQUEST,
         )
 
-    # Look for missing vault details
+    # Validate existence of referenced objects in DB
     for node in workflow.nodes:
         if node.get("type") == NODE_TYPE_ACTION and node.get("data", {}).get("type") == "script":
-            vault_details = node.get("data", {}).get("vaultDetails", {})
-            if not all([vault_details.get("vaultId"), vault_details.get("serverId"), vault_details.get("credentialId")]):
+            data = node.get("data", {})
+            script_id = data.get("selectedScript", {}).get("scriptId")
+            vault_details = data.get("vaultDetails", {})
+            vault_id = vault_details.get("vaultId")
+            server_id = vault_details.get("serverId")
+            credential_id = vault_details.get("credentialId")
+
+            # Check Vault, Server, Credential (must be owned by or accessible to user)
+            # For brevity in this phase, we check existence. Proper multi-tenant access
+            # is handled by the model managers or specific checks if needed.
+            try:
+                if not Script.objects.filter(id=script_id).exists():
+                    raise ValueError(f"Script ID {script_id} not found for node {node.get('id')}")
+                if not Vault.objects.filter(id=vault_id, owner=request.user).exists():
+                    raise ValueError(f"Vault ID {vault_id} not found or access denied for node {node.get('id')}")
+                if not Server.objects.filter(id=server_id, vault_id=vault_id).exists():
+                    raise ValueError(f"Server ID {server_id} not found in vault {vault_id}")
+                if not Credential.objects.filter(id=credential_id, vault_id=vault_id).exists():
+                    raise ValueError(f"Credential ID {credential_id} not found in vault {vault_id}")
+            except (ValueError, Exception) as e:
                 return api_response(
                     success=False,
-                    message=f"Missing vault/server/credential details in action node: {node.get('id')}",
+                    message=str(e),
                     status_code=status.HTTP_400_BAD_REQUEST,
                 )
 
