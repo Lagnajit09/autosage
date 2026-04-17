@@ -1,5 +1,10 @@
+import json
 import logging
 from django.utils import timezone
+from django.http import StreamingHttpResponse
+from django.contrib.auth.models import AnonymousUser
+from django.views.decorators.csrf import csrf_exempt
+from asgiref.sync import sync_to_async
 from rest_framework.decorators import api_view, permission_classes, throttle_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework import status
@@ -22,6 +27,8 @@ from execution_engine.helpers.graph import (
     NODE_TYPE_ACTION,
 )
 from execution_engine.tasks import execute_workflow
+from execution_engine.helpers.redis_pubsub import subscribe_workflow_logs
+from execution_engine.helpers.script_execution.utils import sse_event, json_response, check_throttle
 
 logger = logging.getLogger(__name__)
 
@@ -251,3 +258,94 @@ def cancel_workflow_run(request, run_id):
         success=True,
         message="Workflow execution cancelled successfully."
     )
+
+
+# ── Real-time SSE streaming endpoint ─────────────────────────────────────────
+
+@csrf_exempt
+async def stream_workflow_run(request, run_id):
+    """
+    GET /api/execution-engine/workflows/runs/<run_id>/stream/
+
+    Native async Django view that subscribes to the Redis Pub/Sub channel
+    for the given workflow run and relays log events as Server-Sent Events.
+
+    The Celery task publishes events to the channel as it processes each
+    node. This view yields them in real-time until a ``done`` event is
+    received or the connection is closed.
+
+    SSE event types emitted:
+        status       – workflow-level status changes (running, success, failed)
+        node_start   – a node has started executing
+        node_complete– a node has finished (success/failed/skipped)
+        stdout       – standard output line from a script node
+        stderr       – standard error line from a script node
+        exit_code    – exit code from a script node
+        log          – generic log line
+        done         – workflow execution is complete
+    """
+    if request.method != "GET":
+        return json_response(False, "Method not allowed.", status_code=405)
+
+    # ── Auth check ────────────────────────────────────────────────────────
+    user = getattr(request, "user", None)
+    if not user or isinstance(user, AnonymousUser) or not user.is_authenticated:
+        return json_response(False, "Authentication required.", status_code=401)
+
+    # ── Throttling ────────────────────────────────────────────────────────
+    check_burst = sync_to_async(check_throttle)
+    check_sustained = sync_to_async(check_throttle)
+
+    if not await check_burst(request, ExecutionBurstThrottle):
+        return json_response(False, "Rate limit exceeded.", status_code=429)
+    if not await check_sustained(request, ExecutionSustainedThrottle):
+        return json_response(False, "Rate limit exceeded.", status_code=429)
+
+    # ── Verify the run exists and belongs to the user ─────────────────────
+    get_run = sync_to_async(WorkflowRun.objects.get)
+    try:
+        run = await get_run(id=run_id, user=user)
+    except WorkflowRun.DoesNotExist:
+        return json_response(False, "Workflow run not found.", status_code=404)
+
+    # If run is already finished, return its final status immediately
+    if run.status in ('success', 'failed', 'cancelled'):
+        async def finished_stream():
+            yield sse_event('status', {
+                'workflow_run_id': str(run_id),
+                'status': run.status,
+                'error_message': run.error_message or '',
+            })
+            yield sse_event('done', {
+                'workflow_run_id': str(run_id),
+                'status': run.status,
+            })
+
+        response = StreamingHttpResponse(
+            finished_stream(),
+            content_type='text/event-stream',
+        )
+        response['Cache-Control'] = 'no-cache'
+        response['X-Accel-Buffering'] = 'no'
+        return response
+
+    # ── Stream from Redis Pub/Sub ─────────────────────────────────────────
+    async def log_stream():
+        try:
+            async for payload in subscribe_workflow_logs(str(run_id)):
+                event_name = payload.get('event', 'log')
+                event_data = payload.get('data', {})
+                yield sse_event(event_name, event_data)
+        except Exception as exc:
+            logger.exception("SSE stream error for run %s: %s", run_id, exc)
+            yield sse_event('error', {'message': f'Stream error: {str(exc)}'})
+            yield sse_event('done', {'workflow_run_id': str(run_id), 'status': 'error'})
+
+    response = StreamingHttpResponse(
+        log_stream(),
+        content_type='text/event-stream',
+    )
+    response['Cache-Control'] = 'no-cache'
+    response['X-Accel-Buffering'] = 'no'
+    response['X-Workflow-Run-Id'] = str(run_id)
+    return response

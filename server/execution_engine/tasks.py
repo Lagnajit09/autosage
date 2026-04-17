@@ -26,6 +26,7 @@ from execution_engine.helpers.params import (
 )
 from execution_engine.helpers.gcs import upload_execution_logs
 from execution_engine.helpers.script_execution.worker import build_worker_headers, EXEC_WORKER_URL
+from execution_engine.helpers.redis_pubsub import publish_workflow_log
 
 logger = logging.getLogger(__name__)
 
@@ -74,6 +75,12 @@ def execute_workflow(self, workflow_run_id: str):
     run.started_at = dj_timezone.now()
     run.save(update_fields=['status', 'started_at'])
 
+    # Publish initial status to Redis for SSE subscribers
+    publish_workflow_log(workflow_run_id, 'status', {
+        'workflow_run_id': workflow_run_id,
+        'status': 'running',
+    })
+
     try:
         G = build_dag(run.workflow.nodes, run.workflow.edges)
         topo_order = topological_order(G)
@@ -100,6 +107,13 @@ def execute_workflow(self, workflow_run_id: str):
         node_run.started_at = dj_timezone.now()
         node_run.save(update_fields=['status', 'started_at'])
 
+        # Publish node start event
+        publish_workflow_log(workflow_run_id, 'node_start', {
+            'node_id': node_id,
+            'node_label': node_run.node_label,
+            'node_type': node_data.get('type', ''),
+        })
+
         node_data = get_node_data(G, node_id)
         node_type = node_data.get('type')
         data = node_data.get('data', {})
@@ -109,6 +123,12 @@ def execute_workflow(self, workflow_run_id: str):
             node_run.finished_at = dj_timezone.now()
             node_run.save(update_fields=['status', 'finished_at'])
             node_outputs[node_id] = {}
+            publish_workflow_log(workflow_run_id, 'node_complete', {
+                'node_id': node_id,
+                'node_label': node_run.node_label,
+                'node_type': node_type,
+                'status': 'success',
+            })
             continue
 
         elif node_type == NODE_TYPE_DECISION:
@@ -144,6 +164,14 @@ def execute_workflow(self, workflow_run_id: str):
             node_run.finished_at = dj_timezone.now()
             node_run.save(update_fields=['status', 'finished_at'])
             node_outputs[node_id] = {"result": decision_result}
+            publish_workflow_log(workflow_run_id, 'node_complete', {
+                'node_id': node_id,
+                'node_label': node_run.node_label,
+                'node_type': 'decision',
+                'status': 'success',
+                'decision_result': decision_result,
+                'taken_branch': taken_handle,
+            })
             continue
 
         elif node_type == NODE_TYPE_ACTION:
@@ -155,6 +183,13 @@ def execute_workflow(self, workflow_run_id: str):
                 node_run.finished_at = dj_timezone.now()
                 node_run.save(update_fields=['status', 'finished_at'])
                 node_outputs[node_id] = {}
+                publish_workflow_log(workflow_run_id, 'node_complete', {
+                    'node_id': node_id,
+                    'node_label': node_run.node_label,
+                    'node_type': 'action',
+                    'action_type': data.get('type', 'unknown'),
+                    'status': 'success',
+                })
                 continue
 
             try:
@@ -258,14 +293,33 @@ def execute_workflow(self, workflow_run_id: str):
                                 if ctype == 'exit_code':
                                     try: final_exit_code = int(cdata)
                                     except: final_exit_code = -1
+                                    publish_workflow_log(workflow_run_id, 'exit_code', {
+                                        'node_id': node_id,
+                                        'exit_code': final_exit_code,
+                                    })
                                 elif ctype == 'stdout':
                                     stdout_text += str(cdata) + "\n"
                                     logs_list.append({"type": "stdout", "data": cdata, "ts": ts})
+                                    publish_workflow_log(workflow_run_id, 'stdout', {
+                                        'node_id': node_id,
+                                        'node_label': node_run.node_label,
+                                        'data': str(cdata),
+                                    })
                                 elif ctype in ('stderr', 'error'):
                                     stderr_text += str(cdata) + "\n"
                                     logs_list.append({"type": "stderr", "data": cdata, "ts": ts})
+                                    publish_workflow_log(workflow_run_id, 'stderr', {
+                                        'node_id': node_id,
+                                        'node_label': node_run.node_label,
+                                        'data': str(cdata),
+                                    })
                                 elif ctype == 'log':
                                     logs_list.append({"type": "log", "data": cdata, "ts": ts})
+                                    publish_workflow_log(workflow_run_id, 'log', {
+                                        'node_id': node_id,
+                                        'node_label': node_run.node_label,
+                                        'data': str(cdata),
+                                    })
             except Exception as e:
                 node_run.status = 'failed'
                 node_run.error_message = f"Worker communication error: {str(e)}"
@@ -273,6 +327,15 @@ def execute_workflow(self, workflow_run_id: str):
             
             if node_run.status != 'failed':
                 node_run.status = 'success' if (final_exit_code is None or final_exit_code == 0) else 'failed'
+
+            # Publish node completion event
+            publish_workflow_log(workflow_run_id, 'node_complete', {
+                'node_id': node_id,
+                'node_label': node_run.node_label,
+                'node_type': 'action',
+                'status': node_run.status,
+                'exit_code': final_exit_code,
+            })
             
             try:
                 gcs_urls = upload_execution_logs(
@@ -321,3 +384,14 @@ def execute_workflow(self, workflow_run_id: str):
     run.finished_at = dj_timezone.now()
     run.save(update_fields=['status', 'error_message', 'finished_at'])
     logger.info(f"Workflow run {workflow_run_id} finished with status {run.status}")
+
+    # Publish final workflow status and done event
+    publish_workflow_log(workflow_run_id, 'status', {
+        'workflow_run_id': workflow_run_id,
+        'status': run.status,
+        'error_message': run.error_message or '',
+    })
+    publish_workflow_log(workflow_run_id, 'done', {
+        'workflow_run_id': workflow_run_id,
+        'status': run.status,
+    })
