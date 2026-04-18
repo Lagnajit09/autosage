@@ -124,11 +124,13 @@ def execute_workflow(self, workflow_run_id: str):
             node_run.finished_at = dj_timezone.now()
             node_run.save(update_fields=['status', 'finished_at'])
             node_outputs[node_id] = {}
+            duration = (node_run.finished_at - node_run.started_at).total_seconds()
             publish_workflow_log(workflow_run_id, 'node_complete', {
                 'node_id': node_id,
                 'node_label': node_run.node_label,
                 'node_type': node_type,
                 'status': 'success',
+                'duration': duration,
             })
             continue
 
@@ -144,7 +146,12 @@ def execute_workflow(self, workflow_run_id: str):
                 field_val = resolve_condition_value(raw_field, node_outputs)
                 target_val = resolve_condition_value(raw_target, node_outputs)
                 
-                if not _evaluate_condition(field_val, operator, target_val):
+                cond_result = _evaluate_condition(field_val, operator, target_val)
+                publish_workflow_log(workflow_run_id, 'log', {
+                    'stdout': f"[EVAL] Evaluated '{raw_field}' ({field_val}) {operator} '{raw_target}' ({target_val}) -> {cond_result}"
+                })
+
+                if not cond_result:
                     decision_result = False
                     break
             
@@ -155,16 +162,29 @@ def execute_workflow(self, workflow_run_id: str):
             skipped_target = outgoing.get(skipped_handle)
             if skipped_target:
                 subgraph = get_branch_subgraph(G, skipped_target)
+                publish_workflow_log(workflow_run_id, 'log', {
+                    'stdout': f"[PRUNE] PRUNED inactive branch starting at {skipped_target}. Skipped {len(subgraph)} node(s)."
+                })
                 WorkflowNodeRun.objects.filter(
                     workflow_run=run, 
                     node_id__in=subgraph, 
                     status='pending'
                 ).update(status='skipped')
+                
+                # Also publish node_complete events indicating "skipped" so the UI updates
+                for skipped_node_id in subgraph:
+                    publish_workflow_log(workflow_run_id, 'node_complete', {
+                        'node_id': skipped_node_id,
+                        'status': 'skipped',
+                        'duration': 0.0,
+                    })
             
             node_run.status = 'success'
             node_run.finished_at = dj_timezone.now()
             node_run.save(update_fields=['status', 'finished_at'])
             node_outputs[node_id] = {"result": decision_result}
+            
+            duration = (node_run.finished_at - node_run.started_at).total_seconds()
             publish_workflow_log(workflow_run_id, 'node_complete', {
                 'node_id': node_id,
                 'node_label': node_run.node_label,
@@ -172,6 +192,7 @@ def execute_workflow(self, workflow_run_id: str):
                 'status': 'success',
                 'decision_result': decision_result,
                 'taken_branch': taken_handle,
+                'duration': duration,
             })
             continue
 
@@ -184,18 +205,24 @@ def execute_workflow(self, workflow_run_id: str):
                 node_run.finished_at = dj_timezone.now()
                 node_run.save(update_fields=['status', 'finished_at'])
                 node_outputs[node_id] = {}
+                duration = (node_run.finished_at - node_run.started_at).total_seconds()
                 publish_workflow_log(workflow_run_id, 'node_complete', {
                     'node_id': node_id,
                     'node_label': node_run.node_label,
                     'node_type': 'action',
                     'action_type': data.get('type', 'unknown'),
                     'status': 'success',
+                    'duration': duration,
                 })
                 continue
 
             try:
                 params = data.get('parameters', [])
                 resolved_params = resolve_parameters(params, node_outputs)
+                if resolved_params:
+                    publish_workflow_log(workflow_run_id, 'log', {
+                        'stdout': f"[PARAM] Resolved parameters: {resolved_params}"
+                    })
             except Exception as e:
                 node_run.status = 'failed'
                 node_run.error_message = f"Parameter resolution error: {str(e)}"
@@ -302,25 +329,19 @@ def execute_workflow(self, workflow_run_id: str):
                                 elif ctype == 'stdout':
                                     stdout_text += str(cdata) + "\n"
                                     logs_list.append({"type": "stdout", "data": cdata, "ts": ts})
-                                    publish_workflow_log(workflow_run_id, 'stdout', {
-                                        'node_id': node_id,
-                                        'node_label': node_run.node_label,
-                                        'data': str(cdata),
+                                    publish_workflow_log(workflow_run_id, 'log', {
+                                        'stdout': f"[STDOUT] {cdata}" if not str(cdata).startswith("[") else str(cdata),
                                     })
                                 elif ctype in ('stderr', 'error'):
                                     stderr_text += str(cdata) + "\n"
                                     logs_list.append({"type": "stderr", "data": cdata, "ts": ts})
-                                    publish_workflow_log(workflow_run_id, 'stderr', {
-                                        'node_id': node_id,
-                                        'node_label': node_run.node_label,
-                                        'data': str(cdata),
+                                    publish_workflow_log(workflow_run_id, 'log', {
+                                        'stdout': f"[ERROR] {cdata}" if not str(cdata).startswith("[") else str(cdata),
                                     })
                                 elif ctype == 'log':
                                     logs_list.append({"type": "log", "data": cdata, "ts": ts})
                                     publish_workflow_log(workflow_run_id, 'log', {
-                                        'node_id': node_id,
-                                        'node_label': node_run.node_label,
-                                        'data': str(cdata),
+                                        'stdout': f"[INFO] {cdata}" if not str(cdata).startswith("[") else str(cdata),
                                     })
             except Exception as e:
                 node_run.status = 'failed'
@@ -329,6 +350,12 @@ def execute_workflow(self, workflow_run_id: str):
             
             if node_run.status != 'failed':
                 node_run.status = 'success' if (final_exit_code is None or final_exit_code == 0) else 'failed'
+                
+            node_run.exit_code = final_exit_code
+            node_run.finished_at = dj_timezone.now()
+            node_run.save()
+
+            duration = (node_run.finished_at - node_run.started_at).total_seconds()
 
             # Publish node completion event
             publish_workflow_log(workflow_run_id, 'node_complete', {
@@ -337,6 +364,7 @@ def execute_workflow(self, workflow_run_id: str):
                 'node_type': 'action',
                 'status': node_run.status,
                 'exit_code': final_exit_code,
+                'duration': duration,
             })
             
             try:
@@ -350,12 +378,9 @@ def execute_workflow(self, workflow_run_id: str):
                 node_run.stdout_log_url = gcs_urls.get('stdout_log_url', '')
                 node_run.stderr_log_url = gcs_urls.get('stderr_log_url', '')
                 node_run.logs_url = gcs_urls.get('logs_url', '')
+                node_run.save(update_fields=['stdout_log_url', 'stderr_log_url', 'logs_url'])
             except Exception as e:
                 logger.error(f"Failed to upload GCS logs for NodeRun {node_run.id}: {str(e)}")
-
-            node_run.exit_code = final_exit_code
-            node_run.finished_at = dj_timezone.now()
-            node_run.save()
 
             if node_run.status == 'success':
                 parsed_out = {}
