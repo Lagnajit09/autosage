@@ -5,9 +5,11 @@ import { WorkflowData } from "@/utils/types";
 
 interface ExecutionParametersProps {
   workflow: WorkflowData | null;
+  inputs: Record<string, string>;
+  onInputChange: (id: string, value: string) => void;
 }
 
-const ExecutionParameters = ({ workflow }: ExecutionParametersProps) => {
+const ExecutionParameters = ({ workflow, inputs, onInputChange }: ExecutionParametersProps) => {
   if (!workflow) return null;
 
   // Extract all parameters from all nodes
@@ -49,14 +51,16 @@ const ExecutionParameters = ({ workflow }: ExecutionParametersProps) => {
               </span>
               <Switch
                 id={param.id}
-                defaultChecked={param.value === "true"}
+                checked={inputs[param.id] === "true"}
+                onCheckedChange={(checked) => onInputChange(param.id, checked ? "true" : "false")}
                 className="dark:bg-gray-700"
               />
             </div>
           ) : (
             <Input
               id={param.id}
-              defaultValue={param.value}
+              value={inputs[param.id] || ""}
+              onChange={(e) => onInputChange(param.id, e.target.value)}
               placeholder={param.description || "Enter value"}
               className="dark:text-gray-200"
             />

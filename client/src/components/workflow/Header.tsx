@@ -34,6 +34,7 @@ const Header = ({
   showVault,
   onClearCanvas,
   onDeleteWorkflow,
+  workflowId,
 }: {
   nodes: number;
   edges: number;
@@ -42,6 +43,7 @@ const Header = ({
   showVault: boolean;
   onClearCanvas?: () => void;
   onDeleteWorkflow?: () => void;
+  workflowId?: string;
 }) => {
   const { isDark, toggleTheme } = useTheme();
   const navigate = useNavigate();
@@ -49,7 +51,7 @@ const Header = ({
   return (
     <div className="w-[32%] flex items-center justify-end gap-2 absolute right-4 top-4 z-50">
       <Button
-        onClick={() => navigate("/workflow/execution/2")}
+        onClick={() => navigate(`/workflow/execution/${workflowId}`)}
         className="flex items-center bg-green-100 hover:bg-green-200 dark:bg-green-900/50 dark:hover:bg-green-800 text-green-600 dark:text-green-400 border-2 border-green-500/90 rounded-xl"
       >
         <PlayCircle />

@@ -528,6 +528,7 @@ const WorkflowBuilderContent = ({
           setShowImportDialog={setShowImportDialog}
           onClearCanvas={handleClearCanvas}
           onDeleteWorkflow={handleDeleteWorkflow}
+          workflowId={workflowId}
         />
 
         {/* Main Content */}
