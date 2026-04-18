@@ -11,16 +11,21 @@ import { cn } from "@/lib/utils";
 import { WorkflowData, Node as WorkflowNode } from "@/utils/types";
 
 interface ExecutionNode extends WorkflowNode {
-  status: "success" | "error" | "pending" | "running";
+  status: "success" | "error" | "pending" | "running" | "skipped";
   duration?: string;
 }
 
 interface ExecutionNodesProps {
   workflow: WorkflowData | null;
   nodeStatuses?: Record<string, string>;
+  nodeDurations?: Record<string, number>;
 }
 
-const ExecutionNodes = ({ workflow, nodeStatuses = {} }: ExecutionNodesProps) => {
+const ExecutionNodes = ({
+  workflow,
+  nodeStatuses = {},
+  nodeDurations = {},
+}: ExecutionNodesProps) => {
   const [nodes, setNodes] = useState<ExecutionNode[]>([]);
 
   useEffect(() => {
@@ -28,40 +33,43 @@ const ExecutionNodes = ({ workflow, nodeStatuses = {} }: ExecutionNodesProps) =>
       // Simple sequential sorting based on edges
       const sortedNodes: ExecutionNode[] = [];
       const visited = new Set<string>();
-      
+
       // Find trigger nodes or nodes with no incoming edges
-      const targetIds = new Set(workflow.edges.map(e => e.target));
-      const startNodes = workflow.nodes.filter(n => !targetIds.has(n.id));
-      
+      const targetIds = new Set(workflow.edges.map((e) => e.target));
+      const startNodes = workflow.nodes.filter((n) => !targetIds.has(n.id));
+
       // If no start nodes found (cycle or something), just use all nodes
-      const queue = startNodes.length > 0 ? [...startNodes] : [...workflow.nodes];
-      
+      const queue =
+        startNodes.length > 0 ? [...startNodes] : [...workflow.nodes];
+
       while (queue.length > 0) {
         const current = queue.shift()!;
         if (visited.has(current.id)) continue;
-        
+
         visited.add(current.id);
         sortedNodes.push({
           ...current,
           status: "pending",
-          duration: undefined
+          duration: undefined,
         });
-        
+
         // Find next nodes
         const nextIds = workflow.edges
-          .filter(e => e.source === current.id)
-          .map(e => e.target);
-          
-        const nextNodes = workflow.nodes.filter(n => nextIds.includes(n.id) && !visited.has(n.id));
+          .filter((e) => e.source === current.id)
+          .map((e) => e.target);
+
+        const nextNodes = workflow.nodes.filter(
+          (n) => nextIds.includes(n.id) && !visited.has(n.id),
+        );
         queue.push(...nextNodes);
       }
 
       // Add any orphaned nodes
-      workflow.nodes.forEach(n => {
+      workflow.nodes.forEach((n) => {
         if (!visited.has(n.id)) {
           sortedNodes.push({
             ...n,
-            status: "pending"
+            status: "pending",
           });
         }
       });
@@ -71,10 +79,22 @@ const ExecutionNodes = ({ workflow, nodeStatuses = {} }: ExecutionNodesProps) =>
   }, [workflow]);
 
   // Merge runtime statuses
-  const displayNodes = nodes.map(node => ({
-    ...node,
-    status: (nodeStatuses[node.id] as ExecutionNode["status"]) || node.status
-  }));
+  const displayNodes = nodes.map((node) => {
+    const status =
+      (nodeStatuses[node.id] as ExecutionNode["status"]) || node.status;
+    let durationStr = undefined;
+    if (status === "skipped") {
+      durationStr = "0.0s";
+    } else if (nodeDurations[node.id] !== undefined) {
+      durationStr = `${nodeDurations[node.id].toFixed(1)}s`;
+    }
+
+    return {
+      ...node,
+      status,
+      duration: durationStr,
+    };
+  });
 
   const getStatusIcon = (status: string) => {
     switch (status) {
@@ -100,7 +120,12 @@ const ExecutionNodes = ({ workflow, nodeStatuses = {} }: ExecutionNodesProps) =>
         {displayNodes.map((node, index) => (
           <div
             key={node.id}
-            className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-3 shadow-sm flex items-center gap-3 group hover:border-purple-500/50 transition-colors"
+            className={cn(
+              "bg-white dark:bg-gray-800 border rounded-lg p-3 shadow-sm flex items-center gap-3 transition-colors",
+              node.status === "running"
+                ? "border-purple-500 shadow-purple-500/20 shadow-md ring-1 ring-purple-500"
+                : "border-gray-200 dark:border-gray-700 hover:border-purple-500/50",
+            )}
           >
             <div className="flex items-center justify-center w-6 h-6 rounded-full bg-gray-100 dark:bg-gray-700 text-[10px] font-bold text-gray-400">
               {index + 1}
@@ -122,7 +147,7 @@ const ExecutionNodes = ({ workflow, nodeStatuses = {} }: ExecutionNodesProps) =>
                     "text-[10px] px-1.5 py-0.5 rounded uppercase font-semibold tracking-wider",
                     node.type === "trigger"
                       ? "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400"
-                      : "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400"
+                      : "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400",
                   )}
                 >
                   {node.type}

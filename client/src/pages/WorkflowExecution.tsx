@@ -38,6 +38,7 @@ const WorkflowExecution = () => {
   const [elapsedSeconds, setElapsedSeconds] = useState<number | null>(null);
   const elapsedTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [nodeStatuses, setNodeStatuses] = useState<Record<string, string>>({});
+  const [nodeDurations, setNodeDurations] = useState<Record<string, number>>({});
 
   const { getToken, isSignedIn } = useAuth();
   const navigate = useNavigate();
@@ -161,16 +162,32 @@ const WorkflowExecution = () => {
                 ...prev,
                 [data.node_id]: "running",
               }));
-              setLogs((prev) => [...prev, `> Node start: ${data.node_label}`]);
+              setLogs((prev) => [...prev, `[START] Node start: ${data.node_label}`]);
             } else if (eventName === "node_complete") {
               setNodeStatuses((prev) => ({
                 ...prev,
                 [data.node_id]: data.status,
               }));
-              if (data.status !== "skipped") {
+              if (data.duration !== undefined) {
+                setNodeDurations((prev) => ({
+                  ...prev,
+                  [data.node_id]: data.duration,
+                }));
+              }
+              if (data.status === "skipped") {
                 setLogs((prev) => [
                   ...prev,
-                  `> Node complete: ${data.node_label} (${data.status})`,
+                  `[SKIP] Node skipped: ${data.node_label}`,
+                ]);
+              } else if (data.status === "success" || data.status === "running") {
+                setLogs((prev) => [
+                  ...prev,
+                  `[SUCCESS] Node complete: ${data.node_label}`,
+                ]);
+              } else {
+                setLogs((prev) => [
+                  ...prev,
+                  `[ERROR] Node complete: ${data.node_label} (${data.status})`,
                 ]);
               }
             } else if (eventName === "done") {
@@ -214,6 +231,7 @@ const WorkflowExecution = () => {
     setIsExecuting(true);
     setLogs([]);
     setNodeStatuses({});
+    setNodeDurations({});
     setActiveTab("terminal");
     try {
       const token = await getToken();
@@ -339,6 +357,7 @@ const WorkflowExecution = () => {
                 <ExecutionNodes
                   workflow={workflow}
                   nodeStatuses={nodeStatuses}
+                  nodeDurations={nodeDurations}
                 />
               </CardContent>
             </Card>
@@ -392,6 +411,7 @@ const WorkflowExecution = () => {
                   <ExecutionTerminal
                     logs={logs}
                     elapsedSeconds={elapsedSeconds}
+                    runId={runId}
                   />
                 </TabsContent>
                 <TabsContent

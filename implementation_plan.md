@@ -339,10 +339,10 @@ The `WorkflowRun` request body from the frontend will simply be:
 
 Currently shows workflow details statically. Update to:
 
-1. **"Run Workflow" button** → `POST /api/workflows/{id}/run/` with vault/server/credential selection
+1. ✅ **"Run Workflow" button** → `POST /api/workflows/{id}/run/` with vault/server/credential selection
 2. **Run status panel** — polls `GET /api/workflows/runs/{run_id}/` every 2 seconds while status is `queued` or `running`
 3. **Node progress list** — polls `GET /api/workflows/runs/{run_id}/nodes/` to show per-node status with icons (⏳ pending, ▶️ running, ✅ success, ❌ failed, ⏭️ skipped)
-4. **Log viewer** — clicking a node opens its stdout/stderr log URL
+4. ✅ **Log viewer** — clicking a node opens its stdout/stderr log URL (implemented SSE streaming for now; static logs will be later)
 5. **Cancel button** — `POST /api/workflows/runs/{run_id}/cancel/`
 
 ---
@@ -399,17 +399,25 @@ CELERY_RESULT_BACKEND=redis://<redis-host>:6379/0
 > **Q1: Per-node server/credential OR global?**
 > Current plan: one server+credential applies to ALL nodes in a run. Should individual nodes be able to target different servers? This affects both the node schema and the `WorkflowRun` model.
 
+> **Answer:** Per-node server/credential.
+
 > [!IMPORTANT]
 > **Q2: Parallel node execution?**
 > The initial plan executes nodes strictly sequentially (topological order). NetworkX can identify nodes with no remaining dependencies that can run in parallel. Do you want parallel execution for independent branches in the DAG?
+
+> **Answer:** Parallel node execution.
 
 > [!NOTE]
 > **Q3: Fail-fast vs continue-on-error?**
 > Should a failed node abort the rest of the workflow, or should independent downstream nodes still run? Initial plan: fail-fast (stop on first failure). Should this be configurable per workflow?
 
+> **Answer:** Fail-fast.
+
 > [!NOTE]
 > **Q4: Redis hosting?**
 > For DEV: Docker Redis (already in docker-compose). For PROD on GCP: Use **Memorystore for Redis** (Google's managed Redis — has a small free-tier equivalent on Basic tier) or Redis Cloud free tier (30 MB). Which do you prefer?
+
+> **Answer:** Using Upstash for now.
 
 ---
 
