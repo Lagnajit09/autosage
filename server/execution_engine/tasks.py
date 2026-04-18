@@ -60,7 +60,7 @@ def _evaluate_condition(field_val, operator, target_val):
 
 @shared_task(bind=True, name='workflows.execute_workflow')
 def execute_workflow(self, workflow_run_id: str):
-    logger.info(f"Starting workflow run {workflow_run_id}")
+    logger.info(f"Starting workflow execution for Run: {workflow_run_id}")
     try:
         run = WorkflowRun.objects.select_related('workflow', 'user').get(id=workflow_run_id)
     except WorkflowRun.DoesNotExist:
@@ -95,6 +95,7 @@ def execute_workflow(self, workflow_run_id: str):
     fail_fast = True # Stop execution if a node fails
 
     for node_id in topo_order:
+        logger.info(f"Processing node {node_id} for Run: {workflow_run_id}")
         try:
             node_run = WorkflowNodeRun.objects.get(workflow_run=run, node_id=node_id)
         except WorkflowNodeRun.DoesNotExist:
@@ -107,16 +108,16 @@ def execute_workflow(self, workflow_run_id: str):
         node_run.started_at = dj_timezone.now()
         node_run.save(update_fields=['status', 'started_at'])
 
+        node_data = get_node_data(G, node_id)
+        node_type = node_data.get('type')
+        data = node_data.get('data', {})
+
         # Publish node start event
         publish_workflow_log(workflow_run_id, 'node_start', {
             'node_id': node_id,
             'node_label': node_run.node_label,
-            'node_type': node_data.get('type', ''),
+            'node_type': node_type or '',
         })
-
-        node_data = get_node_data(G, node_id)
-        node_type = node_data.get('type')
-        data = node_data.get('data', {})
 
         if node_type == NODE_TYPE_TRIGGER:
             node_run.status = 'success'
@@ -271,6 +272,7 @@ def execute_workflow(self, workflow_run_id: str):
             logs_list = []
             final_exit_code = None
 
+            logger.info(f"Calling execute-worker for node {node_id} (Run: {workflow_run_id})")
             try:
                 with httpx.Client(timeout=None) as client:
                     with client.stream("POST", EXEC_WORKER_URL, json=worker_payload, headers=headers) as response:
@@ -391,6 +393,7 @@ def execute_workflow(self, workflow_run_id: str):
         'status': run.status,
         'error_message': run.error_message or '',
     })
+    logger.info(f"Workflow execution finished for Run: {workflow_run_id} with status {run.status}")
     publish_workflow_log(workflow_run_id, 'done', {
         'workflow_run_id': workflow_run_id,
         'status': run.status,

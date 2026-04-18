@@ -64,6 +64,7 @@ Nodes on the skipped branch get status = "skipped".
 from __future__ import annotations
 
 import re
+import logging
 from typing import Any
 
 import networkx as nx
@@ -82,6 +83,8 @@ _EDGE_HANDLE_ATTR = "sourceHandle"
 
 # ── Template reference pattern: {{node-id.output.FIELD}} ─────────────────────
 _OUTPUT_REF_RE = re.compile(r"\{\{([\w-]+)\.output\.([\w]+)\}\}")
+
+logger = logging.getLogger(__name__)
 
 
 # ─────────────────────────────────────────────────────────────────────────────

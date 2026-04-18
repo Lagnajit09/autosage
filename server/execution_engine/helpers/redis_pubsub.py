@@ -11,7 +11,9 @@ Channel naming:  ``workflow_run:<run_id>:logs``
 import json
 import logging
 import asyncio
+import ssl
 from typing import AsyncGenerator
+from urllib.parse import urlparse, urlencode, urlunparse, parse_qs
 
 import redis
 import redis.asyncio as aioredis
@@ -21,6 +23,23 @@ logger = logging.getLogger(__name__)
 
 # ── Redis URL (reuse from Celery config) ──────────────────────────────────────
 _REDIS_URL: str = getattr(settings, "CELERY_BROKER_URL", "redis://localhost:6379/0")
+
+
+def _strip_ssl_cert_reqs_from_url(url: str) -> str:
+    """
+    Strip the ssl_cert_reqs query parameter from the URL so redis-py does not
+    see it as an unknown parameter. The ssl_cert_reqs value is passed directly
+    as a kwarg instead.
+    """
+    parsed = urlparse(url)
+    qs = parse_qs(parsed.query)
+    qs.pop("ssl_cert_reqs", None)
+    new_query = urlencode({k: v[0] for k, v in qs.items()})
+    return urlunparse(parsed._replace(query=new_query))
+
+
+def _is_ssl_url(url: str) -> bool:
+    return url.startswith("rediss://")
 
 
 def _channel_name(run_id: str) -> str:
@@ -39,7 +58,11 @@ _sync_redis: redis.Redis | None = None
 def _get_sync_redis() -> redis.Redis:
     global _sync_redis
     if _sync_redis is None:
-        _sync_redis = redis.Redis.from_url(_REDIS_URL, decode_responses=True)
+        clean_url = _strip_ssl_cert_reqs_from_url(_REDIS_URL)
+        kwargs: dict = {"decode_responses": True}
+        if _is_ssl_url(_REDIS_URL):
+            kwargs["ssl_cert_reqs"] = ssl.CERT_NONE
+        _sync_redis = redis.Redis.from_url(clean_url, **kwargs)
     return _sync_redis
 
 
@@ -79,7 +102,11 @@ async def subscribe_workflow_logs(
         timeout_seconds:  Maximum duration to keep the subscription open.
     """
     channel = _channel_name(run_id)
-    r = aioredis.from_url(_REDIS_URL, decode_responses=True)
+    clean_url = _strip_ssl_cert_reqs_from_url(_REDIS_URL)
+    async_kwargs: dict = {"decode_responses": True}
+    if _is_ssl_url(_REDIS_URL):
+        async_kwargs["ssl_cert_reqs"] = ssl.CERT_NONE
+    r = aioredis.from_url(clean_url, **async_kwargs)
     pubsub = r.pubsub()
 
     try:

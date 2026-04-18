@@ -36,7 +36,7 @@ logger = logging.getLogger(__name__)
 @permission_classes([IsAuthenticated])
 @throttle_classes([ExecutionBurstThrottle, ExecutionSustainedThrottle])
 def trigger_workflow_run(request, workflow_id):
-    """POST /api/execution-engine/workflows/<workflow_id>/run/"""
+    logger.info(f"Triggering workflow run for ID: {workflow_id}")
     try:
         workflow = Workflow.objects.get(id=workflow_id, user=request.user)
     except Workflow.DoesNotExist:
@@ -105,7 +105,6 @@ def trigger_workflow_run(request, workflow_id):
                     status_code=status.HTTP_400_BAD_REQUEST,
                 )
 
-    # Create WorkflowRun
     workflow_run = WorkflowRun.objects.create(
         workflow=workflow,
         user=request.user,
@@ -144,7 +143,6 @@ def trigger_workflow_run(request, workflow_id):
         )
         execution_order += 1
 
-    # Dispatch Celery task
     task = execute_workflow.delay(str(workflow_run.id))
     workflow_run.celery_task_id = task.id
     workflow_run.save(update_fields=['celery_task_id'])
