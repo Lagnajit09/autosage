@@ -37,6 +37,7 @@ const WorkflowExecution = () => {
   const [isCancelling, setIsCancelling] = useState(false);
   const [elapsedSeconds, setElapsedSeconds] = useState<number | null>(null);
   const elapsedTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [nodeStatuses, setNodeStatuses] = useState<Record<string, string>>({});
 
   const { getToken, isSignedIn } = useAuth();
   const navigate = useNavigate();
@@ -144,15 +145,34 @@ const WorkflowExecution = () => {
             const data = JSON.parse(dataStr);
             console.log(`[SSE ${eventName}]`, data);
 
-            // Temporary simple log handling until full UI in next phase
             if (
               eventName === "log" ||
               eventName === "stdout" ||
               eventName === "stderr"
             ) {
-              setLogs((prev) => [...prev, data.data || JSON.stringify(data)]);
+              setLogs((prev) => [
+                ...prev,
+                data.data || data.stdout || data.stderr || JSON.stringify(data),
+              ]);
             } else if (eventName === "status") {
-              setLogs((prev) => [...prev, `[STATUS] ${data.status}`]);
+              setLogs((prev) => [...prev, `[STATUS] Workflow: ${data.status}`]);
+            } else if (eventName === "node_start") {
+              setNodeStatuses((prev) => ({
+                ...prev,
+                [data.node_id]: "running",
+              }));
+              setLogs((prev) => [...prev, `> Node start: ${data.node_label}`]);
+            } else if (eventName === "node_complete") {
+              setNodeStatuses((prev) => ({
+                ...prev,
+                [data.node_id]: data.status,
+              }));
+              if (data.status !== "skipped") {
+                setLogs((prev) => [
+                  ...prev,
+                  `> Node complete: ${data.node_label} (${data.status})`,
+                ]);
+              }
             } else if (eventName === "done") {
               setLogs((prev) => [
                 ...prev,
@@ -193,6 +213,7 @@ const WorkflowExecution = () => {
   const handleExecute = async () => {
     setIsExecuting(true);
     setLogs([]);
+    setNodeStatuses({});
     setActiveTab("terminal");
     try {
       const token = await getToken();
@@ -284,7 +305,7 @@ const WorkflowExecution = () => {
         </header>
 
         {/* Main Content */}
-        <main className="flex-1 overflow-hidden p-4 flex gap-4">
+        <main className="flex-1 min-h-0 overflow-hidden p-4 flex gap-4">
           {/* Left Column - Nodes & Parameters */}
           <div className="w-1/3 flex flex-col gap-4 overflow-hidden">
             {/* Parameters Section */}
@@ -314,8 +335,11 @@ const WorkflowExecution = () => {
                   Execution Flow
                 </CardTitle>
               </CardHeader>
-              <CardContent className="flex-1 p-0 overflow-y-auto">
-                <ExecutionNodes workflow={workflow} />
+              <CardContent className="flex-1 p-0 overflow-y-auto min-h-0">
+                <ExecutionNodes
+                  workflow={workflow}
+                  nodeStatuses={nodeStatuses}
+                />
               </CardContent>
             </Card>
           </div>
@@ -325,7 +349,7 @@ const WorkflowExecution = () => {
             <Tabs
               value={activeTab}
               onValueChange={setActiveTab}
-              className="flex-1 flex flex-col"
+              className="flex-1 flex flex-col min-h-0"
             >
               <div className="border-b border-gray-200 dark:border-gray-800 px-4">
                 <TabsList className="bg-transparent h-12 gap-2">
@@ -360,17 +384,32 @@ const WorkflowExecution = () => {
                 </TabsList>
               </div>
 
-              <div className="flex-1 overflow-hidden bg-gray-50 dark:bg-black/20">
-                <TabsContent value="terminal" className="h-full m-0 p-0">
-                  <ExecutionTerminal logs={logs} elapsedSeconds={elapsedSeconds} />
+              <div className="flex-1 min-h-0 overflow-hidden bg-gray-50 dark:bg-black/20">
+                <TabsContent
+                  value="terminal"
+                  className="h-full m-0 p-0 data-[state=active]:flex data-[state=active]:flex-col"
+                >
+                  <ExecutionTerminal
+                    logs={logs}
+                    elapsedSeconds={elapsedSeconds}
+                  />
                 </TabsContent>
-                <TabsContent value="logs" className="h-full m-0 p-0">
+                <TabsContent
+                  value="logs"
+                  className="h-full m-0 p-0 data-[state=active]:flex data-[state=active]:flex-col"
+                >
                   <ExecutionLogs />
                 </TabsContent>
-                <TabsContent value="history" className="h-full m-0 p-0">
+                <TabsContent
+                  value="history"
+                  className="h-full m-0 p-0 data-[state=active]:flex data-[state=active]:flex-col"
+                >
                   <ExecutionHistory />
                 </TabsContent>
-                <TabsContent value="response" className="h-full m-0 p-0">
+                <TabsContent
+                  value="response"
+                  className="h-full m-0 p-0 data-[state=active]:flex data-[state=active]:flex-col"
+                >
                   <ExecutionResponse />
                 </TabsContent>
               </div>

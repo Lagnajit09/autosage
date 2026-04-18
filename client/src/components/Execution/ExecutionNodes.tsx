@@ -17,9 +17,10 @@ interface ExecutionNode extends WorkflowNode {
 
 interface ExecutionNodesProps {
   workflow: WorkflowData | null;
+  nodeStatuses?: Record<string, string>;
 }
 
-const ExecutionNodes = ({ workflow }: ExecutionNodesProps) => {
+const ExecutionNodes = ({ workflow, nodeStatuses = {} }: ExecutionNodesProps) => {
   const [nodes, setNodes] = useState<ExecutionNode[]>([]);
 
   useEffect(() => {
@@ -69,14 +70,23 @@ const ExecutionNodes = ({ workflow }: ExecutionNodesProps) => {
     }
   }, [workflow]);
 
+  // Merge runtime statuses
+  const displayNodes = nodes.map(node => ({
+    ...node,
+    status: (nodeStatuses[node.id] as ExecutionNode["status"]) || node.status
+  }));
+
   const getStatusIcon = (status: string) => {
     switch (status) {
       case "success":
         return <CheckCircle className="w-4 h-4 text-green-500" />;
       case "error":
+      case "failed":
         return <AlertCircle className="w-4 h-4 text-red-500" />;
       case "running":
         return <PlayCircle className="w-4 h-4 text-blue-500 animate-pulse" />;
+      case "skipped":
+        return <AlertCircle className="w-4 h-4 text-gray-400" />;
       default:
         return <Clock className="w-4 h-4 text-gray-400" />;
     }
@@ -87,7 +97,7 @@ const ExecutionNodes = ({ workflow }: ExecutionNodesProps) => {
   return (
     <div className="h-full overflow-y-auto p-4">
       <div className="space-y-3">
-        {nodes.map((node, index) => (
+        {displayNodes.map((node, index) => (
           <div
             key={node.id}
             className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-3 shadow-sm flex items-center gap-3 group hover:border-purple-500/50 transition-colors"
