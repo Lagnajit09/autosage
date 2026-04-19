@@ -213,6 +213,7 @@ def resolve_condition_value(raw_value: str, node_outputs: dict[str, Any]) -> Any
 def resolve_parameters(
     parameters: list[dict[str, Any]],
     node_outputs: dict[str, Any],
+    workflow_inputs: dict[str, Any] = None,
 ) -> dict[str, Any]:
     """
     Resolve a node's ``parameters`` list into a flat ``{name: value}`` dict
@@ -224,21 +225,23 @@ def resolve_parameters(
         The ``value`` field is a literal string.  It is coerced to the
         appropriate Python type via the parameter's ``type`` field
         (``"number"`` | ``"boolean"`` | ``"string"``).
+        If the parameter's ``id`` is present in ``workflow_inputs``, that value
+        overrides the default ``value``.
 
     * ``sourceType == "output"``
         The ``value`` field contains a ``{{node-id.output.FIELD}}`` template
         reference.  It is resolved from ``node_outputs`` and then coerced.
         If the declared ``value`` has no template (edge-case: user cleared it),
         it falls back to a plain-literal coercion.
+        If overridden in ``workflow_inputs``, the provided string is evaluated for
+        template references.
 
     Parameters with an empty ``name`` are silently skipped.
 
     Args:
-        parameters:   List of parameter dicts from ``node.data.parameters``.
-        node_outputs: Dict mapping completed node IDs -> their parsed JSON output.
-                      Keys are node IDs (e.g. ``"action-1771310603866"``).
-                      Values are the parsed dict from the node's JSON stdout,
-                      i.e. the ``jsonSchema``-compliant output the script emitted.
+        parameters:      List of parameter dicts from ``node.data.parameters``.
+        node_outputs:    Dict mapping completed node IDs -> their parsed JSON output.
+        workflow_inputs: Dict of runtime inputs overriding defaults (mapping param ID -> value).
 
     Returns:
         ``{param_name: resolved_value, ...}``
@@ -275,6 +278,7 @@ def resolve_parameters(
         # -> {"THRESHOLD": 80, "MEMORY": 87}
     """
     resolved: dict[str, Any] = {}
+    workflow_inputs = workflow_inputs or {}
 
     for param in parameters:
         name: str = (param.get("name") or "").strip()
@@ -283,7 +287,13 @@ def resolve_parameters(
             continue
 
         source_type: str = (param.get("sourceType") or SOURCE_MANUAL).lower()
+        param_id: str = param.get("id", "")
         raw_value: Any = param.get("value", "")
+        
+        # Override with runtime input if provided
+        if param_id and param_id in workflow_inputs:
+            raw_value = workflow_inputs[param_id]
+            
         param_type: str = param.get("type", "string")
 
         if source_type == SOURCE_MANUAL:

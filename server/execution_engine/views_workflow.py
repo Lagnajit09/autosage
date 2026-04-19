@@ -252,6 +252,11 @@ def cancel_workflow_run(request, run_id):
         finished_at=timezone.now()
     )
 
+    WorkflowRun.objects.filter(id=run_id).update(
+        status='cancelled', 
+        finished_at=timezone.now()
+    )
+
     return api_response(
         success=True,
         message="Workflow execution cancelled successfully."

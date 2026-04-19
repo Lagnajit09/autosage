@@ -95,13 +95,22 @@ def execute_workflow(self, workflow_run_id: str):
     fail_fast = True # Stop execution if a node fails
 
     for node_id in topo_order:
+        # Check if the workflow was cancelled during execution (especially for Windows/solo workers where revoke signals may fail)
+        run.refresh_from_db(fields=['status'])
+        if run.status == 'cancelled':
+            logger.info(f"WorkflowRun {workflow_run_id} cancelled mid-execution. Aborting.")
+            publish_workflow_log(workflow_run_id, 'log', {
+                'stdout': "[SYSTEM] Workflow cancelled by user. Halting further execution."
+            })
+            break
+
         logger.info(f"Processing node {node_id} for Run: {workflow_run_id}")
         try:
             node_run = WorkflowNodeRun.objects.get(workflow_run=run, node_id=node_id)
         except WorkflowNodeRun.DoesNotExist:
             continue
 
-        if node_run.status == 'skipped':
+        if node_run.status in ['skipped', 'cancelled']:
             continue
 
         node_run.status = 'running'
@@ -138,22 +147,43 @@ def execute_workflow(self, workflow_run_id: str):
             conditions = data.get('conditions', [])
             decision_result = True
             
-            for cond in conditions:
-                raw_field = cond.get('field', '')
-                operator = cond.get('operator', '==')
-                raw_target = cond.get('value', '')
-                
-                field_val = resolve_condition_value(raw_field, node_outputs)
-                target_val = resolve_condition_value(raw_target, node_outputs)
-                
-                cond_result = _evaluate_condition(field_val, operator, target_val)
-                publish_workflow_log(workflow_run_id, 'log', {
-                    'stdout': f"[EVAL] Evaluated '{raw_field}' ({field_val}) {operator} '{raw_target}' ({target_val}) -> {cond_result}"
-                })
+            try:
+                for cond in conditions:
+                    raw_field = cond.get('field', '')
+                    operator = cond.get('operator', '==')
+                    raw_target = cond.get('value', '')
+                    
+                    field_val = resolve_condition_value(raw_field, node_outputs)
+                    target_val = resolve_condition_value(raw_target, node_outputs)
+                    
+                    cond_result = _evaluate_condition(field_val, operator, target_val)
+                    publish_workflow_log(workflow_run_id, 'log', {
+                        'stdout': f"[EVAL] Evaluated '{raw_field}' ({field_val}) {operator} '{raw_target}' ({target_val}) -> {cond_result}"
+                    })
 
-                if not cond_result:
-                    decision_result = False
+                    if not cond_result:
+                        decision_result = False
+                        break
+            except Exception as e:
+                node_run.status = 'failed'
+                node_run.error_message = f"Condition evaluation error: {str(e)}"
+                node_run.finished_at = dj_timezone.now()
+                node_run.save(update_fields=['status', 'error_message', 'finished_at'])
+                
+                duration = (node_run.finished_at - node_run.started_at).total_seconds()
+                publish_workflow_log(workflow_run_id, 'node_complete', {
+                    'node_id': node_id,
+                    'node_label': node_run.node_label,
+                    'node_type': 'decision',
+                    'status': 'failed',
+                    'duration': duration,
+                })
+                
+                if fail_fast:
+                    run.status = 'failed'
+                    run.error_message = f"Node {node_id} failed: {node_run.error_message}"
                     break
+                continue
             
             outgoing = get_outgoing_branches(G, node_id)
             taken_handle = EDGE_HANDLE_TRUE if decision_result else EDGE_HANDLE_FALSE
@@ -218,7 +248,7 @@ def execute_workflow(self, workflow_run_id: str):
 
             try:
                 params = data.get('parameters', [])
-                resolved_params = resolve_parameters(params, node_outputs)
+                resolved_params = resolve_parameters(params, node_outputs, run.inputs)
                 if resolved_params:
                     publish_workflow_log(workflow_run_id, 'log', {
                         'stdout': f"[PARAM] Resolved parameters: {resolved_params}"
@@ -228,6 +258,14 @@ def execute_workflow(self, workflow_run_id: str):
                 node_run.error_message = f"Parameter resolution error: {str(e)}"
                 node_run.finished_at = dj_timezone.now()
                 node_run.save(update_fields=['status', 'error_message', 'finished_at'])
+                
+                publish_workflow_log(workflow_run_id, 'node_complete', {
+                    'node_id': node_id,
+                    'node_label': node_run.node_label,
+                    'node_type': 'action',
+                    'status': 'failed',
+                    'duration': (node_run.finished_at - node_run.started_at).total_seconds(),
+                })
                 
                 if fail_fast:
                     run.status = 'failed'
@@ -240,6 +278,15 @@ def execute_workflow(self, workflow_run_id: str):
                 node_run.error_message = "EXEC_WORKER_URL is not configured."
                 node_run.finished_at = dj_timezone.now()
                 node_run.save(update_fields=['status', 'error_message', 'finished_at'])
+                
+                publish_workflow_log(workflow_run_id, 'node_complete', {
+                    'node_id': node_id,
+                    'node_label': node_run.node_label,
+                    'node_type': 'action',
+                    'status': 'failed',
+                    'duration': (node_run.finished_at - node_run.started_at).total_seconds(),
+                })
+                
                 if fail_fast:
                     run.status = 'failed'
                     run.error_message = "Execution worker URL not configured."
@@ -255,6 +302,15 @@ def execute_workflow(self, workflow_run_id: str):
                 node_run.error_message = f"Missing binding configuration: {str(e)}"
                 node_run.finished_at = dj_timezone.now()
                 node_run.save(update_fields=['status', 'error_message', 'finished_at'])
+                
+                publish_workflow_log(workflow_run_id, 'node_complete', {
+                    'node_id': node_id,
+                    'node_label': node_run.node_label,
+                    'node_type': 'action',
+                    'status': 'failed',
+                    'duration': (node_run.finished_at - node_run.started_at).total_seconds(),
+                })
+                
                 if fail_fast:
                     run.status = 'failed'
                     run.error_message = f"Node {node_id} binding error."
@@ -330,7 +386,7 @@ def execute_workflow(self, workflow_run_id: str):
                                     stdout_text += str(cdata) + "\n"
                                     logs_list.append({"type": "stdout", "data": cdata, "ts": ts})
                                     publish_workflow_log(workflow_run_id, 'log', {
-                                        'stdout': f"[STDOUT] {cdata}" if not str(cdata).startswith("[") else str(cdata),
+                                        'stdout': f"> {cdata}" if not str(cdata).startswith("[") else str(cdata),
                                     })
                                 elif ctype in ('stderr', 'error'):
                                     stderr_text += str(cdata) + "\n"
