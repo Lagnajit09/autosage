@@ -115,7 +115,6 @@ const WorkflowBuilderContent = ({
   }, [selectedNode, selectedEdge]);
 
   const importWorkflow = (workflowData: WorkflowData) => {
-    toast2.loading("Importing workflow...");
     try {
       const { name, nodes: importedNodes, edges: importedEdges } = workflowData;
 
@@ -516,6 +515,24 @@ const WorkflowBuilderContent = ({
     URL.revokeObjectURL(url);
   };
 
+  const handleCopyWorkflow = () => {
+    const workflow = {
+      nodes,
+      edges,
+      name: workflowName,
+      id: workflowId,
+    };
+    const workflowWithMetadata = {
+      ...workflow,
+      timestamp: new Date().toISOString(),
+      totalNodes: nodes.length,
+      totalEdges: edges.length,
+    };
+    const json = JSON.stringify(workflowWithMetadata, null, 2);
+    navigator.clipboard.writeText(json);
+    toast2.success("Workflow copied to clipboard");
+  };
+
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-workflow-void overflow-hidden">
       <div className="w-full h-screen bg-transparent">
@@ -542,6 +559,7 @@ const WorkflowBuilderContent = ({
           <AppContextMenu
             mode="workflow"
             workflowActions={{
+              onCopyWorkflow: handleCopyWorkflow,
               onExportJson: handleExportJson,
               onSaveWorkflow: saveWorkflow,
               onDeleteWorkflow: handleDeleteWorkflow,

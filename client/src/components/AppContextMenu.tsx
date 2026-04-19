@@ -16,6 +16,7 @@ type BaseActions = {
 };
 
 type WorkflowActions = {
+  onCopyWorkflow?: () => void;
   onExportJson?: () => void;
   onSaveWorkflow?: () => void;
   onDeleteWorkflow?: () => void;
@@ -38,7 +39,8 @@ export function AppContextMenu({
 }: AppContextMenuProps) {
   const { onReload, onBack, onForward } = baseActions;
 
-  const { onExportJson, onSaveWorkflow, onDeleteWorkflow } = workflowActions;
+  const { onCopyWorkflow, onExportJson, onSaveWorkflow, onDeleteWorkflow } =
+    workflowActions;
 
   // Default implementations for browser-like actions
   const handleReload = () => {
@@ -81,6 +83,9 @@ export function AppContextMenu({
         {mode === "workflow" && (
           <>
             <ContextMenuLabel>Workflow</ContextMenuLabel>
+            <ContextMenuItem onSelect={onCopyWorkflow}>
+              Copy Workflow
+            </ContextMenuItem>
             <ContextMenuItem onSelect={onExportJson}>
               Export JSON
             </ContextMenuItem>
