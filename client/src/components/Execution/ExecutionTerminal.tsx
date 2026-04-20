@@ -32,11 +32,9 @@ const renderLogLine = (log: string) => {
   switch (tag) {
     case "START":
       tagClass = "text-blue-400";
-      contentClass = "text-blue-200";
       break;
     case "SUCCESS":
       tagClass = "text-green-400";
-      contentClass = "text-green-200";
       break;
     case "ERROR":
     case "FAILURE":
@@ -55,19 +53,17 @@ const renderLogLine = (log: string) => {
       tagClass = "text-cyan-400";
       break;
     case "STDOUT":
-      tagClass = "text-amber-400";
-      contentClass = "text-amber-100";
+      tagClass = "text-amber-500";
+      contentClass = "text-gray-200";
       break;
     case "INFO":
       tagClass = "text-blue-300";
       break;
     case "STATUS":
-      tagClass = "text-pink-400 font-bold";
-      contentClass = "text-pink-200 font-medium";
+      tagClass = "text-pink-400 font-semibold";
       break;
     case "DONE":
-      tagClass = "text-green-500 font-bold";
-      contentClass = "text-green-100 font-medium";
+      tagClass = "text-green-500 font-semibold";
       break;
   }
 
