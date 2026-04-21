@@ -119,6 +119,7 @@ class ScriptInfo(BaseModel):
     name: str
     pathname: str
     blob_url: str
+    content: Optional[str] = None
 
 
 class ServerInfo(BaseModel):
@@ -275,34 +276,38 @@ async def execute_script(
     )
 
     async def generate() -> AsyncGenerator[str, None]:
-        # ── 1. Fetch script content from GCS ──────────────────────
+        # ── 1. Fetch script content ──────────────────────────────
         try:
-            # blob_url format: https://storage.googleapis.com/bucket-name/path/to/blob
-            # Or we can use the pathname and assume a bucket if it's not in the URL
-            bucket_name = "autosagex-drive"
-            blob_url = exec_request.script.blob_url
-            
-            # Extract bucket and path from GCS URL if it's in that format
-            if "storage.googleapis.com" in blob_url:
-                parts = blob_url.replace("https://storage.googleapis.com/", "").split("/", 1)
-                if len(parts) == 2:
-                    bucket_name = parts[0]
-                    blob_path = parts[1]
+            if exec_request.script.content:
+                logger.info("Using provided script content (pre-rendered by server)")
+                script_content = exec_request.script.content
+            else:
+                # blob_url format: https://storage.googleapis.com/bucket-name/path/to/blob
+                # Or we can use the pathname and assume a bucket if it's not in the URL
+                bucket_name = "autosagex-drive"
+                blob_url = exec_request.script.blob_url
+                
+                # Extract bucket and path from GCS URL if it's in that format
+                if "storage.googleapis.com" in blob_url:
+                    parts = blob_url.replace("https://storage.googleapis.com/", "").split("/", 1)
+                    if len(parts) == 2:
+                        bucket_name = parts[0]
+                        blob_path = parts[1]
+                    else:
+                        blob_path = exec_request.script.pathname
                 else:
                     blob_path = exec_request.script.pathname
-            else:
-                blob_path = exec_request.script.pathname
 
-            logger.info("Fetching script from GCS: bucket=%s path=%s", bucket_name, blob_path)
+                logger.info("Fetching script from GCS: bucket=%s path=%s", bucket_name, blob_path)
 
-            # Initialize client based on current environment
-            storage_client = build_gcs_client()
-            bucket = storage_client.bucket(bucket_name)
-            blob = bucket.blob(blob_path)
-            
-            # Use run_in_executor for synchronous storage call
-            loop = asyncio.get_event_loop()
-            script_content = await loop.run_in_executor(None, blob.download_as_text)
+                # Initialize client based on current environment
+                storage_client = build_gcs_client()
+                bucket = storage_client.bucket(bucket_name)
+                blob = bucket.blob(blob_path)
+                
+                # Use run_in_executor for synchronous storage call
+                loop = asyncio.get_event_loop()
+                script_content = await loop.run_in_executor(None, blob.download_as_text)
 
         except NotFound:
             yield ndjson({"type": "error", "data": "Script file not found in cloud storage."})
