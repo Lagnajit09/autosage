@@ -380,13 +380,6 @@ const WorkflowExecution = () => {
                     Terminal
                   </TabsTrigger>
                   <TabsTrigger
-                    value="logs"
-                    className="data-[state=active]:bg-gray-100 dark:data-[state=active]:bg-gray-800 data-[state=active]:text-purple-600 dark:data-[state=active]:text-purple-400 rounded-md px-4"
-                  >
-                    <FileText className="w-4 h-4 mr-2" />
-                    Logs
-                  </TabsTrigger>
-                  <TabsTrigger
                     value="history"
                     className="data-[state=active]:bg-gray-100 dark:data-[state=active]:bg-gray-800 data-[state=active]:text-purple-600 dark:data-[state=active]:text-purple-400 rounded-md px-4"
                   >
@@ -415,22 +408,16 @@ const WorkflowExecution = () => {
                   />
                 </TabsContent>
                 <TabsContent
-                  value="logs"
-                  className="h-full m-0 p-0 data-[state=active]:flex data-[state=active]:flex-col"
-                >
-                  <ExecutionLogs />
-                </TabsContent>
-                <TabsContent
                   value="history"
                   className="h-full m-0 p-0 data-[state=active]:flex data-[state=active]:flex-col"
                 >
-                  <ExecutionHistory />
+                  <ExecutionHistory workflowId={id} />
                 </TabsContent>
                 <TabsContent
                   value="response"
                   className="h-full m-0 p-0 data-[state=active]:flex data-[state=active]:flex-col"
                 >
-                  <ExecutionResponse />
+                  <ExecutionResponse workflowId={id} activeRunId={runId} />
                 </TabsContent>
               </div>
             </Tabs>

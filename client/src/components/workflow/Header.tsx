@@ -24,7 +24,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useTheme } from "@/contexts/theme/theme-context";
 import { Button } from "../ui/button";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 
 const Header = ({
   nodes,
@@ -144,12 +144,15 @@ const Header = ({
                   <Trash2 className="mr-2 h-4 w-4" />
                   <span>Delete Workflow</span>
                 </DropdownMenuItem>
-                <DropdownMenuItem
-                  onClick={() => navigate("/script-editor")}
-                  className="cursor-pointer text-gray-700 dark:text-gray-300 focus:bg-gray-100 dark:focus:bg-gray-800"
-                >
-                  <Code2 className="mr-2 h-4 w-4" />
-                  <span>Script Editor</span>
+                <DropdownMenuItem>
+                  <Link
+                    to="/script-editor"
+                    target="_blank"
+                    className="flex items-center gap-4 text-gray-700 dark:text-gray-300 focus:bg-gray-100 dark:focus:bg-gray-800"
+                  >
+                    <Code2 className="h-4 w-4" />
+                    <span>Script Editor</span>
+                  </Link>
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>

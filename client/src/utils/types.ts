@@ -281,3 +281,35 @@ export interface ScriptExecution {
   created_at: string;
   updated_at: string;
 }
+
+export interface WorkflowRun {
+  id: string;
+  workflow_id: string;
+  workflow_name: string;
+  user_id: string;
+  status: "queued" | "running" | "success" | "failed" | "cancelled";
+  error_message: string;
+  started_at: string | null;
+  finished_at: string | null;
+  created_at: string;
+  inputs: Record<string, any>;
+}
+
+export interface WorkflowNodeRun {
+  id: string;
+  workflow_run_id: string;
+  node_id: string;
+  node_label: string;
+  status: "pending" | "running" | "success" | "failed" | "skipped";
+  execution_order: number;
+  stdout_log_url: string;
+  stderr_log_url: string;
+  logs_url: string;
+  stdout_signed_url?: string;
+  stderr_signed_url?: string;
+  logs_signed_url?: string;
+  exit_code: number | null;
+  error_message: string;
+  started_at: string | null;
+  finished_at: string | null;
+}
