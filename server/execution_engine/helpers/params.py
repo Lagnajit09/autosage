@@ -80,7 +80,12 @@ def _coerce_value(raw: Any, param_type: str) -> Any:
     if ptype == "boolean":
         if isinstance(raw, bool):
             return raw
-        return str(raw).strip().lower() in ("true", "1", "yes")
+        val_str = str(raw).strip().lower()
+        if val_str in ("true", "1", "yes", "on", "True", "TRUE", "Yes", "YES", "On", "ON"):
+            return True
+        if val_str in ("false", "0", "no", "off", "False", "FALSE", "No", "NO", "Off", "OFF"):
+            return False
+        return False
 
     # Default: string
     return str(raw)

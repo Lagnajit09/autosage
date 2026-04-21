@@ -24,14 +24,33 @@ from execution_engine.helpers.params import (
     resolve_parameters,
     resolve_condition_value
 )
-from execution_engine.helpers.gcs import upload_execution_logs
+from execution_engine.helpers.gcs import upload_execution_logs, upload_workflow_node_logs
 from execution_engine.helpers.script_execution.worker import build_worker_headers, EXEC_WORKER_URL
 from execution_engine.helpers.redis_pubsub import publish_workflow_log
 
 logger = logging.getLogger(__name__)
 
 def _evaluate_condition(field_val, operator, target_val):
-    """Evaluate a decision node condition."""
+    """Evaluate a decision node condition with robust boolean and numeric handling."""
+    
+    # 1. Normalize to lowercased strings to detect booleans regardless of casing
+    fv_str = str(field_val).strip().lower()
+    tv_str = str(target_val).strip().lower()
+    
+    bool_map = {
+        "true": True, "1": True, "yes": True, "on": True,
+        "false": False, "0": False, "no": False, "off": False
+    }
+    
+    # If both sides are boolean-like, compare as actual Python booleans
+    if fv_str in bool_map and tv_str in bool_map:
+        fv_bool = bool_map[fv_str]
+        tv_bool = bool_map[tv_str]
+        if operator == "==": return fv_bool == tv_bool
+        if operator == "!=": return fv_bool != tv_bool
+        return False # Inequalities not supported for booleans
+
+    # 2. Fall back to numeric or string comparisons
     def try_float(v):
         try: return float(v)
         except (ValueError, TypeError): return v
@@ -48,9 +67,6 @@ def _evaluate_condition(field_val, operator, target_val):
         if operator == "<": return fv < tv
         if operator == "<=": return fv <= tv
         
-    fv_str = str(field_val).lower()
-    tv_str = str(target_val).lower()
-    
     if operator == "contains": return tv_str in fv_str
     if operator == "not_contains": return tv_str not in fv_str
     if operator == "startswith": return fv_str.startswith(tv_str)
@@ -321,6 +337,20 @@ def execute_workflow(self, workflow_run_id: str):
             if server_host.startswith(('http://', 'https://')):
                 server_host = server_host.split('://', 1)[1]
 
+            # Fetch script content from GCS (authenticated) and resolve {{VAR}} placeholders
+            # before sending to worker. This avoids the worker needing workflow state.
+            rendered_script = None
+            try:
+                from execution_engine.helpers.gcs import download_script_content
+                from execution_engine.helpers.params import resolve_template_variables
+
+                script_body = download_script_content(script.blob_url)
+                rendered_script = resolve_template_variables(script_body, resolved_params)
+                logger.info(f"[Node {node_id}] Script rendered successfully ({len(rendered_script)} bytes)")
+            except Exception as e:
+                # Log and fall through — worker will attempt its own GCS fetch as fallback
+                logger.error(f"[Node {node_id}] Failed to fetch/render script from GCS: {str(e)}")
+
             worker_payload = {
                 "execution_id": str(node_run.id),
                 "script": {
@@ -328,6 +358,7 @@ def execute_workflow(self, workflow_run_id: str):
                     "name": script.name,
                     "pathname": script.pathname,
                     "blob_url": script.blob_url,
+                    "content": rendered_script,
                 },
                 "server": {
                     "id": str(server.id),
@@ -424,9 +455,11 @@ def execute_workflow(self, workflow_run_id: str):
             })
             
             try:
-                gcs_urls = upload_execution_logs(
+                gcs_urls = upload_workflow_node_logs(
                     user_id=run.user_id,
-                    execution_id=str(node_run.id),
+                    workflow_id=str(run.workflow_id),
+                    run_id=str(run.id),
+                    node_id=node_id,
                     stdout=stdout_text,
                     stderr=stderr_text,
                     logs=logs_list

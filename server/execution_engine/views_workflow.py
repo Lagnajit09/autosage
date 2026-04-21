@@ -160,7 +160,13 @@ def trigger_workflow_run(request, workflow_id):
 @throttle_classes([ExecutionBurstThrottle, ExecutionSustainedThrottle])
 def list_workflow_runs(request):
     """GET /api/execution-engine/workflows/runs/"""
-    runs = WorkflowRun.objects.filter(user=request.user).order_by('-created_at')
+    workflow_id = request.query_params.get('workflow_id')
+    runs = WorkflowRun.objects.filter(user=request.user)
+    
+    if workflow_id:
+        runs = runs.filter(workflow_id=workflow_id)
+        
+    runs = runs.order_by('-created_at')
     serializer = WorkflowRunSerializer(runs, many=True)
     return api_response(
         success=True,

@@ -115,10 +115,13 @@ class WorkflowNodeRunSerializer(serializers.ModelSerializer):
 
 
 class WorkflowRunSerializer(serializers.ModelSerializer):
+    workflow_name = serializers.CharField(source='workflow.name', read_only=True)
+
     class Meta:
         model = WorkflowRun
         fields = [
-            'id', 'workflow_id', 'user_id', 'status', 'error_message',
+            'id', 'workflow_id', 'workflow_name', 'user_id', 'status', 'error_message',
             'started_at', 'finished_at', 'created_at', 'inputs'
         ]
         read_only_fields = fields
+

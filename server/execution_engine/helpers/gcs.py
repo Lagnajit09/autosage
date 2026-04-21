@@ -34,10 +34,18 @@ def _get_logs_bucket() -> storage.Bucket:
 
 def build_log_blob_path(user_id, execution_id: str, filename: str) -> str:
     """
-    Build the canonical GCS blob path for an execution log.
+    Build the canonical GCS blob path for a script execution log.
     Pattern: scripts-execution/<user_id>/<execution_id>/<filename>
     """
     return f"scripts-execution/{user_id}/{execution_id}/{filename}"
+
+
+def build_workflow_log_blob_path(user_id, workflow_id: str, run_id: str, node_id: str, filename: str) -> str:
+    """
+    Build the canonical GCS blob path for a workflow node execution log.
+    Pattern: workflow-execution/<user_id>/<workflow_id>/<run_id>/<node_id>/<filename>
+    """
+    return f"workflow-execution/{user_id}/{workflow_id}/{run_id}/{node_id}/{filename}"
 
 
 def build_log_url(blob_path: str) -> str:
@@ -64,7 +72,7 @@ def upload_log(blob_path: str, content: str, content_type: str = "text/plain") -
 
 def upload_execution_logs(user_id, execution_id: str, stdout: str, stderr: str, logs: list) -> dict:
     """
-    Upload stdout, stderr, and logs (as JSON) to GCS for a given execution.
+    Upload stdout, stderr, and logs (as JSON) to GCS for a given script execution.
 
     Returns:
         dict with keys: stdout_log_url, stderr_log_url, logs_url
@@ -72,6 +80,29 @@ def upload_execution_logs(user_id, execution_id: str, stdout: str, stderr: str, 
     stdout_path = build_log_blob_path(user_id, execution_id, "stdout.log")
     stderr_path = build_log_blob_path(user_id, execution_id, "stderr.log")
     logs_path   = build_log_blob_path(user_id, execution_id, "logs.json")
+
+    from django.core.serializers.json import DjangoJSONEncoder
+    stdout_url = upload_log(stdout_path, stdout or "", content_type="text/plain")
+    stderr_url = upload_log(stderr_path, stderr or "", content_type="text/plain")
+    logs_url   = upload_log(logs_path, json.dumps(logs, cls=DjangoJSONEncoder, indent=2), content_type="application/json")
+
+    return {
+        "stdout_log_url": stdout_url,
+        "stderr_log_url": stderr_url,
+        "logs_url": logs_url,
+    }
+
+
+def upload_workflow_node_logs(user_id, workflow_id: str, run_id: str, node_id: str, stdout: str, stderr: str, logs: list) -> dict:
+    """
+    Upload stdout, stderr, and logs (as JSON) to GCS for a given workflow node.
+
+    Returns:
+        dict with keys: stdout_log_url, stderr_log_url, logs_url
+    """
+    stdout_path = build_workflow_log_blob_path(user_id, workflow_id, run_id, node_id, "stdout.log")
+    stderr_path = build_workflow_log_blob_path(user_id, workflow_id, run_id, node_id, "stderr.log")
+    logs_path   = build_workflow_log_blob_path(user_id, workflow_id, run_id, node_id, "logs.json")
 
     from django.core.serializers.json import DjangoJSONEncoder
     stdout_url = upload_log(stdout_path, stdout or "", content_type="text/plain")
@@ -131,4 +162,42 @@ def download_log(blob_path: str) -> str:
     blob = bucket.blob(blob_path)
     content = blob.download_as_text(encoding="utf-8")
     logger.info(f"Downloaded log from GCS: {blob_path}")
+    return content
+
+
+def download_script_content(blob_url: str) -> str:
+    """
+    Download script content from a GCS URL using authenticated access.
+
+    Accepts either:
+      - a full GCS URL: https://storage.googleapis.com/<bucket>/<path>
+      - a gs:// style URL: gs://<bucket>/<path>
+
+    Returns:
+        The raw text content of the script blob.
+
+    Raises:
+        ValueError: if the URL format is unrecognised.
+        NotFound: if the blob does not exist.
+        GoogleCloudError: on other download failures.
+    """
+    bucket_name: str
+    blob_path: str
+
+    if blob_url.startswith("https://storage.googleapis.com/"):
+        # https://storage.googleapis.com/<bucket>/<path>
+        rest = blob_url[len("https://storage.googleapis.com/"):]
+        bucket_name, blob_path = rest.split("/", 1)
+    elif blob_url.startswith("gs://"):
+        # gs://<bucket>/<path>
+        rest = blob_url[len("gs://"):]
+        bucket_name, blob_path = rest.split("/", 1)
+    else:
+        raise ValueError(f"Unrecognised GCS URL format: {blob_url}")
+
+    client = _get_client()
+    bucket = client.bucket(bucket_name)
+    blob = bucket.blob(blob_path)
+    content = blob.download_as_text(encoding="utf-8")
+    logger.info(f"Downloaded script from GCS: gs://{bucket_name}/{blob_path} ({len(content)} bytes)")
     return content
