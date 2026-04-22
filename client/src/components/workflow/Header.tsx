@@ -53,6 +53,7 @@ const Header = ({
       <Button
         onClick={() => navigate(`/workflow/execution/${workflowId}`)}
         className="flex items-center bg-green-100 hover:bg-green-200 dark:bg-green-900/50 dark:hover:bg-green-800 text-green-600 dark:text-green-400 border-2 border-green-500/90 rounded-xl"
+        disabled={!workflowId}
       >
         <PlayCircle />
         <span className="font-medium">Run</span>

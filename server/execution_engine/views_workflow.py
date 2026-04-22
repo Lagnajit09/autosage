@@ -105,11 +105,24 @@ def trigger_workflow_run(request, workflow_id):
                     status_code=status.HTTP_400_BAD_REQUEST,
                 )
 
+    # Mask passwords before saving to DB
+    masked_inputs = dict(inputs)
+    password_param_ids = set()
+    for node in workflow.nodes:
+        params = node.get("data", {}).get("parameters", [])
+        for p in params:
+            if p.get("type") == "password":
+                password_param_ids.add(p.get("id"))
+                
+    for pid in password_param_ids:
+        if pid in masked_inputs and masked_inputs[pid]:
+            masked_inputs[pid] = "*****"
+
     workflow_run = WorkflowRun.objects.create(
         workflow=workflow,
         user=request.user,
         status="queued",
-        inputs=inputs
+        inputs=masked_inputs
     )
 
     # Create WorkflowNodeRuns
@@ -143,7 +156,7 @@ def trigger_workflow_run(request, workflow_id):
         )
         execution_order += 1
 
-    task = execute_workflow.delay(str(workflow_run.id))
+    task = execute_workflow.delay(str(workflow_run.id), raw_inputs=inputs)
     workflow_run.celery_task_id = task.id
     workflow_run.save(update_fields=['celery_task_id'])
 

@@ -199,7 +199,7 @@ const ExecutionHistory = ({ workflowId }: ExecutionHistoryProps) => {
     <div className="h-full bg-white dark:bg-gray-950 flex flex-col overflow-hidden">
       <div className="p-4 border-b border-gray-200 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-900/30 flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <HistoryIcon className="h-4 h-4 text-purple-500" />
+          <HistoryIcon className="w-4 h-4 text-purple-500" />
           <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">
             Execution History
           </h3>
@@ -209,10 +209,10 @@ const ExecutionHistory = ({ workflowId }: ExecutionHistoryProps) => {
           size="sm"
           onClick={fetchHistory}
           disabled={isLoading}
-          className="h-8 text-xs h-8"
+          className="w-8 h-8 text-xs mr-4"
         >
           {isLoading ? (
-            <Loader2 className="h-3 w-3 animate-spin mr-2" />
+            <Loader2 className="h-4 w-4 animate-spin mr-2" />
           ) : (
             "Refresh"
           )}
@@ -256,7 +256,9 @@ const ExecutionHistory = ({ workflowId }: ExecutionHistoryProps) => {
                   <TableCell colSpan={5} className="h-32 text-center">
                     <div className="flex flex-col items-center justify-center gap-1 text-muted-foreground">
                       <p className="text-sm font-medium">No history yet</p>
-                      <p className="text-xs">Run the workflow to see history.</p>
+                      <p className="text-xs">
+                        Run the workflow to see history.
+                      </p>
                     </div>
                   </TableCell>
                 </TableRow>
@@ -298,7 +300,9 @@ const ExecutionHistory = ({ workflowId }: ExecutionHistoryProps) => {
                           size="sm"
                           className="h-8 px-2 text-gray-500 hover:text-purple-600 dark:hover:text-purple-400"
                           onClick={() => handleCopyLogs(run)}
-                          disabled={run.status === "queued" || run.status === "running"}
+                          disabled={
+                            run.status === "queued" || run.status === "running"
+                          }
                         >
                           <Copy className="h-3.5 w-3.5 mr-1.5" />
                           <span className="hidden lg:inline">Copy</span>
@@ -308,7 +312,9 @@ const ExecutionHistory = ({ workflowId }: ExecutionHistoryProps) => {
                           size="sm"
                           className="h-8 px-2 text-gray-500 hover:text-purple-600 dark:hover:text-purple-400"
                           onClick={() => handleDownloadLogs(run)}
-                          disabled={run.status === "queued" || run.status === "running"}
+                          disabled={
+                            run.status === "queued" || run.status === "running"
+                          }
                         >
                           <Download className="h-3.5 w-3.5 mr-1.5" />
                           <span className="hidden lg:inline">Logs</span>

@@ -35,7 +35,7 @@ export interface ConditionItem {
 export interface Parameter {
   id: string;
   name: string;
-  type: "string" | "number" | "boolean" | "file";
+  type: "string" | "number" | "boolean" | "password";
   description?: string;
   value?: string;
   sourceType?: "manual" | "output";

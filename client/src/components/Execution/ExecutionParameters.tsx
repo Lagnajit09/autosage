@@ -1,6 +1,12 @@
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
-import { Switch } from "@/components/ui/switch";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { WorkflowData } from "@/utils/types";
 
 interface ExecutionParametersProps {
@@ -9,7 +15,11 @@ interface ExecutionParametersProps {
   onInputChange: (id: string, value: string) => void;
 }
 
-const ExecutionParameters = ({ workflow, inputs, onInputChange }: ExecutionParametersProps) => {
+const ExecutionParameters = ({
+  workflow,
+  inputs,
+  onInputChange,
+}: ExecutionParametersProps) => {
   if (!workflow) return null;
 
   // Extract all parameters from all nodes
@@ -37,7 +47,7 @@ const ExecutionParameters = ({ workflow, inputs, onInputChange }: ExecutionParam
               htmlFor={param.id}
               className="text-xs font-semibold text-gray-500 uppercase tracking-wider"
             >
-              {param.name}
+              {param.name} ({param.type})
             </Label>
             <span className="text-[10px] text-gray-400 font-mono italic">
               via {param.nodeLabel}
@@ -45,24 +55,42 @@ const ExecutionParameters = ({ workflow, inputs, onInputChange }: ExecutionParam
           </div>
 
           {param.type === "boolean" ? (
-            <div className="flex items-center justify-between py-1">
-              <span className="text-sm text-gray-600 dark:text-gray-400">
-                {param.description || `Enable ${param.name}`}
-              </span>
-              <Switch
-                id={param.id}
-                checked={inputs[param.id] === "true"}
-                onCheckedChange={(checked) => onInputChange(param.id, checked ? "true" : "false")}
-                className="dark:bg-gray-700"
-              />
-            </div>
+            <Select
+              value={inputs[param.id] || "false"}
+              onValueChange={(val) => onInputChange(param.id, val)}
+            >
+              <SelectTrigger className="w-full h-9 bg-white dark:bg-gray-950 border-gray-200 dark:border-gray-800">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent className="bg-white dark:bg-gray-950 dark:text-gray-100">
+                <SelectItem value="true">True</SelectItem>
+                <SelectItem value="false">False</SelectItem>
+              </SelectContent>
+            </Select>
           ) : (
             <Input
               id={param.id}
               value={inputs[param.id] || ""}
-              onChange={(e) => onInputChange(param.id, e.target.value)}
-              placeholder={param.description || "Enter value"}
-              className="dark:text-gray-200"
+              onChange={(e) => {
+                let val = e.target.value;
+                if (param.type === "number") {
+                  val = val.replace(/[^0-9.-]/g, "");
+                  const parts = val.split(".");
+                  if (parts.length > 2)
+                    val = parts[0] + "." + parts.slice(1).join("");
+                  if (val.lastIndexOf("-") > 0)
+                    val = val[0] + val.slice(1).replace(/-/g, "");
+                } else {
+                  val = val.replace(/[<>]/g, "");
+                }
+                onInputChange(param.id, val);
+              }}
+              type={param.type === "password" ? "password" : "text"}
+              maxLength={
+                param.type === "password" || param.type === "string" ? 25 : 255
+              }
+              placeholder={param.description || `Enter ${param.name}`}
+              className="dark:text-gray-200 dark:bg-gray-950 dark:border-gray-800"
             />
           )}
         </div>

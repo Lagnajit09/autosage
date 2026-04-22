@@ -75,7 +75,11 @@ const WorkflowExecution = () => {
         data?.nodes?.forEach((node: any) => {
           node.data?.parameters?.forEach((param: any) => {
             if (param.id) {
-              initialInputs[param.id] = param.value || "";
+              let defaultValue = param.value || "";
+              if (param.type === "boolean" && !defaultValue) {
+                defaultValue = "false";
+              }
+              initialInputs[param.id] = defaultValue;
             }
           });
         });

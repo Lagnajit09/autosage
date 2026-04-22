@@ -40,18 +40,24 @@ export const ParametersModal: React.FC<ParametersModalProps> = ({
   edges,
 }) => {
   const [localParameters, setLocalParameters] = useState<Parameter[]>([]);
+  const [lastOpenNodeId, setLastOpenNodeId] = useState<string | null>(null);
 
   // Reset local parameters whenever the modal opens with new parameters
   useEffect(() => {
-    if (isOpen) {
+    if (isOpen && (nodeId !== lastOpenNodeId || !lastOpenNodeId)) {
       setLocalParameters(
         parameters.map((p) => ({
           ...p,
           sourceType: p.sourceType || "manual",
         })),
       );
+      setLastOpenNodeId(nodeId || "unknown");
     }
-  }, [isOpen, parameters, nodeId]);
+    
+    if (!isOpen) {
+      setLastOpenNodeId(null);
+    }
+  }, [isOpen, nodeId, parameters, lastOpenNodeId]);
 
   const getUpstreamNodes = (startNodeId: string) => {
     const upstream: Node[] = [];
@@ -150,7 +156,7 @@ export const ParametersModal: React.FC<ParametersModalProps> = ({
                     key={param.id}
                     className="bg-slate-50 dark:bg-gray-800 rounded-lg p-3 border border-slate-200 dark:border-gray-700"
                   >
-                    <div className="space-y-3">
+                    <div className="space-y-2">
                       <div className="flex items-center gap-3">
                         <div className="flex-1">
                           <Label
@@ -166,11 +172,11 @@ export const ParametersModal: React.FC<ParametersModalProps> = ({
                               updateParameter(param.id, "name", e.target.value)
                             }
                             placeholder="e.g., server_url"
-                            className="h-9 text-xs bg-white dark:bg-gray-950 border border-slate-200 dark:border-gray-800 text-slate-900 dark:text-gray-100 focus:ring-2 focus:ring-purple-500/20"
+                            className="h-8 text-xs bg-white dark:bg-gray-950 border border-slate-200 dark:border-gray-800 text-slate-900 dark:text-gray-100 focus:ring-2 focus:ring-purple-500/20"
                           />
                         </div>
 
-                        <div className="w-24">
+                        <div className="w-28">
                           <Label
                             htmlFor={`type-${param.id}`}
                             className="text-[10px] text-slate-500 dark:text-gray-400 mb-1 block uppercase tracking-wider font-semibold"
@@ -183,19 +189,19 @@ export const ParametersModal: React.FC<ParametersModalProps> = ({
                               updateParameter(param.id, "type", value)
                             }
                           >
-                            <SelectTrigger className="h-9 text-xs bg-white dark:bg-gray-950 border border-slate-200 dark:border-gray-800">
+                            <SelectTrigger className="h-8 text-xs bg-white dark:bg-gray-950 border border-slate-200 dark:border-gray-800">
                               <SelectValue />
                             </SelectTrigger>
                             <SelectContent className="bg-white dark:bg-gray-950 dark:text-gray-100 border border-slate-200 dark:border-gray-800">
                               <SelectItem value="string">String</SelectItem>
                               <SelectItem value="number">Number</SelectItem>
                               <SelectItem value="boolean">Boolean</SelectItem>
-                              <SelectItem value="file">File</SelectItem>
+                              <SelectItem value="password">Password</SelectItem>
                             </SelectContent>
                           </Select>
                         </div>
 
-                        <div className="w-32">
+                        <div className="w-28">
                           <Label className="text-[10px] text-slate-500 dark:text-gray-400 mb-1 block uppercase tracking-wider font-semibold">
                             Source
                           </Label>
@@ -205,7 +211,7 @@ export const ParametersModal: React.FC<ParametersModalProps> = ({
                               updateParameter(param.id, "sourceType", value)
                             }
                           >
-                            <SelectTrigger className="h-9 text-xs bg-white dark:bg-gray-950 border border-slate-200 dark:border-gray-800">
+                            <SelectTrigger className="h-8 text-xs bg-white dark:bg-gray-950 border border-slate-200 dark:border-gray-800">
                               <SelectValue />
                             </SelectTrigger>
                             <SelectContent className="bg-white dark:bg-gray-950 dark:text-gray-100 border border-slate-200 dark:border-gray-800">
@@ -219,7 +225,7 @@ export const ParametersModal: React.FC<ParametersModalProps> = ({
                           onClick={() => removeParameter(param.id)}
                           size="sm"
                           variant="ghost"
-                          className="h-9 w-9 p-0 text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 self-end"
+                          className="h-8 w-8 p-0 text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 self-end"
                         >
                           <Trash2 size={14} />
                         </Button>
@@ -250,7 +256,7 @@ export const ParametersModal: React.FC<ParametersModalProps> = ({
                                   );
                                 }}
                               >
-                                <SelectTrigger className="h-9 text-xs bg-white dark:bg-gray-950 border border-slate-200 dark:border-gray-800">
+                                <SelectTrigger className="h-8 text-xs bg-white dark:bg-gray-950 border border-slate-200 dark:border-gray-800">
                                   <SelectValue placeholder="Select node..." />
                                 </SelectTrigger>
                                 <SelectContent className="bg-white dark:bg-gray-950 dark:text-gray-100 border border-slate-200 dark:border-gray-800">
@@ -290,7 +296,7 @@ export const ParametersModal: React.FC<ParametersModalProps> = ({
                                   }
                                 }}
                               >
-                                <SelectTrigger className="h-9 text-xs bg-white dark:bg-gray-950 border border-slate-200 dark:border-gray-800">
+                                <SelectTrigger className="h-8 text-xs bg-white dark:bg-gray-950 border border-slate-200 dark:border-gray-800">
                                   <SelectValue />
                                 </SelectTrigger>
                                 <SelectContent className="bg-white dark:bg-gray-950 dark:text-gray-100 border border-slate-200 dark:border-gray-800">
@@ -334,19 +340,64 @@ export const ParametersModal: React.FC<ParametersModalProps> = ({
                             >
                               Static Value
                             </Label>
-                            <Input
-                              id={`value-${param.id}`}
-                              value={param.value || ""}
-                              onChange={(e) =>
-                                updateParameter(
-                                  param.id,
-                                  "value",
-                                  e.target.value,
-                                )
-                              }
-                              placeholder="Enter value"
-                              className="h-9 text-xs bg-white dark:bg-gray-950 border border-slate-200 dark:border-gray-800 text-slate-900 dark:text-gray-100"
-                            />
+                            {param.type === "boolean" ? (
+                              <Select
+                                value={param.value || "false"}
+                                onValueChange={(val) =>
+                                  updateParameter(param.id, "value", val)
+                                }
+                              >
+                                <SelectTrigger className="h-8 text-xs bg-white dark:bg-gray-950 border border-slate-200 dark:border-gray-800 text-slate-900 dark:text-gray-100">
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent className="bg-white dark:bg-gray-950 dark:text-gray-100 border border-slate-200 dark:border-gray-800">
+                                  <SelectItem value="true">True</SelectItem>
+                                  <SelectItem value="false">False</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            ) : (
+                              <Input
+                                id={`value-${param.id}`}
+                                value={param.value || ""}
+                                onChange={(e) => {
+                                  let val = e.target.value;
+                                  if (param.type === "number") {
+                                    // Regex: allow digits, one dot, and one leading minus
+                                    val = val.replace(/[^0-9.-]/g, "");
+                                    const parts = val.split(".");
+                                    if (parts.length > 2)
+                                      val =
+                                        parts[0] +
+                                        "." +
+                                        parts.slice(1).join("");
+                                    if (val.lastIndexOf("-") > 0)
+                                      val =
+                                        val[0] + val.slice(1).replace(/-/g, "");
+                                  } else {
+                                    // Basic sanitization for string/password
+                                    val = val.replace(/[<>]/g, ""); // Remove basic HTML-like tags
+                                  }
+                                  updateParameter(param.id, "value", val);
+                                }}
+                                type={
+                                  param.type === "password"
+                                    ? "password"
+                                    : "text"
+                                }
+                                placeholder={
+                                  param.type === "number"
+                                    ? "Enter number"
+                                    : "Enter value"
+                                }
+                                maxLength={
+                                  param.type === "password" ||
+                                  param.type === "string"
+                                    ? 25
+                                    : 255
+                                }
+                                className="h-8 text-xs bg-white dark:bg-gray-950 border border-slate-200 dark:border-gray-800 text-slate-900 dark:text-gray-100"
+                              />
+                            )}
                           </div>
                         )}
                       </div>

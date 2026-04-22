@@ -62,7 +62,7 @@ def _coerce_value(raw: Any, param_type: str) -> Any:
     Returns:
         A Python int, float, bool, or str depending on ``param_type``.
     """
-    if raw is None or raw == "":
+    if raw is None:
         return raw
 
     ptype = (param_type or "string").lower()

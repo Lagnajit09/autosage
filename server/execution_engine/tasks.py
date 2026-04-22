@@ -75,7 +75,7 @@ def _evaluate_condition(field_val, operator, target_val):
     return False
 
 @shared_task(bind=True, name='workflows.execute_workflow')
-def execute_workflow(self, workflow_run_id: str):
+def execute_workflow(self, workflow_run_id: str, raw_inputs: dict = None):
     logger.info(f"Starting workflow execution for Run: {workflow_run_id}")
     try:
         run = WorkflowRun.objects.select_related('workflow', 'user').get(id=workflow_run_id)
@@ -109,6 +109,38 @@ def execute_workflow(self, workflow_run_id: str):
 
     node_outputs = {}
     fail_fast = True # Stop execution if a node fails
+    
+    # Identify password parameters to mask them in logs
+    password_values = []
+    
+    # Collect from raw inputs
+    if raw_inputs:
+        for node in run.workflow.nodes:
+            params = node.get("data", {}).get("parameters", [])
+            for p in params:
+                if p.get("type") == "password":
+                    pid = p.get("id")
+                    if pid in raw_inputs and raw_inputs[pid]:
+                        password_values.append(str(raw_inputs[pid]))
+
+    # Collect static values from workflow definition
+    for node in run.workflow.nodes:
+        params = node.get("data", {}).get("parameters", [])
+        for p in params:
+            if p.get("type") == "password":
+                static_val = p.get("value")
+                if static_val and p.get("sourceType") == "manual":
+                    password_values.append(str(static_val))
+                        
+    # Sort password values by length descending so we replace longest first
+    password_values = sorted(list(set(password_values)), key=len, reverse=True)
+    
+    def mask_passwords(text: str) -> str:
+        if not text or not isinstance(text, str):
+            return text
+        for pwd in password_values:
+            text = text.replace(pwd, "*****")
+        return text
 
     for node_id in topo_order:
         # Check if the workflow was cancelled during execution (especially for Windows/solo workers where revoke signals may fail)
@@ -264,10 +296,16 @@ def execute_workflow(self, workflow_run_id: str):
 
             try:
                 params = data.get('parameters', [])
-                resolved_params = resolve_parameters(params, node_outputs, run.inputs)
+                resolved_params = resolve_parameters(params, node_outputs, raw_inputs or run.inputs)
                 if resolved_params:
+                    masked_resolved = {}
+                    for k, v in resolved_params.items():
+                        # Mask in the logged dictionary
+                        is_pwd = any(p.get("name") == k and p.get("type") == "password" for p in params)
+                        masked_resolved[k] = "*****" if is_pwd else v
+                        
                     publish_workflow_log(workflow_run_id, 'log', {
-                        'stdout': f"[PARAM] Resolved parameters: {resolved_params}"
+                        'stdout': f"[PARAM] Resolved parameters: {masked_resolved}"
                     })
             except Exception as e:
                 node_run.status = 'failed'
@@ -414,21 +452,24 @@ def execute_workflow(self, workflow_run_id: str):
                                         'exit_code': final_exit_code,
                                     })
                                 elif ctype == 'stdout':
-                                    stdout_text += str(cdata) + "\n"
-                                    logs_list.append({"type": "stdout", "data": cdata, "ts": ts})
+                                    masked_cdata = mask_passwords(str(cdata))
+                                    stdout_text += masked_cdata + "\n"
+                                    logs_list.append({"type": "stdout", "data": masked_cdata, "ts": ts})
                                     publish_workflow_log(workflow_run_id, 'log', {
-                                        'stdout': f"> {cdata}" if not str(cdata).startswith("[") else str(cdata),
+                                        'stdout': f"> {masked_cdata}" if not masked_cdata.startswith("[") else masked_cdata,
                                     })
                                 elif ctype in ('stderr', 'error'):
-                                    stderr_text += str(cdata) + "\n"
-                                    logs_list.append({"type": "stderr", "data": cdata, "ts": ts})
+                                    masked_cdata = mask_passwords(str(cdata))
+                                    stderr_text += masked_cdata + "\n"
+                                    logs_list.append({"type": "stderr", "data": masked_cdata, "ts": ts})
                                     publish_workflow_log(workflow_run_id, 'log', {
-                                        'stdout': f"[ERROR] {cdata}" if not str(cdata).startswith("[") else str(cdata),
+                                        'stdout': f"[ERROR] {masked_cdata}" if not masked_cdata.startswith("[") else masked_cdata,
                                     })
                                 elif ctype == 'log':
-                                    logs_list.append({"type": "log", "data": cdata, "ts": ts})
+                                    masked_cdata = mask_passwords(str(cdata))
+                                    logs_list.append({"type": "log", "data": masked_cdata, "ts": ts})
                                     publish_workflow_log(workflow_run_id, 'log', {
-                                        'stdout': f"[INFO] {cdata}" if not str(cdata).startswith("[") else str(cdata),
+                                        'stdout': f"[INFO] {masked_cdata}" if not masked_cdata.startswith("[") else masked_cdata,
                                     })
             except Exception as e:
                 node_run.status = 'failed'
