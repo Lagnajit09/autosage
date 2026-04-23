@@ -18,7 +18,7 @@ Stream format:
 import json
 import logging
 import os
-from typing import AsyncGenerator, Dict, Any, Literal, Optional
+from typing import AsyncGenerator, Dict, Any, Literal, Optional, List
 
 import uvicorn
 import bleach
@@ -170,6 +170,10 @@ class ExecutionRequest(BaseModel):
     server: ServerInfo
     credentials: Credentials
     inputs: Dict[str, Any] = {}
+    # Names of parameters whose type == "password" — used for worker-level
+    # log reporting only.  The actual masking is performed by Django before
+    # logs are persisted or streamed to the frontend.
+    secret_keys: List[str] = []
 
     @validator("execution_id")
     def validate_execution_id(cls, v):
@@ -334,7 +338,12 @@ async def execute_script(
             return
 
         try:
-            async for chunk in executor.stream(script_content, stop_event=stop_event):
+            async for chunk in executor.stream(
+                script_content,
+                stop_event=stop_event,
+                env_vars=exec_request.inputs or {},
+                secret_keys=exec_request.secret_keys or [],
+            ):
                 # chunk = {"type": "stdout"|"stderr"|"exit_code"|"error", "data": ...}
                 line = ndjson(chunk)
                 logger.debug("Chunk: %s", line.strip())

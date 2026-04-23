@@ -297,6 +297,16 @@ def execute_workflow(self, workflow_run_id: str, raw_inputs: dict = None):
             try:
                 params = data.get('parameters', [])
                 resolved_params = resolve_parameters(params, node_outputs, raw_inputs or run.inputs)
+
+                # Build list of parameter names whose type is "password".
+                # Sent to the exec-worker so it can report how many secrets
+                # are being injected (without logging their values).
+                secret_param_names = [
+                    p.get("name", "")
+                    for p in params
+                    if p.get("type") == "password" and p.get("name")
+                ]
+
                 if resolved_params:
                     masked_resolved = {}
                     for k, v in resolved_params.items():
@@ -415,6 +425,9 @@ def execute_workflow(self, workflow_run_id: str, raw_inputs: dict = None):
                     "key_passphrase": credential.key_passphrase or "",
                 },
                 "inputs": resolved_params,
+                # Names of secret parameters so the worker can log injection
+                # counts without exposing values.
+                "secret_keys": secret_param_names,
             }
 
             headers = build_worker_headers()
