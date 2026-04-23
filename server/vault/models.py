@@ -36,9 +36,9 @@ class Credential(models.Model):
     credential_type = models.CharField(max_length=50, choices=Type.choices)
     
     username = models.CharField(max_length=255, blank=True, null=True)
-    password = EncryptedCharField(max_length=255, blank=True, null=True) 
+    password = EncryptedCharField(max_length=1024, blank=True, null=True) 
     ssh_key = EncryptedTextField(blank=True, null=True)
-    key_passphrase = EncryptedCharField(max_length=255, blank=True, null=True)
+    key_passphrase = EncryptedCharField(max_length=1024, blank=True, null=True)
     cert_pem = EncryptedTextField(blank=True, null=True)
     
     created_at = models.DateTimeField(auto_now_add=True)

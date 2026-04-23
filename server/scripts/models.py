@@ -10,7 +10,7 @@ class Script(models.Model):
 
     # Identifiers
     name = models.CharField(max_length=255)
-    pathname = models.CharField(max_length=1024, unique=True)
+    pathname = models.CharField(max_length=1024)
     
     # URLs
     blob_url = models.URLField()
@@ -27,6 +27,7 @@ class Script(models.Model):
     version = models.PositiveIntegerField(default=1)
 
     class Meta:
+        unique_together = ('owner', 'pathname')
         indexes = [
             models.Index(fields=['owner', 'pathname']),
         ]

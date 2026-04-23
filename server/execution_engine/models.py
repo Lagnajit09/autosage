@@ -12,10 +12,10 @@ class ScriptExecution(models.Model):
     ]
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    script = models.ForeignKey('scripts.Script', on_delete=models.CASCADE, related_name='executions')
-    vault = models.ForeignKey('vault.Vault', on_delete=models.CASCADE, related_name='executions')
-    server = models.ForeignKey('vault.Server', on_delete=models.CASCADE, related_name='executions')
-    credential = models.ForeignKey('vault.Credential', on_delete=models.CASCADE, related_name='executions')
+    script = models.ForeignKey('scripts.Script', on_delete=models.SET_NULL, related_name='executions', null=True, blank=True)
+    vault = models.ForeignKey('vault.Vault', on_delete=models.SET_NULL, related_name='executions', null=True, blank=True)
+    server = models.ForeignKey('vault.Server', on_delete=models.SET_NULL, related_name='executions', null=True, blank=True)
+    credential = models.ForeignKey('vault.Credential', on_delete=models.SET_NULL, related_name='executions', null=True, blank=True)
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='script_executions', null=True, blank=True)
     inputs = models.JSONField(default=dict)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
@@ -99,7 +99,7 @@ class WorkflowNodeRun(models.Model):
     node_label = models.CharField(max_length=255, blank=True)
 
     # Script bound to this node at execution time (nullable for input/output-only nodes)
-    script_id = models.CharField(max_length=255, null=True, blank=True)
+    script_id = models.IntegerField(null=True, blank=True)
 
     # Snapshot of execution context for this specific node
     vault_id = models.UUIDField(null=True, blank=True)
@@ -126,6 +126,10 @@ class WorkflowNodeRun(models.Model):
         indexes = [
             models.Index(fields=['workflow_run', 'status']),
             models.Index(fields=['workflow_run', 'execution_order']),
+            models.Index(fields=['script_id']),
+            models.Index(fields=['vault_id']),
+            models.Index(fields=['server_id']),
+            models.Index(fields=['credential_id']),
         ]
         verbose_name = "Workflow Node Run"
         verbose_name_plural = "Workflow Node Runs"
