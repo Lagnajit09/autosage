@@ -223,7 +223,7 @@ const ExecutionHistory = ({ workflowId }: ExecutionHistoryProps) => {
         <div className="p-4">
           <Table>
             <TableHeader>
-              <TableRow className="border-gray-200 dark:border-gray-800">
+              <TableRow className="border-gray-200 dark:border-gray-800 hover:bg-transparent">
                 <TableHead className="w-[180px]">
                   <div className="flex items-center gap-2">
                     <Hash className="h-3.5 w-3.5" />

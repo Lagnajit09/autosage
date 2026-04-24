@@ -145,7 +145,7 @@ const Header = ({
                   <Trash2 className="mr-2 h-4 w-4" />
                   <span>Delete Workflow</span>
                 </DropdownMenuItem>
-                <DropdownMenuItem>
+                <DropdownMenuItem className="dark:hover:bg-gray-700/40">
                   <Link
                     to="/script-editor"
                     target="_blank"

@@ -16,11 +16,14 @@ import {
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@clerk/clerk-react";
 import { apiRequest } from "@/lib/api-client";
-import Loader from "@/components/Loader";
 import { toast } from "@/hooks/use-toast";
 import { toast as toast2 } from "sonner";
 import { deleteWorkflow } from "@/lib/actions/workflow";
 import { DeleteConfirmationModal } from "@/components/DeleteConfirmationModal";
+import {
+  WorkflowCardSkeleton,
+  WorkflowListItemSkeleton,
+} from "@/components/Workflows/WorkflowsSkeleton";
 
 const Workflows = () => {
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
@@ -166,13 +169,13 @@ const Workflows = () => {
     }
   };
 
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-100 dark:bg-workflow-void/90">
-        <Loader />
-      </div>
-    );
-  }
+  // if (loading) {
+  //   return (
+  //     <div className="min-h-screen flex items-center justify-center bg-gray-100 dark:bg-workflow-void/90">
+  //       <Loader />
+  //     </div>
+  //   );
+  // }
 
   return (
     <div className="flex w-full h-screen bg-gray-100 dark:bg-workflow-void/90 overflow-hidden">
@@ -299,46 +302,64 @@ const Workflows = () => {
               </div>
             </div>
 
-            {/* Workflows Grid/List */}
-            <div
-              className={cn(
-                "animate-in fade-in slide-in-from-bottom-4 duration-500",
-                viewMode === "grid"
-                  ? "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6"
-                  : "flex flex-col space-y-4",
-              )}
-            >
-              {filteredWorkflows.length > 0 ? (
-                filteredWorkflows.map((workflow) =>
+            {loading ? (
+              <div
+                className={cn(
+                  "animate-in fade-in slide-in-from-bottom-4 duration-500",
+                  viewMode === "grid"
+                    ? "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6"
+                    : "flex flex-col space-y-4",
+                )}
+              >
+                {Array.from({ length: 3 }).map((_, i) =>
                   viewMode === "grid" ? (
-                    <WorkflowCard
-                      key={workflow.id}
-                      workflow={workflow}
-                      onDelete={handleDeleteClick}
-                    />
+                    <WorkflowCardSkeleton key={i} />
                   ) : (
-                    <WorkflowListItem
-                      key={workflow.id}
-                      workflow={workflow}
-                      onDelete={handleDeleteClick}
-                    />
+                    <WorkflowListItemSkeleton key={i} />
                   ),
-                )
-              ) : (
-                <div className="col-span-full flex flex-col items-center justify-center py-12 text-center">
-                  <div className="bg-gray-100 dark:bg-gray-800/50 p-4 rounded-full mb-4">
-                    <Search className="w-8 h-8 text-gray-400" />
+                )}
+              </div>
+            ) : (
+              <div
+                className={cn(
+                  "animate-in fade-in slide-in-from-bottom-4 duration-500",
+                  viewMode === "grid"
+                    ? "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6"
+                    : "flex flex-col space-y-4",
+                )}
+              >
+                {filteredWorkflows.length > 0 ? (
+                  filteredWorkflows.map((workflow) =>
+                    viewMode === "grid" ? (
+                      <WorkflowCard
+                        key={workflow.id}
+                        workflow={workflow}
+                        onDelete={handleDeleteClick}
+                      />
+                    ) : (
+                      <WorkflowListItem
+                        key={workflow.id}
+                        workflow={workflow}
+                        onDelete={handleDeleteClick}
+                      />
+                    ),
+                  )
+                ) : (
+                  <div className="col-span-full flex flex-col items-center justify-center py-12 text-center">
+                    <div className="bg-gray-100 dark:bg-gray-800/50 p-4 rounded-full mb-4">
+                      <Search className="w-8 h-8 text-gray-400" />
+                    </div>
+                    <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                      No workflows found
+                    </h3>
+                    <p className="text-gray-500 dark:text-gray-400 mt-1 max-w-sm">
+                      We couldn't find any workflows matching "{searchQuery}".
+                      Try adjusting your search terms.
+                    </p>
                   </div>
-                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
-                    No workflows found
-                  </h3>
-                  <p className="text-gray-500 dark:text-gray-400 mt-1 max-w-sm">
-                    We couldn't find any workflows matching "{searchQuery}". Try
-                    adjusting your search terms.
-                  </p>
-                </div>
-              )}
-            </div>
+                )}
+              </div>
+            )}
           </div>
         </main>
       </div>

@@ -4,8 +4,6 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import {
-  Code2Icon,
-  CodeSquare,
   CodeXml,
   Home,
   ListPlus,
@@ -28,36 +26,34 @@ export const NavItems = ({ mobile = false }: { mobile?: boolean }) => {
 
   const items = [
     {
-      icon: <Home className={cn("w-10 h-10", mobile ? "w-5 h-5 mr-2" : "")} />,
+      icon: <Home className={cn("w-6 h-6", mobile ? "w-5 h-5 mr-2" : "")} />,
       label: "Dashboard",
       onClick: () => navigate("/dashboard"),
     },
     {
       icon: (
-        <Workflow className={cn("w-10 h-10", mobile ? "w-5 h-5 mr-2" : "")} />
+        <Workflow className={cn("w-6 h-6", mobile ? "w-5 h-5 mr-2" : "")} />
       ),
       label: "All Workflows",
       onClick: () => navigate("/workflows"),
     },
     {
       icon: (
-        <ListPlus className={cn("w-10 h-10", mobile ? "w-5 h-5 mr-2" : "")} />
+        <ListPlus className={cn("w-6 h-6", mobile ? "w-5 h-5 mr-2" : "")} />
       ),
       label: "Templates",
       onClick: () => navigate("/templates"),
     },
     {
-      icon: (
-        <CodeXml className={cn("w-10 h-10", mobile ? "w-5 h-5 mr-2" : "")} />
-      ),
+      icon: <CodeXml className={cn("w-6 h-6", mobile ? "w-5 h-5 mr-2" : "")} />,
       label: "Editor",
       onClick: () => navigate("/script-editor"),
     },
     {
       icon: (
         <AutobotIcon
-          size={mobile ? 18 : 18}
-          className={cn("w-10 h-10", mobile ? "w-5 h-5 mr-2" : "")}
+          size={16}
+          className={cn("w-6 h-6", mobile ? "w-5 h-5 mr-2" : "")}
         />
       ),
       label: "AutoBot",
@@ -70,25 +66,25 @@ export const NavItems = ({ mobile = false }: { mobile?: boolean }) => {
       icon: isDark ? (
         <Sun
           className={cn(
-            "w-10 h-10 text-light-primary",
+            "w-6 h-6 text-light-primary",
             mobile ? "w-5 h-5 mr-2" : "",
           )}
         />
       ) : (
-        <Moon className={cn("w-10 h-10", mobile ? "w-5 h-5 mr-2" : "")} />
+        <Moon className={cn("w-6 h-6", mobile ? "w-5 h-5 mr-2" : "")} />
       ),
       label: isDark ? "Light Mode" : "Dark Mode",
       onClick: toggleTheme,
     },
     {
       icon: (
-        <Settings className={cn("w-10 h-10", mobile ? "w-5 h-5 mr-2" : "")} />
+        <Settings className={cn("w-6 h-6", mobile ? "w-5 h-5 mr-2" : "")} />
       ),
       label: "Settings",
       onClick: () => navigate("/settings"),
     },
     {
-      icon: <User className={cn("w-10 h-10", mobile ? "w-5 h-5 mr-2" : "")} />,
+      icon: <User className={cn("w-6 h-6", mobile ? "w-5 h-5 mr-2" : "")} />,
       label: "Account",
       onClick: () => navigate("/profile"),
     },
@@ -128,8 +124,8 @@ export const NavItems = ({ mobile = false }: { mobile?: boolean }) => {
   }
 
   return (
-    <div className="flex flex-col h-full justify-between">
-      <div className="w-full flex-col space-y-4 items-center text-gray-800 dark:text-gray-200">
+    <div className="flex flex-col h-full justify-between w-full">
+      <div className="w-full flex flex-col space-y-4 items-center text-gray-800 dark:text-gray-200">
         {items.map((item, index) => (
           <ToolTipIcon
             key={index}
@@ -139,7 +135,7 @@ export const NavItems = ({ mobile = false }: { mobile?: boolean }) => {
           />
         ))}
       </div>
-      <div className="w-full flex-col space-y-4 text-gray-800 dark:text-gray-200">
+      <div className="w-full flex flex-col space-y-4 items-center text-gray-800 dark:text-gray-200">
         {bottomItems.map((item, index) => (
           <ToolTipIcon
             key={index}
@@ -155,7 +151,7 @@ export const NavItems = ({ mobile = false }: { mobile?: boolean }) => {
 
 const LeftNav = () => {
   return (
-    <div className="hidden lg:flex flex-col w-[4%] h-screen bg-gray-50 dark:bg-bg-card/90 px-4 py-4 space-y-4 justify-between">
+    <div className="hidden lg:flex flex-col w-16 shrink-0 h-screen bg-gray-50 dark:bg-bg-card/90 px-2 py-4 space-y-4 justify-between items-center border-r border-gray-200 dark:border-gray-800/50">
       <NavItems />
     </div>
   );
@@ -177,7 +173,7 @@ const ToolTipIcon = ({
       <TooltipTrigger asChild>
         <Button
           variant="outline"
-          className="bg-[#a768d0]/30 hover:bg-[#a768d0]/20 dark:bg-bg-tertiary/50 dark:hover:bg-bg-tertiary/70 dark:hover:text-gray-100 rounded-lg p-2 dark:border-none dark:outline-none w-full"
+          className="bg-[#a768d0]/30 hover:bg-[#a768d0]/20 dark:bg-bg-tertiary/50 dark:hover:bg-bg-tertiary/70 dark:hover:text-gray-100 rounded-lg p-0 flex items-center justify-center dark:border-none dark:outline-none w-full aspect-square"
           onClick={onClick}
         >
           {icon}

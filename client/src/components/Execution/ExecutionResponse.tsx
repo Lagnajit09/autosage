@@ -131,10 +131,12 @@ const ExecutionResponse = ({
                 <SelectItem
                   key={run.id}
                   value={run.id}
-                  className="font-mono text-xs cursor-pointer"
+                  className="font-mono text-xs cursor-pointer dark:hover:bg-gray-700/40"
                 >
                   <div className="flex items-center gap-2">
-                    <span className="font-bold">{run.id.substring(0, 8)}</span>
+                    <span className="font-bold dark:text-gray-200">
+                      {run.id.substring(0, 8)}
+                    </span>
                     <span className="text-gray-500">—</span>
                     <span className="text-gray-400">
                       {new Date(run.created_at).toLocaleTimeString()}
