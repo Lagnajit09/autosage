@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Script
+from scripts.models import Script
 
 class ScriptSerializer(serializers.ModelSerializer):
     """
@@ -14,8 +14,6 @@ class ScriptSerializer(serializers.ModelSerializer):
             'id',
             'name',
             'pathname',
-            'blob_url',
-            'download_url',
             'owner',
             'owner_username',
             'content_type',
@@ -26,8 +24,6 @@ class ScriptSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = [
             'id',
-            'blob_url',
-            'download_url',
             'owner',
             'owner_username',
             'file_size',

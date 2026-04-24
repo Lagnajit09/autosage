@@ -358,9 +358,9 @@ def execute_workflow(self, workflow_run_id: str, raw_inputs: dict = None):
                 continue
 
             try:
-                script = Script.objects.get(id=node_run.script_id)
-                server = Server.objects.get(id=node_run.server_id)
-                credential = Credential.objects.get(id=node_run.credential_id)
+                script = Script.objects.get(id=node_run.script_id, owner=run.user)
+                server = Server.objects.get(id=node_run.server_id, vault__owner=run.user)
+                credential = Credential.objects.get(id=node_run.credential_id, vault__owner=run.user)
             except Exception as e:
                 node_run.status = 'failed'
                 node_run.error_message = f"Missing binding configuration: {str(e)}"

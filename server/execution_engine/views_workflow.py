@@ -60,10 +60,10 @@ def trigger_workflow_run(request, workflow_id):
     try:
         G = build_dag(workflow.nodes, workflow.edges)
         topo_order = topological_order(G)
-    except ValueError as e:
+    except ValueError:
         return api_response(
             success=False,
-            message=str(e),
+            message="Workflow graph validation failed.",
             status_code=status.HTTP_400_BAD_REQUEST,
         )
 
@@ -90,8 +90,8 @@ def trigger_workflow_run(request, workflow_id):
             # For brevity in this phase, we check existence. Proper multi-tenant access
             # is handled by the model managers or specific checks if needed.
             try:
-                if not Script.objects.filter(id=script_id).exists():
-                    raise ValueError(f"Script ID {script_id} not found for node {node.get('id')}")
+                if not Script.objects.filter(id=script_id, owner=request.user).exists():
+                    raise ValueError(f"Script ID {script_id} not found or access denied for node {node.get('id')}")
                 if not Vault.objects.filter(id=vault_id, owner=request.user).exists():
                     raise ValueError(f"Vault ID {vault_id} not found or access denied for node {node.get('id')}")
                 if not Server.objects.filter(id=server_id, vault_id=vault_id).exists():
@@ -99,9 +99,10 @@ def trigger_workflow_run(request, workflow_id):
                 if not Credential.objects.filter(id=credential_id, vault_id=vault_id).exists():
                     raise ValueError(f"Credential ID {credential_id} not found in vault {vault_id}")
             except (ValueError, Exception) as e:
+                logger.error(f"Validation error for workflow {workflow_id}: {str(e)}")
                 return api_response(
                     success=False,
-                    message=str(e),
+                    message="One or more script or credential bindings are invalid or inaccessible.",
                     status_code=status.HTTP_400_BAD_REQUEST,
                 )
 
@@ -137,7 +138,13 @@ def trigger_workflow_run(request, workflow_id):
 
         if node_data.get("type") == NODE_TYPE_ACTION and node_data.get("data", {}).get("type") == "script":
             data_dict = node_data.get("data", {})
-            script_id = data_dict.get("selectedScript", {}).get("scriptId")
+            script_id_raw = data_dict.get("selectedScript", {}).get("scriptId")
+            if script_id_raw:
+                try:
+                    script_id = int(script_id_raw)
+                except (ValueError, TypeError):
+                    script_id = None
+            
             vault_details = data_dict.get("vaultDetails", {})
             vault_id = vault_details.get("vaultId")
             server_id = vault_details.get("serverId")

@@ -5,19 +5,17 @@ from rest_framework import status, generics
 from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.exceptions import ValidationError, PermissionDenied
-from .models import Script
-from .serializers import (
+from scripts.models import Script
+from scripts.serializers import (
     ScriptSerializer,
     ScriptCreateSerializer,
     ScriptUpdateSerializer,
     ScriptRenameSerializer,
-    ScriptContentSerializer
 )
 from server.utils import api_response
 from server.rate_limiters import ScriptBurstThrottle, ScriptSustainedThrottle, ScriptCreateThrottle
-from .gcs import (
+from scripts.gcs import (
     build_blob_path,
-    build_public_url,
     upload_script,
     download_script,
     delete_script,
@@ -142,7 +140,7 @@ class ScriptListCreateView(generics.ListCreateAPIView):
             return api_response(
                 success=False,
                 message="Failed to upload script to cloud storage.",
-                errors={"storage": [str(e)]},
+                errors={"storage": ["GCS service error. Please try again later."]},
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
         except Exception as e:
@@ -150,7 +148,7 @@ class ScriptListCreateView(generics.ListCreateAPIView):
             return api_response(
                 success=False,
                 message="An unexpected error occurred.",
-                errors={"server": [str(e)]},
+                errors={"server": ["Internal server error."]},
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
@@ -210,7 +208,7 @@ class ScriptDetailView(generics.RetrieveDestroyAPIView):
             return api_response(
                 success=False,
                 message="An unexpected error occurred.",
-                errors={"server": [str(e)]},
+                errors={"server": ["Failed to delete script record."]},
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
@@ -256,7 +254,7 @@ class ScriptContentView(APIView):
             return api_response(
                 success=False,
                 message="Failed to fetch script content from storage.",
-                errors={"storage": [str(e)]},
+                errors={"storage": ["GCS service error."]},
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
         except Exception as e:
@@ -264,7 +262,7 @@ class ScriptContentView(APIView):
             return api_response(
                 success=False,
                 message="An unexpected error occurred.",
-                errors={"server": [str(e)]},
+                errors={"server": ["Internal server error."]},
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
@@ -321,7 +319,7 @@ class ScriptUpdateView(APIView):
             return api_response(
                 success=False,
                 message="Failed to update script in cloud storage.",
-                errors={"storage": [str(e)]},
+                errors={"storage": ["GCS service error."]},
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
         except Exception as e:
@@ -329,7 +327,7 @@ class ScriptUpdateView(APIView):
             return api_response(
                 success=False,
                 message="An unexpected error occurred.",
-                errors={"server": [str(e)]},
+                errors={"server": ["Internal server error."]},
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
@@ -410,7 +408,7 @@ class ScriptRenameView(APIView):
             return api_response(
                 success=False,
                 message="Failed to rename script in cloud storage.",
-                errors={"storage": [str(e)]},
+                errors={"storage": ["GCS service error."]},
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
         except Exception as e:
@@ -418,6 +416,6 @@ class ScriptRenameView(APIView):
             return api_response(
                 success=False,
                 message="An unexpected error occurred.",
-                errors={"server": [str(e)]},
+                errors={"server": ["Internal server error."]},
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
             )

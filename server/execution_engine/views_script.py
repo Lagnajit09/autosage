@@ -129,10 +129,10 @@ async def execute_script(request):
     worker_payload = {
         "execution_id": str(execution.id),
         "script": {
-            "id": str(script_details["script_id"]),
-            "name": script_details["script_name"],
-            "pathname": script_details["pathname"],
-            "blob_url": script_details["url"],
+            "id": str(script.id),
+            "name": script.name,
+            "pathname": script.pathname,
+            "blob_url": script.blob_url,
         },
         "server": {
             "id": str(server.id),
@@ -233,6 +233,8 @@ def execution_history(request):
     try:
         page_number = int(request.GET.get('page', 1))
         page_size = int(request.GET.get('page_size', 50))
+        # Cap page_size to prevent excessive load
+        page_size = min(max(page_size, 1), 100)
     except ValueError:
         return api_response(
             success=False,
@@ -326,13 +328,13 @@ def stop_execution(request, execution_id):
         logger.exception("Failed to communicate with worker to stop execution %s", execution_id)
         return api_response(
             success=False,
-            message=f"Failed to communicate with worker: {str(e)}",
+            message="Failed to communicate with execution worker.",
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
         )
 
 
 @api_view(["GET"])
-@permission_classes([AllowAny])
+@permission_classes([IsAuthenticated])
 def health_check(request):
     """
     GET /api/execution-engine/health/
@@ -377,6 +379,6 @@ def health_check(request):
         logger.exception("Failed to connect to execution worker for health check")
         return api_response(
             success=False,
-            message=f"Could not reach execution worker: {str(e)}",
+            message="Could not reach execution worker.",
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE
         )

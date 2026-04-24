@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Workflow
+from workflows.models import Workflow
 import random
 
 class WorkflowSerializer(serializers.ModelSerializer):
@@ -13,6 +13,7 @@ class WorkflowSerializer(serializers.ModelSerializer):
         Custom representation to include dynamic fields if needed.
         Check if we are in a list context or detail context.
         """
+        from execution_engine.models import WorkflowRun
         ret = super().to_representation(instance)
         
         # If the context is 'list', use the list representation
@@ -20,9 +21,16 @@ class WorkflowSerializer(serializers.ModelSerializer):
              ret['total_nodes'] = len(instance.nodes)
              ret['total_edges'] = len(instance.edges)
 
-            #  TODO: Integrate with Execution-engine
-             ret['last_run'] = instance.created_at.isoformat()
-             ret['runs'] = random.randint(1, 100)
+             # Real data from Execution-engine
+             runs_qs = WorkflowRun.objects.filter(workflow=instance)
+             ret['runs'] = runs_qs.count()
+             
+             last_run_obj = runs_qs.order_by('-created_at').first()
+             if last_run_obj:
+                 ret['last_run'] = last_run_obj.created_at.isoformat()
+             else:
+                 ret['last_run'] = "Never"
+                 
              # Remove nodes/edges from list view as they are too large
              ret.pop('nodes', None)
              ret.pop('edges', None)

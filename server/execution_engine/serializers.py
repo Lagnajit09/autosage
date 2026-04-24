@@ -9,7 +9,6 @@ class ScriptDetailsSerializer(serializers.Serializer):
     script_id = serializers.IntegerField()
     script_name = serializers.CharField(max_length=255)
     pathname = serializers.CharField(max_length=500)
-    url = serializers.URLField()  # GCS blob URL
 
 
 class VaultDetailsSerializer(serializers.Serializer):
@@ -32,7 +31,7 @@ class ScriptExecutionResponseSerializer(serializers.ModelSerializer):
     class Meta:
         model = ScriptExecution
         fields = [
-            'id', 'status', 'stdout_log_url', 'stderr_log_url', 'logs_url',
+            'id', 'status', 
             'stdout_signed_url', 'stderr_signed_url', 'logs_signed_url',
             'exit_code', 'started_at', 'completed_at', 'duration',
             'created_at', 'updated_at',
@@ -95,7 +94,7 @@ class WorkflowNodeRunSerializer(serializers.ModelSerializer):
         model = WorkflowNodeRun
         fields = [
             'id', 'workflow_run_id', 'node_id', 'node_label', 'status',
-            'execution_order', 'stdout_log_url', 'stderr_log_url', 'logs_url',
+            'execution_order',
             'stdout_signed_url', 'stderr_signed_url', 'logs_signed_url',
             'exit_code', 'error_message', 'started_at', 'finished_at'
         ]
