@@ -23,10 +23,10 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # See https://docs.djangoproject.com/en/6.0/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = config('SECRET_KEY', default='django-insecure-9&eg$=amhr5f6@k=*w-_8(j6@l_(bt4(fk-r+=u#^wjxj9&d&0')
+SECRET_KEY = config('SECRET_KEY', default='')
 
 # Vault Encryption Key
-VAULT_ENCRYPTION_KEY = config('VAULT_ENCRYPTION_KEY', default='django-insecure-WWy_XbN_amXeON93ehJvtsHv5CRVqSo0qgjtatg20iQ')
+VAULT_ENCRYPTION_KEY = config('VAULT_ENCRYPTION_KEY', default='')
 
 # Clerk Configuration
 CLERK_PUBLISHABLE_KEY = config('CLERK_PUBLISHABLE_KEY', default='')
@@ -39,7 +39,7 @@ WORKER_API_KEY = config('WORKER_API_KEY', default='')
 EXEC_WORKER_AUDIENCE = config('EXEC_WORKER_AUDIENCE', default='')
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = config('DEBUG', default=True, cast=bool)
+DEBUG = config('DEBUG', default=False, cast=bool)
 
 # Google Cloud Storage
 GOOGLE_APPLICATION_CREDENTIALS = config('GOOGLE_APPLICATION_CREDENTIALS', default='')

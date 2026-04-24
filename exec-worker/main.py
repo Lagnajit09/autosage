@@ -18,6 +18,8 @@ Stream format:
 import json
 import logging
 import os
+import ipaddress
+import socket
 from typing import AsyncGenerator, Dict, Any, Literal, Optional, List
 
 import uvicorn
@@ -110,6 +112,64 @@ def sanitize_input(text: str) -> str:
 def ndjson(chunk: dict) -> str:
     """Serialize a dict to a single NDJSON line (JSON + newline)."""
     return json.dumps(chunk, ensure_ascii=False) + "\n"
+
+
+BLOCKED_IPS = {
+    ipaddress.ip_address("169.254.169.254"),
+}
+
+def is_safe_host(host: str) -> bool:
+    host = host.strip()
+    if not host:
+        return False
+
+    host_lower = host.lower()
+
+    # Cloud metadata is dangerous in all environments
+    if host_lower in {"metadata.google.internal", "metadata"}:
+        return False
+
+    try:
+        ip = ipaddress.ip_address(host)
+        if ip in BLOCKED_IPS:
+            return False
+        
+        # Allow internal network access only in local DEV environments
+        if ENVIRONMENT == "DEV":
+            return True
+            
+        return ip.is_global
+    except ValueError:
+        pass
+
+    # In non-dev, strictly block localhost names entirely
+    if ENVIRONMENT != "DEV" and host_lower == "localhost":
+        return False
+
+    try:
+        resolved = socket.getaddrinfo(host, None, proto=socket.IPPROTO_TCP)
+    except socket.gaierror:
+        return False
+
+    resolved_ips = set()
+
+    for entry in resolved:
+        ip_str = entry[4][0]
+        try:
+            ip = ipaddress.ip_address(ip_str)
+        except ValueError:
+            return False
+
+        if ip in BLOCKED_IPS:
+            return False
+
+        # If in production, ensure no DNS resolution yields a private IP
+        if ENVIRONMENT != "DEV" and not ip.is_global:
+            return False
+
+        resolved_ips.add(ip)
+
+    return bool(resolved_ips)
 
 
 # ── Request models ────────────────────────────────────────────────────────────
@@ -280,6 +340,12 @@ async def execute_script(
     )
 
     async def generate() -> AsyncGenerator[str, None]:
+        # ── 0. Safety Check ─────────────────────────────────────
+        if not is_safe_host(exec_request.server.host):
+            logger.warning("Blocked connection attempt to unsafe host: %s", exec_request.server.host)
+            yield ndjson({"type": "error", "data": "Access to internal or private networks is restricted."})
+            return
+
         # ── 1. Fetch script content ──────────────────────────────
         try:
             if exec_request.script.content:
