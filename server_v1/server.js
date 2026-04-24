@@ -2,6 +2,9 @@ const express = require("express");
 const cors = require("cors");
 require("dotenv").config();
 
+console.error("WARNING: The legacy Node.js backend (server_v1) is deprecated and disabled for security reasons.");
+console.error("Please use the Django backend (server) instead.");
+process.exit(1);
 // Import route modules
 const healthRoutes = require("./routes/health");
 const workflowRoutes = require("./routes/workflow");

@@ -10,3 +10,10 @@ node_modules
 gcs-key.json
 # Let's Encrypt certificate storage — never commit
 acme.json
+
+# Graphify
+graphify-out/
+.graphifyignore
+
+# Local audit/tool temp files
+.tmp/
