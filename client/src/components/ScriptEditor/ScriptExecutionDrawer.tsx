@@ -174,7 +174,7 @@ export function ScriptExecutionDrawer({
               size="sm"
               className="h-8 bg-green-600 hover:bg-green-700 text-white"
               onClick={onExecute}
-              disabled={!selectedServerId || isExecuting}
+              disabled={!selectedServerId || !selectedCredentialId || selectedCredentialId === "none" || isExecuting}
             >
               {isExecuting ? (
                 <>Running...</>

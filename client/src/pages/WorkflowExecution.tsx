@@ -8,7 +8,6 @@ import {
   Play,
   Settings,
   Terminal,
-  FileText,
   History,
   Activity,
   Pencil,
@@ -16,7 +15,6 @@ import {
 } from "lucide-react";
 import ExecutionNodes from "@/components/Execution/ExecutionNodes";
 import ExecutionTerminal from "@/components/Execution/ExecutionTerminal";
-import ExecutionLogs from "@/components/Execution/ExecutionLogs";
 import ExecutionHistory from "@/components/Execution/ExecutionHistory";
 import ExecutionResponse from "@/components/Execution/ExecutionResponse";
 import ExecutionParameters from "@/components/Execution/ExecutionParameters";
@@ -38,7 +36,9 @@ const WorkflowExecution = () => {
   const [elapsedSeconds, setElapsedSeconds] = useState<number | null>(null);
   const elapsedTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [nodeStatuses, setNodeStatuses] = useState<Record<string, string>>({});
-  const [nodeDurations, setNodeDurations] = useState<Record<string, number>>({});
+  const [nodeDurations, setNodeDurations] = useState<Record<string, number>>(
+    {},
+  );
 
   const { getToken, isSignedIn } = useAuth();
   const navigate = useNavigate();
@@ -166,7 +166,10 @@ const WorkflowExecution = () => {
                 ...prev,
                 [data.node_id]: "running",
               }));
-              setLogs((prev) => [...prev, `[START] Node start: ${data.node_label}`]);
+              setLogs((prev) => [
+                ...prev,
+                `[START] Node start: ${data.node_label}`,
+              ]);
             } else if (eventName === "node_complete") {
               setNodeStatuses((prev) => ({
                 ...prev,
@@ -183,7 +186,10 @@ const WorkflowExecution = () => {
                   ...prev,
                   `[SKIP] Node skipped: ${data.node_label}`,
                 ]);
-              } else if (data.status === "success" || data.status === "running") {
+              } else if (
+                data.status === "success" ||
+                data.status === "running"
+              ) {
                 setLogs((prev) => [
                   ...prev,
                   `[SUCCESS] Node complete: ${data.node_label}`,

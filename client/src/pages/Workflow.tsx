@@ -12,7 +12,7 @@ const Workflow = () => {
 
   const { getToken, isSignedIn } = useAuth();
   const [initialData, setInitialData] = useState(null);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(!!id);
   const [token, setToken] = useState<string | null>(null);
 
   useEffect(() => {

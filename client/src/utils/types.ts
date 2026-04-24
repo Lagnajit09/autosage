@@ -292,7 +292,7 @@ export interface WorkflowRun {
   started_at: string | null;
   finished_at: string | null;
   created_at: string;
-  inputs: Record<string, any>;
+  inputs: Record<string, unknown>;
 }
 
 export interface WorkflowNodeRun {

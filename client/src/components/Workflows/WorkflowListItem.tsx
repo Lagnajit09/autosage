@@ -70,6 +70,7 @@ export const WorkflowListItem = ({
         <Button
           variant="ghost"
           size="sm"
+          onClick={() => navigate(`/workflow/${workflow.id}/run`)}
           className="text-gray-500 hover:text-purple-600 dark:hover:text-purple-400"
         >
           <Play className="w-4 h-4 mr-2" />
