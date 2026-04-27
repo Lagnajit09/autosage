@@ -100,13 +100,13 @@ export interface NodeData {
   bcc?: string[];
   subject?: string;
   body?: string;
-  isHTML?: boolean;
   attachments?: Attachment[];
   smtpConfig?: {
     host: string;
     port: number;
     secure: boolean;
-    selectedCredential?: Credential;
+    vaultId?: string;
+    credentialId?: string;
   };
 }
 
