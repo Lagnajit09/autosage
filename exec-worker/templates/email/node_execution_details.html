@@ -1,0 +1,253 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <meta name="x-apple-disable-message-reformatting" />
+    <title>{{ subject }}</title>
+    <style>
+      @media (prefers-color-scheme: dark) {
+        body,
+        .bg-page {
+          background: #0a0a0a !important;
+        }
+        .bg-card {
+          background: #111113 !important;
+          border-color: #27272a !important;
+        }
+        .text-heading {
+          color: #fafafa !important;
+        }
+        .text-body {
+          color: #d4d4d8 !important;
+        }
+        .text-muted {
+          color: #71717a !important;
+        }
+        .divider {
+          border-color: #27272a !important;
+        }
+        .footer-bar {
+          background: #09090b !important;
+        }
+        .code-block {
+          background: #18181b !important;
+          border-color: #27272a !important;
+          color: #e4e4e7 !important;
+        }
+      }
+    </style>
+  </head>
+  <body
+    class="bg-page"
+    style="
+      margin: 0;
+      padding: 0;
+      background: #f4f4f5;
+      font-family:
+        -apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, Roboto,
+        &quot;Helvetica Neue&quot;, Arial, sans-serif;
+      line-height: 1.55;
+      color: #27272a;
+      -webkit-font-smoothing: antialiased;
+    "
+  >
+    <!-- Preheader: hidden preview text -->
+    <div style="display: none; max-height: 0; overflow: hidden; mso-hide: all">
+      {{ subject }}
+    </div>
+
+    <table
+      role="presentation"
+      width="100%"
+      cellpadding="0"
+      cellspacing="0"
+      border="0"
+      class="bg-page"
+      style="background: #f4f4f5"
+    >
+      <tr>
+        <td align="center" style="padding: 32px 16px">
+          <table
+            role="presentation"
+            width="600"
+            cellpadding="0"
+            cellspacing="0"
+            border="0"
+            style="max-width: 600px; width: 100%"
+          >
+            <!-- Brand header -->
+            <tr>
+              <td style="padding: 0 0 20px 0">
+                <table
+                  role="presentation"
+                  width="100%"
+                  cellpadding="0"
+                  cellspacing="0"
+                  border="0"
+                >
+                  <tr>
+                    <td
+                      align="left"
+                      style="
+                        font-size: 18px;
+                        font-weight: 700;
+                        letter-spacing: 0.5px;
+                        color: #8b5cf6;
+                      "
+                    >
+                      AUTOSAGE
+                    </td>
+                    <td
+                      align="right"
+                      class="text-muted"
+                      style="font-size: 12px; color: #71717a"
+                    >
+                      Workflow Email
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+
+            <!-- Card -->
+            <tr>
+              <td
+                class="bg-card"
+                style="
+                  background: #ffffff;
+                  border: 1px solid #e4e4e7;
+                  border-radius: 12px;
+                  padding: 32px;
+                "
+              >
+                <h1
+                  class="text-heading"
+                  style="
+                    margin: 0 0 16px 0;
+                    font-size: 20px;
+                    line-height: 1.4;
+                    font-weight: 600;
+                    color: #18181b;
+                  "
+                >
+                  {{ subject }}
+                </h1>
+
+                <div
+                  class="text-body"
+                  style="
+                    font-size: 15px;
+                    line-height: 1.65;
+                    color: #3f3f46;
+                    word-break: break-word;
+                  "
+                >
+                  {{ email_body|safe }}
+                </div>
+
+                {% if attached_outputs %}
+                <div style="margin: 24px 0 0 0">
+                  <div
+                    class="text-muted"
+                    style="
+                      font-size: 11px;
+                      letter-spacing: 0.6px;
+                      text-transform: uppercase;
+                      font-weight: 600;
+                      color: #71717a;
+                      margin: 0 0 10px 0;
+                    "
+                  >
+                    Outputs
+                  </div>
+                  {% for item in attached_outputs %}
+                  <div style="margin: 0 0 12px 0">
+                    <div
+                      class="text-muted"
+                      style="
+                        font-size: 11px;
+                        font-family:
+                          ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
+                          monospace;
+                        color: #71717a;
+                        margin: 0 0 4px 0;
+                      "
+                    >
+                      {{ item.name }}
+                    </div>
+                    <pre
+                      class="code-block"
+                      style="
+                        background: #f4f4f5;
+                        border: 1px solid #e4e4e7;
+                        border-radius: 6px;
+                        padding: 10px 12px;
+                        margin: 0;
+                        font-family:
+                          ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
+                          monospace;
+                        font-size: 13px;
+                        line-height: 1.5;
+                        color: #18181b;
+                        white-space: pre-wrap;
+                        word-break: break-word;
+                        overflow-x: auto;
+                      "
+                    >
+{{ item.value }}</pre
+                    >
+                  </div>
+                  {% endfor %}
+                </div>
+                {% endif %}
+
+                <hr
+                  class="divider"
+                  style="
+                    border: none;
+                    border-top: 1px solid #e4e4e7;
+                    margin: 28px 0 0 0;
+                  "
+                />
+
+                <p
+                  class="text-muted"
+                  style="
+                    margin: 20px 0 0 0;
+                    font-size: 12px;
+                    line-height: 1.5;
+                    color: #71717a;
+                  "
+                >
+                  Sent by Autosage Workflow{% if node_label %} &middot; {{
+                  node_label }}{% endif %}{% if workflow_run_id %} &middot; run
+                  <span
+                    style="
+                      font-family:
+                        ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
+                        monospace;
+                    "
+                    >{{ workflow_run_id[:8] }}</span
+                  >{% endif %}
+                </p>
+              </td>
+            </tr>
+
+            <!-- Footer -->
+            <tr>
+              <td
+                align="center"
+                class="text-muted"
+                style="padding: 20px 8px 0 8px; font-size: 12px; color: #a1a1aa"
+              >
+                You received this email because an Autosage workflow was
+                configured to send it.
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>

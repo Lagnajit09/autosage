@@ -38,7 +38,7 @@ from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
 
-from executors import ShellExecutor, PowerShellExecutor
+from executors import ShellExecutor, PowerShellExecutor, EmailExecutor
 
 load_dotenv(override=True)
 
@@ -242,6 +242,58 @@ class ExecutionRequest(BaseModel):
         return sanitize_input(v)
 
 
+class SMTPConfig(BaseModel):
+    host: str
+    port: int = 587
+    # True  → implicit TLS (SMTPS, typically port 465)
+    # False → plain connect, then STARTTLS upgrade where supported (587/25)
+    secure: bool = False
+    username: str
+    password: str
+
+
+class AttachedOutput(BaseModel):
+    """One {name, value} pair to render in the body's outputs codeblock."""
+    name: str
+    value: str = ""
+
+
+class EmailExecutionRequest(BaseModel):
+    execution_id: str
+    smtp: SMTPConfig
+    sender: str = ""
+    to: List[str] = []
+    cc: List[str] = []
+    bcc: List[str] = []
+    subject: str = ""
+    body: str = ""
+    workflow_run_id: Optional[str] = None
+    node_label: Optional[str] = None
+    # Resolved upstream-node parameter values to append at the bottom of the
+    # email body in a code block. Django resolves these (including the special
+    # `input_as_text` field that returns the entire upstream output).
+    attached_outputs: List[AttachedOutput] = []
+
+    @validator("execution_id")
+    def validate_execution_id(cls, v):
+        if not v or len(v) > 255:
+            raise ValueError("Invalid execution_id")
+        return sanitize_input(v)
+
+    @validator("to")
+    def validate_to(cls, v):
+        cleaned = [addr for addr in (v or []) if addr and addr.strip()]
+        if not cleaned:
+            raise ValueError("At least one 'to' recipient is required")
+        return cleaned
+
+    @validator("subject")
+    def validate_subject(cls, v):
+        if not v or not v.strip():
+            raise ValueError("Email subject is required")
+        return v
+
+
 # ── Executor factory ──────────────────────────────────────────────────────────
 
 def build_executor(req: ExecutionRequest):
@@ -426,6 +478,85 @@ async def execute_script(
         media_type="application/x-ndjson",
         headers={
             # Prevent any proxy/nginx from buffering the stream
+            "X-Accel-Buffering": "no",
+            "Cache-Control": "no-cache",
+        },
+    )
+
+
+@app.post("/api/worker/execute/email")
+@limiter.limit("20/minute")
+async def execute_email(
+    request: Request,
+    email_request: EmailExecutionRequest,
+    _: None = Depends(verify_api_key),
+):
+    """
+    Send an email via SMTP and stream delivery status as NDJSON.
+
+    Each line in the response body is a JSON object:
+        {"type": "email_queued",  "data": "..."}
+        {"type": "email_sending", "data": "..."}
+        {"type": "email_sent",    "data": "..."}
+        {"type": "email_error",   "data": "..."}
+        {"type": "exit_code",     "data": <int>}
+    """
+    logger.info(
+        "Streaming email send: id=%s host=%s to=%d cc=%d bcc=%d",
+        email_request.execution_id,
+        email_request.smtp.host,
+        len(email_request.to),
+        len(email_request.cc),
+        len(email_request.bcc),
+    )
+
+    async def generate() -> AsyncGenerator[str, None]:
+        if not is_safe_host(email_request.smtp.host):
+            logger.warning(
+                "Blocked email send to unsafe SMTP host: %s",
+                email_request.smtp.host,
+            )
+            yield ndjson({
+                "type": "email_error",
+                "data": "SMTP host blocked by security policy.",
+            })
+            yield ndjson({"type": "exit_code", "data": 1})
+            return
+
+        executor = EmailExecutor(
+            host=email_request.smtp.host,
+            port=email_request.smtp.port,
+            username=email_request.smtp.username,
+            password=email_request.smtp.password,
+            secure=email_request.smtp.secure,
+            sender=email_request.sender,
+            to=email_request.to,
+            cc=email_request.cc,
+            bcc=email_request.bcc,
+            subject=email_request.subject,
+            body=email_request.body,
+            workflow_run_id=email_request.workflow_run_id,
+            node_label=email_request.node_label,
+            attached_outputs=[item.dict() for item in email_request.attached_outputs],
+        )
+
+        stop_event = asyncio.Event()
+        STOP_EVENTS[email_request.execution_id] = stop_event
+
+        try:
+            async for chunk in executor.stream(stop_event=stop_event):
+                yield ndjson(chunk)
+        except Exception as exc:
+            logger.exception("Unexpected error during email streaming: %s", exc)
+            yield ndjson({"type": "email_error", "data": f"Unexpected error: {exc}"})
+            yield ndjson({"type": "exit_code", "data": 1})
+        finally:
+            STOP_EVENTS.pop(email_request.execution_id, None)
+
+    return StreamingResponse(
+        generate(),
+        media_type="application/x-ndjson",
+        headers={
             "X-Accel-Buffering": "no",
             "Cache-Control": "no-cache",
         },
