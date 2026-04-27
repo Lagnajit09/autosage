@@ -318,31 +318,43 @@ def get_branch_subgraph(
 
 def validate_executable_nodes(nodes: list[dict[str, Any]]) -> list[str]:
     """
-    Return the IDs of ``action`` nodes that are missing a ``script_id``
-    binding when their ``data.type == "script"``.
+    Return the IDs of ``action`` nodes that are missing required bindings.
 
-    Trigger nodes are never executed — they are excluded.
-    Decision nodes have no script — they are excluded.
-    Action nodes whose ``data.type`` is not ``"script"`` (e.g. ``"email"``)
-    are also excluded (they are handled by a different executor).
+    Trigger and decision nodes are never validated here.
+
+    Per action sub-type:
+      * ``script`` → requires ``data.selectedScript.scriptId``.
+      * ``email``  → requires at least one recipient in ``data.to`` and
+                     both ``data.smtpConfig.vaultId`` and
+                     ``data.smtpConfig.credentialId``.
 
     Args:
         nodes: List of node dicts from ``Workflow.nodes``.
 
     Returns:
-        List of action node IDs that are type="script" but missing
-        ``data.selectedScript.scriptId``.  Empty list = all bound.
+        List of action node IDs that are missing bindings. Empty list = all bound.
     """
     missing: list[str] = []
     for node in nodes:
         if node.get("type") != NODE_TYPE_ACTION:
             continue
         data = node.get("data", {})
-        if data.get("type") != "script":
-            continue  # non-script actions (email, webhook, …): no script needed
-        script_id = (data.get("selectedScript") or {}).get("scriptId")
-        if not script_id:
-            missing.append(node["id"])
+        action_type = data.get("type")
+
+        if action_type == "script":
+            script_id = (data.get("selectedScript") or {}).get("scriptId")
+            if not script_id:
+                missing.append(node["id"])
+        elif action_type == "email":
+            smtp = data.get("smtpConfig") or {}
+            recipients = data.get("to") or []
+            if (
+                not [r for r in recipients if r and str(r).strip()]
+                or not smtp.get("vaultId")
+                or not smtp.get("credentialId")
+            ):
+                missing.append(node["id"])
+        # Other action types (e.g. future webhook): not yet validated here.
     return missing
 
 

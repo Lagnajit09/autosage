@@ -78,17 +78,18 @@ def trigger_workflow_run(request, workflow_id):
 
     # Validate existence of referenced objects in DB
     for node in workflow.nodes:
-        if node.get("type") == NODE_TYPE_ACTION and node.get("data", {}).get("type") == "script":
-            data = node.get("data", {})
+        if node.get("type") != NODE_TYPE_ACTION:
+            continue
+        data = node.get("data", {})
+        action_type = data.get("type")
+
+        if action_type == "script":
             script_id = data.get("selectedScript", {}).get("scriptId")
             vault_details = data.get("vaultDetails", {})
             vault_id = vault_details.get("vaultId")
             server_id = vault_details.get("serverId")
             credential_id = vault_details.get("credentialId")
 
-            # Check Vault, Server, Credential (must be owned by or accessible to user)
-            # For brevity in this phase, we check existence. Proper multi-tenant access
-            # is handled by the model managers or specific checks if needed.
             try:
                 if not Script.objects.filter(id=script_id, owner=request.user).exists():
                     raise ValueError(f"Script ID {script_id} not found or access denied for node {node.get('id')}")
@@ -106,6 +107,41 @@ def trigger_workflow_run(request, workflow_id):
                     status_code=status.HTTP_400_BAD_REQUEST,
                 )
 
+        elif action_type == "email":
+            smtp = data.get("smtpConfig") or {}
+            vault_id = smtp.get("vaultId")
+            credential_id = smtp.get("credentialId")
+
+            try:
+                if not smtp.get("host") or not str(smtp.get("host")).strip():
+                    raise ValueError(f"SMTP host missing for email node {node.get('id')}")
+                port = smtp.get("port")
+                if not isinstance(port, int) or port <= 0 or port > 65535:
+                    raise ValueError(f"SMTP port invalid for email node {node.get('id')}")
+                if not data.get("subject") or not str(data.get("subject")).strip():
+                    raise ValueError(f"Email subject missing for node {node.get('id')}")
+                recipients = [r for r in (data.get("to") or []) if r and str(r).strip()]
+                if not recipients:
+                    raise ValueError(f"At least one 'to' recipient required for email node {node.get('id')}")
+                if not Vault.objects.filter(id=vault_id, owner=request.user).exists():
+                    raise ValueError(f"Vault ID {vault_id} not found or access denied for email node {node.get('id')}")
+                if not Credential.objects.filter(
+                    id=credential_id,
+                    vault_id=vault_id,
+                    credential_type="username_password",
+                ).exists():
+                    raise ValueError(
+                        f"SMTP credential ID {credential_id} not found in vault {vault_id} "
+                        f"for email node {node.get('id')}"
+                    )
+            except (ValueError, Exception) as e:
+                logger.error(f"Email node validation error for workflow {workflow_id}: {str(e)}")
+                return api_response(
+                    success=False,
+                    message=f"Invalid email node configuration: {str(e)}",
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                )
+
     # Mask passwords before saving to DB
     masked_inputs = dict(inputs)
     password_param_ids = set()
@@ -114,10 +150,20 @@ def trigger_workflow_run(request, workflow_id):
         for p in params:
             if p.get("type") == "password":
                 password_param_ids.add(p.get("id"))
-                
+
     for pid in password_param_ids:
         if pid in masked_inputs and masked_inputs[pid]:
             masked_inputs[pid] = "*****"
+
+    # Defense-in-depth: strip any plaintext credential payload that may have
+    # been embedded in email nodes by older clients. The execution engine
+    # resolves credentials by ID only.
+    for node in workflow.nodes:
+        smtp_cfg = node.get("data", {}).get("smtpConfig")
+        if isinstance(smtp_cfg, dict):
+            smtp_cfg.pop("selectedCredential", None)
+            smtp_cfg.pop("password", None)
+            smtp_cfg.pop("username", None)
 
     workflow_run = WorkflowRun.objects.create(
         workflow=workflow,
@@ -130,25 +176,33 @@ def trigger_workflow_run(request, workflow_id):
     execution_order = 0
     for node_id in topo_order:
         node_data = G.nodes[node_id]
-        
+
         script_id = None
         vault_id = None
         server_id = None
         credential_id = None
 
-        if node_data.get("type") == NODE_TYPE_ACTION and node_data.get("data", {}).get("type") == "script":
+        if node_data.get("type") == NODE_TYPE_ACTION:
             data_dict = node_data.get("data", {})
-            script_id_raw = data_dict.get("selectedScript", {}).get("scriptId")
-            if script_id_raw:
-                try:
-                    script_id = int(script_id_raw)
-                except (ValueError, TypeError):
-                    script_id = None
-            
-            vault_details = data_dict.get("vaultDetails", {})
-            vault_id = vault_details.get("vaultId")
-            server_id = vault_details.get("serverId")
-            credential_id = vault_details.get("credentialId")
+            action_type = data_dict.get("type")
+
+            if action_type == "script":
+                script_id_raw = data_dict.get("selectedScript", {}).get("scriptId")
+                if script_id_raw:
+                    try:
+                        script_id = int(script_id_raw)
+                    except (ValueError, TypeError):
+                        script_id = None
+
+                vault_details = data_dict.get("vaultDetails", {})
+                vault_id = vault_details.get("vaultId")
+                server_id = vault_details.get("serverId")
+                credential_id = vault_details.get("credentialId")
+
+            elif action_type == "email":
+                smtp = data_dict.get("smtpConfig") or {}
+                vault_id = smtp.get("vaultId")
+                credential_id = smtp.get("credentialId")
 
         WorkflowNodeRun.objects.create(
             workflow_run=workflow_run,

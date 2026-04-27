@@ -6,6 +6,7 @@ logger = logging.getLogger(__name__)
 
 # Execution Worker configuration
 EXEC_WORKER_URL = getattr(settings, "EXEC_WORKER_URL", os.getenv("EXEC_WORKER_URL", ""))
+EXEC_WORKER_URL_EMAIL = getattr(settings, "EXEC_WORKER_URL_EMAIL", os.getenv("EXEC_WORKER_URL_EMAIL", ""))
 WORKER_API_KEY = getattr(settings, "WORKER_API_KEY", os.getenv("WORKER_API_KEY", ""))
 # ENVIRONMENT=PROD  → attach an OIDC identity token (Google Cloud IAM).
 # ENVIRONMENT=DEV   → skip OIDC; plain X-API-Key is enough on localhost.
@@ -16,6 +17,17 @@ EXEC_WORKER_AUDIENCE = getattr(settings, "EXEC_WORKER_AUDIENCE", os.getenv("EXEC
 # Ensure the URL always has a scheme (guard against bare host/IP in env vars)
 if EXEC_WORKER_URL and not EXEC_WORKER_URL.startswith(("http://", "https://")):
     EXEC_WORKER_URL = f"http://{EXEC_WORKER_URL}"
+
+# Derive the email endpoint from the script endpoint when not configured
+# explicitly. Both endpoints live on the same exec-worker service.
+if not EXEC_WORKER_URL_EMAIL and EXEC_WORKER_URL:
+    base = EXEC_WORKER_URL.rstrip("/")
+    if base.endswith("/api/worker/execute"):
+        EXEC_WORKER_URL_EMAIL = base + "/email"
+    else:
+        EXEC_WORKER_URL_EMAIL = base.rsplit("/", 1)[0] + "/execute/email" if "/execute" in base else base + "/email"
+elif EXEC_WORKER_URL_EMAIL and not EXEC_WORKER_URL_EMAIL.startswith(("http://", "https://")):
+    EXEC_WORKER_URL_EMAIL = f"http://{EXEC_WORKER_URL_EMAIL}"
 
 def get_oidc_token(audience: str) -> str:
     """

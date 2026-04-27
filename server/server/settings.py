@@ -35,6 +35,7 @@ CLERK_SECRET_KEY = config('CLERK_SECRET_KEY', default='')
 # Cloud Run Configuration
 ENVIRONMENT = config('ENVIRONMENT', default='DEV').upper()
 EXEC_WORKER_URL = config('EXEC_WORKER_URL', default='')
+EXEC_WORKER_URL_EMAIL = config('EXEC_WORKER_URL_EMAIL', default='')
 WORKER_API_KEY = config('WORKER_API_KEY', default='')
 EXEC_WORKER_AUDIENCE = config('EXEC_WORKER_AUDIENCE', default='')
 

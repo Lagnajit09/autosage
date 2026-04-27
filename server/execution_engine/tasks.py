@@ -25,7 +25,7 @@ from execution_engine.helpers.params import (
     resolve_condition_value
 )
 from execution_engine.helpers.gcs import upload_execution_logs, upload_workflow_node_logs
-from execution_engine.helpers.script_execution.worker import build_worker_headers, EXEC_WORKER_URL
+from execution_engine.helpers.script_execution.worker import build_worker_headers, EXEC_WORKER_URL, EXEC_WORKER_URL_EMAIL
 from execution_engine.helpers.redis_pubsub import publish_workflow_log
 
 logger = logging.getLogger(__name__)
@@ -73,6 +73,327 @@ def _evaluate_condition(field_val, operator, target_val):
     if operator == "endswith": return fv_str.endswith(tv_str)
     
     return False
+
+def _resolve_email_recipients(values, node_outputs):
+    """Resolve {{node.output.X}} refs inside a list of email addresses and drop blanks."""
+    from execution_engine.helpers.params import resolve_template_string
+    resolved: list[str] = []
+    for raw in (values or []):
+        if not raw:
+            continue
+        try:
+            val = resolve_template_string(str(raw), node_outputs)
+        except Exception:
+            val = str(raw)
+        val = val.strip()
+        if val:
+            resolved.append(val)
+    return resolved
+
+
+# Pattern for a clean single-reference: ``{{node-id.output.FIELD}}`` (whole string).
+import re as _re_email
+_EMAIL_OUTPUT_REF_RE = _re_email.compile(r"^\{\{([\w-]+)\.output\.([\w]+)\}\}$")
+
+
+def _format_full_output(output) -> str:
+    """
+    Stringify the full output of an upstream node for the ``input_as_text`` field.
+
+    Scripts whose stdout is non-JSON are stored as ``{"raw": "<stdout>"}`` —
+    in that case return the raw text directly. Otherwise, pretty-print the
+    full output dict as JSON so the user sees the same shape they configured.
+    """
+    if output is None:
+        return ""
+    if isinstance(output, dict) and set(output.keys()) == {"raw"}:
+        return str(output.get("raw", ""))
+    try:
+        return json.dumps(output, indent=2, ensure_ascii=False, default=str)
+    except Exception:
+        return str(output)
+
+
+def _build_email_attached_outputs(parameters, node_outputs):
+    """
+    Resolve the email node's ``parameters`` list into a flat list of
+    ``{"name", "value"}`` pairs to render in a code block under the body.
+
+    Conventions:
+      * ``sourceType == "manual"`` → use the literal value as-is.
+      * ``sourceType == "output"`` with value ``{{nid.output.<field>}}``
+          - ``<field> == "input_as_text"`` → full upstream output as text.
+          - any other field → the scalar value at ``node_outputs[nid][field]``.
+      * Composite or unparseable references fall back to template substitution.
+
+    Missing references are rendered as a placeholder string rather than raising,
+    so the email still goes out and the user can see what was unresolved.
+    """
+    from execution_engine.helpers.params import resolve_template_string
+
+    items: list[dict] = []
+    for p in (parameters or []):
+        name = (p.get("name") or "").strip()
+        if not name:
+            continue
+        source_type = (p.get("sourceType") or "manual").lower()
+        raw = p.get("value", "")
+        raw_str = "" if raw is None else str(raw)
+
+        if source_type == "output":
+            match = _EMAIL_OUTPUT_REF_RE.match(raw_str.strip())
+            if match:
+                node_id_ref = match.group(1)
+                field = match.group(2)
+                output = node_outputs.get(node_id_ref)
+                if output is None:
+                    value_str = f"<no output yet for '{node_id_ref}'>"
+                elif field == "input_as_text":
+                    value_str = _format_full_output(output)
+                elif isinstance(output, dict) and field in output:
+                    raw_field = output[field]
+                    if isinstance(raw_field, (dict, list)):
+                        try:
+                            value_str = json.dumps(raw_field, indent=2,
+                                                    ensure_ascii=False, default=str)
+                        except Exception:
+                            value_str = str(raw_field)
+                    else:
+                        value_str = "" if raw_field is None else str(raw_field)
+                else:
+                    value_str = f"<field '{field}' not found in output of '{node_id_ref}'>"
+            else:
+                # Composite / non-clean reference — best-effort substitute.
+                try:
+                    value_str = resolve_template_string(raw_str, node_outputs)
+                except Exception:
+                    value_str = raw_str
+        else:
+            value_str = raw_str
+
+        items.append({"name": name, "value": value_str})
+    return items
+
+
+def _execute_email_node(run, node_run, node_id, data, node_outputs,
+                        workflow_run_id, fail_fast):
+    """
+    Execute an email action node by calling the exec-worker's email endpoint.
+
+    Resolves the credential by ID at runtime (never stored in workflow JSON),
+    streams NDJSON chunks back from the worker, and publishes them to the
+    Redis pub/sub channel just like the script branch does.
+    """
+    from execution_engine.helpers.params import resolve_template_string
+
+    if not EXEC_WORKER_URL_EMAIL:
+        node_run.status = 'failed'
+        node_run.error_message = "EXEC_WORKER_URL_EMAIL is not configured."
+        node_run.finished_at = dj_timezone.now()
+        node_run.save(update_fields=['status', 'error_message', 'finished_at'])
+        publish_workflow_log(workflow_run_id, 'node_complete', {
+            'node_id': node_id,
+            'node_label': node_run.node_label,
+            'node_type': 'action',
+            'action_type': 'email',
+            'status': 'failed',
+            'duration': (node_run.finished_at - node_run.started_at).total_seconds(),
+        })
+        if fail_fast:
+            run.status = 'failed'
+            run.error_message = "Email worker URL not configured."
+        return
+
+    # ── Resolve credential (encrypted at rest, decrypted on access) ────────
+    try:
+        credential = Credential.objects.get(
+            id=node_run.credential_id,
+            vault__owner=run.user,
+            credential_type="username_password",
+        )
+    except Credential.DoesNotExist:
+        node_run.status = 'failed'
+        node_run.error_message = "SMTP credential not found or access denied."
+        node_run.finished_at = dj_timezone.now()
+        node_run.save(update_fields=['status', 'error_message', 'finished_at'])
+        publish_workflow_log(workflow_run_id, 'node_complete', {
+            'node_id': node_id,
+            'node_label': node_run.node_label,
+            'node_type': 'action',
+            'action_type': 'email',
+            'status': 'failed',
+            'duration': (node_run.finished_at - node_run.started_at).total_seconds(),
+        })
+        if fail_fast:
+            run.status = 'failed'
+            run.error_message = f"Node {node_id} email credential missing."
+        return
+
+    smtp_cfg = data.get('smtpConfig') or {}
+    smtp_password = credential.password or ""
+
+    # ── Resolve template refs in user-facing fields ────────────────────────
+    try:
+        subject = resolve_template_string(str(data.get('subject') or ''), node_outputs)
+    except Exception:
+        subject = str(data.get('subject') or '')
+
+    try:
+        body = resolve_template_string(str(data.get('body') or ''), node_outputs)
+    except Exception:
+        body = str(data.get('body') or '')
+
+    to_list = _resolve_email_recipients(data.get('to'), node_outputs)
+    cc_list = _resolve_email_recipients(data.get('cc'), node_outputs)
+    bcc_list = _resolve_email_recipients(data.get('bcc'), node_outputs)
+
+    sender_raw = (data.get('from') or '').strip()
+    sender = sender_raw if sender_raw else (credential.username or '')
+
+    # Resolve email node parameters (if any) into {name, value} pairs that the
+    # worker will render in a code block under the body. Password-typed
+    # parameters are NOT included, to avoid leaking secrets into the email.
+    email_params = [
+        p for p in (data.get('parameters') or [])
+        if (p.get('type') or 'string').lower() != 'password'
+    ]
+    attached_outputs = _build_email_attached_outputs(email_params, node_outputs)
+
+    worker_payload = {
+        "execution_id": str(node_run.id),
+        "smtp": {
+            "host": str(smtp_cfg.get('host') or '').strip(),
+            "port": int(smtp_cfg.get('port') or 587),
+            "secure": bool(smtp_cfg.get('secure') or False),
+            "username": credential.username or '',
+            "password": smtp_password,
+        },
+        "sender": sender,
+        "to": to_list,
+        "cc": cc_list,
+        "bcc": bcc_list,
+        "subject": subject,
+        "body": body,
+        "workflow_run_id": str(run.id),
+        "node_label": node_run.node_label or node_id,
+        "attached_outputs": attached_outputs,
+    }
+
+    headers = build_worker_headers()
+
+    stdout_text = ""
+    stderr_text = ""
+    logs_list: list[dict] = []
+    final_exit_code = None
+
+    def _mask(text: str) -> str:
+        if not text or not isinstance(text, str) or not smtp_password:
+            return text
+        return text.replace(smtp_password, "*****")
+
+    logger.info(f"Calling exec-worker (email) for node {node_id} (Run: {workflow_run_id})")
+    try:
+        with httpx.Client(timeout=None) as client:
+            with client.stream("POST", EXEC_WORKER_URL_EMAIL, json=worker_payload, headers=headers) as response:
+                if response.status_code != 200:
+                    node_run.error_message = f"Email worker responded with {response.status_code}"
+                    node_run.status = 'failed'
+                else:
+                    for line in response.iter_lines():
+                        if not line.strip():
+                            continue
+                        try:
+                            chunk = json.loads(line)
+                        except json.JSONDecodeError:
+                            chunk = {"type": "log", "data": line}
+
+                        ctype = chunk.get('type')
+                        cdata = chunk.get('data', '')
+                        ts = dj_timezone.now().isoformat()
+
+                        if ctype == 'exit_code':
+                            try:
+                                final_exit_code = int(cdata)
+                            except (TypeError, ValueError):
+                                final_exit_code = -1
+                            publish_workflow_log(workflow_run_id, 'exit_code', {
+                                'node_id': node_id,
+                                'exit_code': final_exit_code,
+                            })
+                        elif ctype == 'email_error' or ctype == 'error':
+                            masked = _mask(str(cdata))
+                            stderr_text += masked + "\n"
+                            logs_list.append({"type": "stderr", "data": masked, "ts": ts})
+                            publish_workflow_log(workflow_run_id, 'log', {
+                                'stdout': f"[ERROR] {masked}",
+                            })
+                        elif ctype in ('email_queued', 'email_sending', 'email_sent'):
+                            masked = _mask(str(cdata))
+                            stdout_text += masked + "\n"
+                            logs_list.append({"type": "stdout", "data": masked, "ts": ts})
+                            publish_workflow_log(workflow_run_id, 'log', {
+                                'stdout': f"[EMAIL] {masked}",
+                            })
+                        else:
+                            masked = _mask(str(cdata))
+                            logs_list.append({"type": "log", "data": masked, "ts": ts})
+                            publish_workflow_log(workflow_run_id, 'log', {
+                                'stdout': f"[INFO] {masked}",
+                            })
+    except Exception as e:
+        node_run.status = 'failed'
+        node_run.error_message = f"Email worker communication error: {_mask(str(e))}"
+        stderr_text += f"{node_run.error_message}\n"
+
+    if node_run.status != 'failed':
+        node_run.status = 'success' if (final_exit_code is None or final_exit_code == 0) else 'failed'
+
+    node_run.exit_code = final_exit_code
+    node_run.finished_at = dj_timezone.now()
+    node_run.save()
+
+    duration = (node_run.finished_at - node_run.started_at).total_seconds()
+    publish_workflow_log(workflow_run_id, 'node_complete', {
+        'node_id': node_id,
+        'node_label': node_run.node_label,
+        'node_type': 'action',
+        'action_type': 'email',
+        'status': node_run.status,
+        'exit_code': final_exit_code,
+        'duration': duration,
+    })
+
+    try:
+        gcs_urls = upload_workflow_node_logs(
+            user_id=run.user_id,
+            workflow_id=str(run.workflow_id),
+            run_id=str(run.id),
+            node_id=node_id,
+            stdout=stdout_text,
+            stderr=stderr_text,
+            logs=logs_list,
+        )
+        node_run.stdout_log_url = gcs_urls.get('stdout_log_url', '')
+        node_run.stderr_log_url = gcs_urls.get('stderr_log_url', '')
+        node_run.logs_url = gcs_urls.get('logs_url', '')
+        node_run.save(update_fields=['stdout_log_url', 'stderr_log_url', 'logs_url'])
+    except Exception as e:
+        logger.error(f"Failed to upload GCS logs for email NodeRun {node_run.id}: {str(e)}")
+
+    if node_run.status == 'success':
+        node_outputs[node_id] = {
+            "to": to_list,
+            "cc": cc_list,
+            "bcc": bcc_list,
+            "subject": subject,
+            "sent": True,
+        }
+    else:
+        node_outputs[node_id] = {"sent": False}
+        if fail_fast:
+            run.status = 'failed'
+            run.error_message = f"Node {node_id} email send failed: {node_run.error_message}"
+
 
 @shared_task(bind=True, name='workflows.execute_workflow')
 def execute_workflow(self, workflow_run_id: str, raw_inputs: dict = None):
@@ -275,10 +596,24 @@ def execute_workflow(self, workflow_run_id: str, raw_inputs: dict = None):
             continue
 
         elif node_type == NODE_TYPE_ACTION:
-            if data.get('type') != 'script':
-                # For non-script actions (email, etc.), we don't have an executor yet.
-                # Mark as success for now to continue flow, or handle accordingly.
-                # TODO: Implement other action types (email, webhook, etc.)
+            action_type = data.get('type')
+
+            if action_type == 'email':
+                _execute_email_node(
+                    run=run,
+                    node_run=node_run,
+                    node_id=node_id,
+                    data=data,
+                    node_outputs=node_outputs,
+                    workflow_run_id=workflow_run_id,
+                    fail_fast=fail_fast,
+                )
+                if run.status == 'failed':
+                    break
+                continue
+
+            if action_type != 'script':
+                # Unknown / future action types: mark success and move on so the flow doesn't stall.
                 node_run.status = 'success'
                 node_run.finished_at = dj_timezone.now()
                 node_run.save(update_fields=['status', 'finished_at'])
@@ -288,7 +623,7 @@ def execute_workflow(self, workflow_run_id: str, raw_inputs: dict = None):
                     'node_id': node_id,
                     'node_label': node_run.node_label,
                     'node_type': 'action',
-                    'action_type': data.get('type', 'unknown'),
+                    'action_type': action_type or 'unknown',
                     'status': 'success',
                     'duration': duration,
                 })
