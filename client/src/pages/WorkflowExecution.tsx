@@ -18,10 +18,13 @@ import ExecutionTerminal from "@/components/Execution/ExecutionTerminal";
 import ExecutionHistory from "@/components/Execution/ExecutionHistory";
 import ExecutionResponse from "@/components/Execution/ExecutionResponse";
 import ExecutionParameters from "@/components/Execution/ExecutionParameters";
-import { useAuth } from "@clerk/clerk-react";
+import { useAuth, useUser } from "@clerk/clerk-react";
 import { apiRequest } from "@/lib/api-client";
 import Loader from "@/components/Loader";
 import { WorkflowData } from "@/utils/types";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Label } from "@/components/ui/label";
+import { Mail } from "lucide-react";
 
 const WorkflowExecution = () => {
   const { id } = useParams();
@@ -41,7 +44,11 @@ const WorkflowExecution = () => {
   );
 
   const { getToken, isSignedIn } = useAuth();
+  const { user } = useUser();
   const navigate = useNavigate();
+
+  const userEmail = user?.primaryEmailAddress?.emailAddress || "";
+  const [sendEmail, setSendEmail] = useState(false);
 
   // Start/stop the elapsed-seconds counter based on isExecuting
   useEffect(() => {
@@ -249,7 +256,11 @@ const WorkflowExecution = () => {
         `/api/execution-engine/workflows/${id}/run/`,
         {
           method: "POST",
-          body: JSON.stringify({ inputs }),
+          body: JSON.stringify({
+            inputs,
+            send_email: sendEmail,
+            user_email: sendEmail ? userEmail : "",
+          }),
         },
         token,
       );
@@ -345,6 +356,35 @@ const WorkflowExecution = () => {
                 </CardTitle>
               </CardHeader>
               <CardContent className="p-0 max-h-[300px] overflow-y-auto">
+                <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-800">
+                  <Label
+                    htmlFor="send-completion-email"
+                    className="flex items-start gap-3 rounded-lg border border-gray-200 dark:border-gray-700 p-3 hover:bg-gray-50 dark:hover:bg-gray-800 cursor-pointer"
+                  >
+                    <Checkbox
+                      id="send-completion-email"
+                      checked={sendEmail}
+                      onCheckedChange={(checked) =>
+                        setSendEmail(Boolean(checked))
+                      }
+                      disabled={isExecuting || !userEmail}
+                      className="mt-0.5 data-[state=checked]:border-purple-600 data-[state=checked]:bg-purple-600 data-[state=checked]:text-white"
+                    />
+                    <div className="grid gap-1 font-normal">
+                      <div className="flex items-center gap-2">
+                        <Mail className="w-3.5 h-3.5 text-purple-500" />
+                        <p className="text-sm leading-none font-medium text-gray-900 dark:text-gray-100">
+                          Send completion email
+                        </p>
+                      </div>
+                      <p className="text-xs text-gray-500 dark:text-gray-400">
+                        {userEmail
+                          ? `We'll email ${userEmail} when this run finishes.`
+                          : "No email on file for your account."}
+                      </p>
+                    </div>
+                  </Label>
+                </div>
                 <ExecutionParameters
                   workflow={workflow}
                   inputs={inputs}
