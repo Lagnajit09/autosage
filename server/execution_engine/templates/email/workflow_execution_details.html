@@ -1,0 +1,199 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <meta name="x-apple-disable-message-reformatting" />
+    <title>Workflow run — {{ workflow_name }}</title>
+    <style>
+      @media (prefers-color-scheme: dark) {
+        body, .bg-page { background: #0a0a0a !important; }
+        .bg-card { background: #111113 !important; border-color: #27272a !important; }
+        .text-heading { color: #fafafa !important; }
+        .text-body { color: #d4d4d8 !important; }
+        .text-muted { color: #71717a !important; }
+        .divider { border-color: #27272a !important; }
+        .code-block {
+          background: #18181b !important;
+          border-color: #27272a !important;
+          color: #e4e4e7 !important;
+        }
+        .cta-button {
+          background: #8b5cf6 !important;
+          color: #ffffff !important;
+        }
+        .status-pill-success { background: #14532d !important; color: #bbf7d0 !important; }
+        .status-pill-failed  { background: #7f1d1d !important; color: #fecaca !important; }
+        .status-pill-cancelled { background: #422006 !important; color: #fed7aa !important; }
+      }
+    </style>
+  </head>
+  <body
+    class="bg-page"
+    style="margin:0;padding:0;background:#f4f4f5;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;line-height:1.55;color:#27272a;-webkit-font-smoothing:antialiased;"
+  >
+    <!-- Preheader -->
+    <div style="display:none;max-height:0;overflow:hidden;mso-hide:all;">
+      Workflow "{{ workflow_name }}" finished with status {{ status_label }}.
+    </div>
+
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="bg-page" style="background:#f4f4f5;">
+      <tr>
+        <td align="center" style="padding:32px 16px;">
+          <table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0" style="max-width:600px;width:100%;">
+
+            <!-- Brand header -->
+            <tr>
+              <td style="padding:0 0 20px 0;">
+                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+                  <tr>
+                    <td align="left" style="font-size:18px;font-weight:700;letter-spacing:0.5px;color:#8b5cf6;">
+                      AUTOSAGE
+                    </td>
+                    <td align="right" class="text-muted" style="font-size:12px;color:#71717a;">
+                      Workflow Run Notification
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+
+            <!-- Card -->
+            <tr>
+              <td
+                class="bg-card"
+                style="background:#ffffff;border:1px solid #e4e4e7;border-radius:12px;padding:32px;"
+              >
+                <h1
+                  class="text-heading"
+                  style="margin:0 0 8px 0;font-size:20px;line-height:1.4;font-weight:600;color:#18181b;"
+                >
+                  Workflow run finished
+                </h1>
+
+                <p
+                  class="text-body"
+                  style="margin:0 0 20px 0;font-size:14px;color:#3f3f46;"
+                >
+                  Your <strong>{{ workflow_name }}</strong> workflow has finished
+                  executing with status
+                  <span
+                    class="status-pill-{{ status }}"
+                    style="
+                      display:inline-block;
+                      padding:2px 10px;
+                      border-radius:999px;
+                      font-size:12px;
+                      font-weight:600;
+                      letter-spacing:0.3px;
+                      text-transform:uppercase;
+                      background:{{ status_bg }};
+                      color:{{ status_fg }};
+                      vertical-align:1px;
+                    "
+                  >{{ status_label }}</span>.
+                </p>
+
+                <div
+                  class="text-muted"
+                  style="font-size:11px;letter-spacing:0.6px;text-transform:uppercase;font-weight:600;color:#71717a;margin:0 0 8px 0;"
+                >
+                  Execution metadata
+                </div>
+                <pre
+                  class="code-block"
+                  style="
+                    background:#f4f4f5;
+                    border:1px solid #e4e4e7;
+                    border-radius:8px;
+                    padding:14px 16px;
+                    margin:0 0 24px 0;
+                    font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace;
+                    font-size:13px;
+                    line-height:1.55;
+                    color:#18181b;
+                    white-space:pre-wrap;
+                    word-break:break-word;
+                    overflow-x:auto;
+                  "
+>{{ metadata_block }}</pre>
+
+                {% if error_message %}
+                <div
+                  class="text-muted"
+                  style="font-size:11px;letter-spacing:0.6px;text-transform:uppercase;font-weight:600;color:#b91c1c;margin:0 0 8px 0;"
+                >
+                  Error
+                </div>
+                <pre
+                  class="code-block"
+                  style="
+                    background:#fef2f2;
+                    border:1px solid #fecaca;
+                    border-radius:8px;
+                    padding:14px 16px;
+                    margin:0 0 24px 0;
+                    font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace;
+                    font-size:13px;
+                    line-height:1.55;
+                    color:#7f1d1d;
+                    white-space:pre-wrap;
+                    word-break:break-word;
+                  "
+>{{ error_message }}</pre>
+                {% endif %}
+
+                <!-- CTA -->
+                <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 8px 0;">
+                  <tr>
+                    <td>
+                      <a
+                        href="{{ execution_url }}"
+                        class="cta-button"
+                        style="
+                          display:inline-block;
+                          background:#8b5cf6;
+                          color:#ffffff;
+                          text-decoration:none;
+                          font-size:14px;
+                          font-weight:600;
+                          padding:10px 18px;
+                          border-radius:8px;
+                          line-height:1.2;
+                        "
+                      >View full logs &rarr;</a>
+                    </td>
+                  </tr>
+                </table>
+                <p class="text-muted" style="margin:0;font-size:12px;color:#71717a;word-break:break-all;">
+                  Or copy this link: <a href="{{ execution_url }}" style="color:#8b5cf6;text-decoration:none;">{{ execution_url }}</a>
+                </p>
+
+                <hr
+                  class="divider"
+                  style="border:none;border-top:1px solid #e4e4e7;margin:28px 0 0 0;"
+                />
+
+                <p
+                  class="text-muted"
+                  style="margin:20px 0 0 0;font-size:12px;line-height:1.5;color:#71717a;"
+                >
+                  Sent by Autosage &middot; run
+                  <span style="font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace;">{{ run_id_short }}</span>
+                </p>
+              </td>
+            </tr>
+
+            <!-- Footer -->
+            <tr>
+              <td align="center" class="text-muted" style="padding:20px 8px 0 8px;font-size:12px;color:#a1a1aa;">
+                You received this email because you enabled the Send-Email option for this workflow run.
+              </td>
+            </tr>
+
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>

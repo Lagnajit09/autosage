@@ -56,6 +56,8 @@ def trigger_workflow_run(request, workflow_id):
         )
 
     inputs = serializer.validated_data.get("inputs", {})
+    send_email = serializer.validated_data.get("send_email", False)
+    user_email = serializer.validated_data.get("user_email", "") or ""
 
     try:
         G = build_dag(workflow.nodes, workflow.edges)
@@ -169,7 +171,9 @@ def trigger_workflow_run(request, workflow_id):
         workflow=workflow,
         user=request.user,
         status="queued",
-        inputs=masked_inputs
+        inputs=masked_inputs,
+        send_email=send_email,
+        notification_email=user_email if send_email else "",
     )
 
     # Create WorkflowNodeRuns

@@ -901,3 +901,16 @@ def execute_workflow(self, workflow_run_id: str, raw_inputs: dict = None):
         'workflow_run_id': workflow_run_id,
         'status': run.status,
     })
+
+    # Send the completion email if the user opted in at trigger time. Failures
+    # here must not impact the run itself, so the helper swallows exceptions.
+    if run.send_email and run.notification_email:
+        try:
+            from execution_engine.helpers.notifications.workflow_email import (
+                send_workflow_completion_email,
+            )
+            send_workflow_completion_email(workflow_run_id)
+        except Exception:
+            logger.exception(
+                "Workflow completion email failed for run %s", workflow_run_id,
+            )

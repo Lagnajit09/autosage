@@ -63,6 +63,11 @@ class WorkflowRun(models.Model):
     # Global workflow-level input overrides
     inputs = models.JSONField(default=dict, blank=True)
 
+    # Notification preferences captured at trigger time. The Celery task
+    # honours these after the run terminates.
+    send_email = models.BooleanField(default=False)
+    notification_email = models.EmailField(blank=True)
+
     error_message = models.TextField(blank=True)
     started_at = models.DateTimeField(null=True, blank=True)
     finished_at = models.DateTimeField(null=True, blank=True)

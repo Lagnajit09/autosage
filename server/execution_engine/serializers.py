@@ -83,6 +83,15 @@ class ScriptExecutionHistorySerializer(serializers.ModelSerializer):
 
 class WorkflowRunRequestSerializer(serializers.Serializer):
     inputs = serializers.DictField(required=False, default=dict)
+    send_email = serializers.BooleanField(required=False, default=False)
+    user_email = serializers.EmailField(required=False, allow_blank=True, default="")
+
+    def validate(self, attrs):
+        if attrs.get("send_email") and not attrs.get("user_email"):
+            raise serializers.ValidationError(
+                {"user_email": "user_email is required when send_email is true."}
+            )
+        return attrs
 
 
 class WorkflowNodeRunSerializer(serializers.ModelSerializer):

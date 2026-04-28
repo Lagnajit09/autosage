@@ -277,3 +277,23 @@ CELERY_TIMEZONE          = 'UTC'
 CELERY_TASK_TRACK_STARTED = True
 CELERY_TASK_SOFT_TIME_LIMIT = 1800   # 30 minutes per workflow
 CELERY_TASK_TIME_LIMIT      = 3600   # hard kill after 1 hour
+
+# Email (Gmail SMTP, app password). Used by Django to notify the user when
+# their workflow run completes (Send-Email checkbox on the Execution page).
+GMAIL_USERNAME = config('GMAIL_USERNAME', default='')
+GMAIL_APP_PASSWORD = config('GMAIL_APP_PASSWORD', default='')
+EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+EMAIL_HOST = 'smtp.gmail.com'
+EMAIL_PORT = 587
+EMAIL_USE_TLS = True
+EMAIL_HOST_USER = GMAIL_USERNAME
+EMAIL_HOST_PASSWORD = GMAIL_APP_PASSWORD
+DEFAULT_FROM_EMAIL = GMAIL_USERNAME or 'noreply@autosage.local'
+
+# Public frontend base URL for email deep-links. The notification email's
+# "View execution" link is built against this. Falls back to the first
+# CORS-allowed origin so DEV setups still produce a clickable link.
+FRONTEND_URL = config(
+    'FRONTEND_URL',
+    default=(CORS_ALLOWED_ORIGINS[0] if CORS_ALLOWED_ORIGINS else 'http://localhost:5173'),
+)
