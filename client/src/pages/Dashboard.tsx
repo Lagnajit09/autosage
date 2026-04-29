@@ -13,6 +13,7 @@ import {
 } from "@/components/Dashboard/RecentActions";
 import { useAuth, useUser } from "@clerk/clerk-react";
 import { motion, AnimatePresence } from "framer-motion";
+import { apiRequest } from "@/lib/api-client";
 
 const Dashboard = () => {
   const { getToken, isSignedIn } = useAuth();
@@ -63,13 +64,40 @@ const Dashboard = () => {
       const hasSeenWelcome = localStorage.getItem("hasSeenWelcome");
       if (!hasSeenWelcome) {
         setShowFirstVisitWelcome(true);
+
+        // Sync user with backend
+        const syncUser = async () => {
+          try {
+            const token = await getToken();
+            if (token) {
+              await apiRequest(
+                "/api/user/update/",
+                {
+                  method: "POST",
+                  body: JSON.stringify({
+                    first_name: user.firstName,
+                    last_name: user.lastName,
+                    email: user.primaryEmailAddress?.emailAddress,
+                  }),
+                },
+                token,
+              );
+              console.log("User synced with backend successfully");
+            }
+          } catch (error) {
+            console.error("Failed to sync user with backend:", error);
+          }
+        };
+
+        syncUser();
+
         setTimeout(() => {
           setShowFirstVisitWelcome(false);
           localStorage.setItem("hasSeenWelcome", "true");
         }, 3500);
       }
     }
-  }, [user]);
+  }, [user, getToken]);
 
   // Mock Data
   const stats = {
