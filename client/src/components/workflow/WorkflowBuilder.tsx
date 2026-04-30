@@ -34,6 +34,7 @@ import {
   updateWorkflow,
   deleteWorkflow,
 } from "@/lib/actions/workflow";
+import { deleteHttpTrigger } from "@/lib/actions/triggers";
 import { useAuth } from "@clerk/clerk-react";
 
 const nodeTypes = {
@@ -258,13 +259,34 @@ const WorkflowBuilderContent = ({
 
   const deleteNode = useCallback(
     (nodeId: string) => {
+      const nodeToDelete = nodes.find((n) => n.id === nodeId);
+
       setNodes((nds) => nds.filter((node) => node.id !== nodeId));
       setEdges((eds) =>
         eds.filter((edge) => edge.source !== nodeId && edge.target !== nodeId),
       );
       setSelectedNode(null);
+
+      // Best-effort cleanup of the server-side HTTP trigger record so
+      // orphaned tokens don't accumulate. Failure is logged but doesn't
+      // block the local delete — the user can also retry via re-save.
+      if (
+        workflowId &&
+        nodeToDelete?.type === "trigger" &&
+        nodeToDelete?.data?.type === "http" &&
+        nodeToDelete?.data?.httpTrigger
+      ) {
+        (async () => {
+          try {
+            const token = await getToken();
+            await deleteHttpTrigger(workflowId, nodeId, token);
+          } catch (err) {
+            console.warn("Failed to delete HTTP trigger on server:", err);
+          }
+        })();
+      }
     },
-    [setNodes, setEdges],
+    [setNodes, setEdges, nodes, workflowId, getToken],
   );
 
   const deleteEdge = useCallback(
@@ -647,6 +669,7 @@ const WorkflowBuilderContent = ({
             onCreateEdge={handleCreateEdge}
             nodes={nodes}
             edges={edges}
+            workflowId={workflowId}
             open={sidebarOpen}
             onOpenChange={(open) => {
               setSidebarOpen(open);

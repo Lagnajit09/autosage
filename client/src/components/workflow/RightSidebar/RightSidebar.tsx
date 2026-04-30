@@ -35,6 +35,7 @@ interface RightSidebarProps {
   onSaveWorkflow: () => void;
   nodes?: Node[];
   edges?: Edge[];
+  workflowId?: string | null;
   onCreateEdge?: (
     sourceId: string,
     targetId: string,
@@ -53,6 +54,7 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({
   onOpenChange,
   nodes = [],
   edges = [],
+  workflowId,
   onCreateEdge,
 }) => {
   const [showParametersModal, setShowParametersModal] = useState(false);
@@ -116,6 +118,8 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({
           <TriggerConf
             selectedNode={selectedNode}
             onUpdateNode={onUpdateNode}
+            workflowId={workflowId}
+            nodes={nodes}
           />
         );
       default:

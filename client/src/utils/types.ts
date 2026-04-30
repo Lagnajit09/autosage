@@ -92,6 +92,16 @@ export interface NodeData {
   webhookMethod?: "GET" | "POST" | "PUT" | "DELETE" | "PATCH";
   webhookHeaders?: Record<string, string>;
   webhookBody?: string;
+  // HTTP-trigger metadata (server is source of truth; this is a denormalized
+  // copy so the UI can render before re-fetching). The plaintext secret is
+  // never stored here.
+  httpTrigger?: {
+    triggerUrl: string;
+    secretLast4: string;
+    createdAt: string;
+    rotatedAt?: string | null;
+    lastTriggeredAt?: string | null;
+  };
 
   // Email Specific
   from?: string;
@@ -145,6 +155,8 @@ export interface WorkflowData {
 export interface BaseConfigProps {
   selectedNode: Node;
   onUpdateNode: (nodeId: string, data: Partial<NodeData>) => void;
+  workflowId?: string | null;
+  nodes?: Node[];
 }
 
 export interface EdgeConfigProps {
