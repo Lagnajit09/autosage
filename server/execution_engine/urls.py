@@ -25,6 +25,16 @@ urlpatterns = [
     path("workflows/runs/<uuid:run_id>/cancel/", views_workflow.cancel_workflow_run, name="workflow-run-cancel"),
     path("workflows/runs/<uuid:run_id>/stream/", views_workflow.stream_workflow_run, name="workflow-run-stream"),
 
+    # Public HTTP trigger entry point (no Clerk auth — secret in X-Trigger-Secret header)
+    path("triggers/http/<str:trigger_token>/", views_workflow.trigger_workflow_via_http, name="http-trigger-execute"),
+
+    # Public run-status polling for HTTP-trigger callers (same X-Trigger-Secret auth)
+    path(
+        "triggers/http/<str:trigger_token>/runs/<uuid:run_id>/",
+        views_workflow.get_workflow_run_via_http_trigger,
+        name="http-trigger-run-status",
+    ),
+
     path("health/", views_script.health_check, name="exec-worker-health-check"),
 
 ]

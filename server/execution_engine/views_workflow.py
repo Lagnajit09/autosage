@@ -1,16 +1,21 @@
 import json
 import logging
+from django.db import IntegrityError
 from django.utils import timezone
 from django.http import StreamingHttpResponse
 from django.contrib.auth.models import AnonymousUser
 from django.views.decorators.csrf import csrf_exempt
 from asgiref.sync import sync_to_async
 from rest_framework.decorators import api_view, permission_classes, throttle_classes
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework import status
 
 from server.utils import api_response
-from server.rate_limiters import ExecutionBurstThrottle, ExecutionSustainedThrottle
+from server.rate_limiters import (
+    ExecutionBurstThrottle,
+    ExecutionSustainedThrottle,
+    HttpTriggerThrottle,
+)
 from workflows.models import Workflow
 from execution_engine.models import WorkflowRun, WorkflowNodeRun
 from scripts.models import Script
@@ -26,6 +31,7 @@ from execution_engine.helpers.graph import (
     validate_executable_nodes,
     NODE_TYPE_ACTION,
 )
+from execution_engine.helpers.run_builder import RunBuildError, enqueue_workflow_run
 from execution_engine.tasks import execute_workflow
 from execution_engine.helpers.redis_pubsub import subscribe_workflow_logs
 from execution_engine.helpers.script_execution.utils import sse_event, json_response, check_throttle
@@ -60,176 +66,268 @@ def trigger_workflow_run(request, workflow_id):
     user_email = serializer.validated_data.get("user_email", "") or ""
 
     try:
-        G = build_dag(workflow.nodes, workflow.edges)
-        topo_order = topological_order(G)
-    except ValueError:
+        workflow_run = enqueue_workflow_run(
+            workflow=workflow,
+            user=request.user,
+            inputs=inputs,
+            send_email=send_email,
+            user_email=user_email,
+        )
+    except RunBuildError as exc:
         return api_response(
             success=False,
-            message="Workflow graph validation failed.",
+            message=exc.message,
             status_code=status.HTTP_400_BAD_REQUEST,
         )
-
-    # Secondary validation: Enforce vault/server credentials presence and existence for scripts
-    missing_bindings = validate_executable_nodes(workflow.nodes)
-    if missing_bindings:
-        return api_response(
-            success=False,
-            message=f"Missing script or credential bindings in nodes: {missing_bindings}",
-            status_code=status.HTTP_400_BAD_REQUEST,
-        )
-
-    # Validate existence of referenced objects in DB
-    for node in workflow.nodes:
-        if node.get("type") != NODE_TYPE_ACTION:
-            continue
-        data = node.get("data", {})
-        action_type = data.get("type")
-
-        if action_type == "script":
-            script_id = data.get("selectedScript", {}).get("scriptId")
-            vault_details = data.get("vaultDetails", {})
-            vault_id = vault_details.get("vaultId")
-            server_id = vault_details.get("serverId")
-            credential_id = vault_details.get("credentialId")
-
-            try:
-                if not Script.objects.filter(id=script_id, owner=request.user).exists():
-                    raise ValueError(f"Script ID {script_id} not found or access denied for node {node.get('id')}")
-                if not Vault.objects.filter(id=vault_id, owner=request.user).exists():
-                    raise ValueError(f"Vault ID {vault_id} not found or access denied for node {node.get('id')}")
-                if not Server.objects.filter(id=server_id, vault_id=vault_id).exists():
-                    raise ValueError(f"Server ID {server_id} not found in vault {vault_id}")
-                if not Credential.objects.filter(id=credential_id, vault_id=vault_id).exists():
-                    raise ValueError(f"Credential ID {credential_id} not found in vault {vault_id}")
-            except (ValueError, Exception) as e:
-                logger.error(f"Validation error for workflow {workflow_id}: {str(e)}")
-                return api_response(
-                    success=False,
-                    message="One or more script or credential bindings are invalid or inaccessible.",
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                )
-
-        elif action_type == "email":
-            smtp = data.get("smtpConfig") or {}
-            vault_id = smtp.get("vaultId")
-            credential_id = smtp.get("credentialId")
-
-            try:
-                if not smtp.get("host") or not str(smtp.get("host")).strip():
-                    raise ValueError(f"SMTP host missing for email node {node.get('id')}")
-                port = smtp.get("port")
-                if not isinstance(port, int) or port <= 0 or port > 65535:
-                    raise ValueError(f"SMTP port invalid for email node {node.get('id')}")
-                if not data.get("subject") or not str(data.get("subject")).strip():
-                    raise ValueError(f"Email subject missing for node {node.get('id')}")
-                recipients = [r for r in (data.get("to") or []) if r and str(r).strip()]
-                if not recipients:
-                    raise ValueError(f"At least one 'to' recipient required for email node {node.get('id')}")
-                if not Vault.objects.filter(id=vault_id, owner=request.user).exists():
-                    raise ValueError(f"Vault ID {vault_id} not found or access denied for email node {node.get('id')}")
-                if not Credential.objects.filter(
-                    id=credential_id,
-                    vault_id=vault_id,
-                    credential_type="username_password",
-                ).exists():
-                    raise ValueError(
-                        f"SMTP credential ID {credential_id} not found in vault {vault_id} "
-                        f"for email node {node.get('id')}"
-                    )
-            except (ValueError, Exception) as e:
-                logger.error(f"Email node validation error for workflow {workflow_id}: {str(e)}")
-                return api_response(
-                    success=False,
-                    message=f"Invalid email node configuration: {str(e)}",
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                )
-
-    # Mask passwords before saving to DB
-    masked_inputs = dict(inputs)
-    password_param_ids = set()
-    for node in workflow.nodes:
-        params = node.get("data", {}).get("parameters", [])
-        for p in params:
-            if p.get("type") == "password":
-                password_param_ids.add(p.get("id"))
-
-    for pid in password_param_ids:
-        if pid in masked_inputs and masked_inputs[pid]:
-            masked_inputs[pid] = "*****"
-
-    # Defense-in-depth: strip any plaintext credential payload that may have
-    # been embedded in email nodes by older clients. The execution engine
-    # resolves credentials by ID only.
-    for node in workflow.nodes:
-        smtp_cfg = node.get("data", {}).get("smtpConfig")
-        if isinstance(smtp_cfg, dict):
-            smtp_cfg.pop("selectedCredential", None)
-            smtp_cfg.pop("password", None)
-            smtp_cfg.pop("username", None)
-
-    workflow_run = WorkflowRun.objects.create(
-        workflow=workflow,
-        user=request.user,
-        status="queued",
-        inputs=masked_inputs,
-        send_email=send_email,
-        notification_email=user_email if send_email else "",
-    )
-
-    # Create WorkflowNodeRuns
-    execution_order = 0
-    for node_id in topo_order:
-        node_data = G.nodes[node_id]
-
-        script_id = None
-        vault_id = None
-        server_id = None
-        credential_id = None
-
-        if node_data.get("type") == NODE_TYPE_ACTION:
-            data_dict = node_data.get("data", {})
-            action_type = data_dict.get("type")
-
-            if action_type == "script":
-                script_id_raw = data_dict.get("selectedScript", {}).get("scriptId")
-                if script_id_raw:
-                    try:
-                        script_id = int(script_id_raw)
-                    except (ValueError, TypeError):
-                        script_id = None
-
-                vault_details = data_dict.get("vaultDetails", {})
-                vault_id = vault_details.get("vaultId")
-                server_id = vault_details.get("serverId")
-                credential_id = vault_details.get("credentialId")
-
-            elif action_type == "email":
-                smtp = data_dict.get("smtpConfig") or {}
-                vault_id = smtp.get("vaultId")
-                credential_id = smtp.get("credentialId")
-
-        WorkflowNodeRun.objects.create(
-            workflow_run=workflow_run,
-            node_id=node_id,
-            node_label=node_data.get("data", {}).get("label", node_id),
-            script_id=script_id,
-            vault_id=vault_id,
-            server_id=server_id,
-            credential_id=credential_id,
-            status="pending",
-            execution_order=execution_order,
-        )
-        execution_order += 1
-
-    task = execute_workflow.delay(str(workflow_run.id), raw_inputs=inputs)
-    workflow_run.celery_task_id = task.id
-    workflow_run.save(update_fields=['celery_task_id'])
 
     return api_response(
         success=True,
         message="Workflow execution queued successfully.",
         data={"workflow_run_id": str(workflow_run.id), "status": "queued"},
-        status_code=status.HTTP_202_ACCEPTED
+        status_code=status.HTTP_202_ACCEPTED,
+    )
+
+
+def _build_polling_url(request, trigger_token: str, run_id) -> str:
+    """Absolute URL the caller can GET (with X-Trigger-Secret) to poll status."""
+    return request.build_absolute_uri(
+        f"/api/execution-engine/triggers/http/{trigger_token}/runs/{run_id}/"
+    )
+
+
+@api_view(["POST"])
+@permission_classes([AllowAny])
+@throttle_classes([HttpTriggerThrottle])
+def trigger_workflow_via_http(request, trigger_token):
+    """Public webhook entry point for HTTP-trigger nodes.
+
+    Auth: ``X-Trigger-Secret`` header verified against the stored hash.
+    Idempotency: ``Idempotency-Key`` header required. Repeat requests with
+    the same key on the same trigger return the original run instead of
+    queueing a duplicate.
+
+    Returns 202 Accepted on first call, 200 OK on idempotent replay.
+    Body shape: ``{"inputs": {...}}`` (forwarded to the Celery task).
+    The response includes a ``polling_url`` the caller can GET (with the
+    same ``X-Trigger-Secret``) to retrieve run status without logging in.
+    """
+    # Imported lazily so the views_workflow module doesn't depend on the
+    # triggers app at import time (which would create a circular reference
+    # during INSTALLED_APPS resolution).
+    from triggers.models import HttpTrigger, HttpTriggerIdempotencyKey
+    from triggers.utils import verify_secret
+
+    try:
+        trigger = HttpTrigger.objects.select_related("workflow", "workflow__user").get(
+            trigger_token=trigger_token
+        )
+    except HttpTrigger.DoesNotExist:
+        return api_response(
+            success=False,
+            message="Trigger not found.",
+            status_code=status.HTTP_404_NOT_FOUND,
+        )
+
+    presented_secret = request.headers.get("X-Trigger-Secret", "")
+    if not presented_secret or not verify_secret(presented_secret, trigger.secret_hash):
+        return api_response(
+            success=False,
+            message="Invalid trigger secret.",
+            status_code=status.HTTP_401_UNAUTHORIZED,
+        )
+
+    idempotency_key = (request.headers.get("Idempotency-Key") or "").strip()
+    if not idempotency_key:
+        return api_response(
+            success=False,
+            message="Idempotency-Key header is required.",
+            status_code=status.HTTP_400_BAD_REQUEST,
+        )
+    if len(idempotency_key) > 255:
+        return api_response(
+            success=False,
+            message="Idempotency-Key header exceeds 255 characters.",
+            status_code=status.HTTP_400_BAD_REQUEST,
+        )
+
+    # Fast-path replay check
+    existing = (
+        HttpTriggerIdempotencyKey.objects
+        .select_related("workflow_run")
+        .filter(trigger=trigger, key=idempotency_key)
+        .first()
+    )
+    if existing is not None:
+        return api_response(
+            success=True,
+            message="Duplicate request — returning prior workflow run.",
+            data={
+                "workflow_run_id": str(existing.workflow_run_id),
+                "status": existing.workflow_run.status,
+                "idempotent": True,
+                "polling_url": _build_polling_url(request, trigger_token, existing.workflow_run_id),
+            },
+            status_code=status.HTTP_200_OK,
+        )
+
+    raw_inputs = request.data.get("inputs", {}) if isinstance(request.data, dict) else {}
+    if not isinstance(raw_inputs, dict):
+        return api_response(
+            success=False,
+            message="Request body 'inputs' must be a JSON object.",
+            status_code=status.HTTP_400_BAD_REQUEST,
+        )
+
+    workflow = trigger.workflow
+    if workflow.user is None:
+        return api_response(
+            success=False,
+            message="Workflow has no owner — cannot run.",
+            status_code=status.HTTP_400_BAD_REQUEST,
+        )
+
+    try:
+        workflow_run = enqueue_workflow_run(
+            workflow=workflow,
+            user=workflow.user,
+            inputs=raw_inputs,
+            send_email=False,
+            user_email="",
+        )
+    except RunBuildError as exc:
+        return api_response(
+            success=False,
+            message=exc.message,
+            status_code=status.HTTP_400_BAD_REQUEST,
+        )
+
+    # Race-safe insert. If another request beat us to it for the same
+    # idempotency key, surface their run id (and accept the orphan run we
+    # just queued — the unique constraint is the source of truth).
+    try:
+        HttpTriggerIdempotencyKey.objects.create(
+            trigger=trigger,
+            key=idempotency_key,
+            workflow_run=workflow_run,
+        )
+    except IntegrityError:
+        existing = (
+            HttpTriggerIdempotencyKey.objects
+            .select_related("workflow_run")
+            .get(trigger=trigger, key=idempotency_key)
+        )
+        logger.warning(
+            "HTTP trigger %s race: orphan run %s replaced by %s",
+            trigger.id, workflow_run.id, existing.workflow_run_id,
+        )
+        return api_response(
+            success=True,
+            message="Duplicate request — returning prior workflow run.",
+            data={
+                "workflow_run_id": str(existing.workflow_run_id),
+                "status": existing.workflow_run.status,
+                "idempotent": True,
+                "polling_url": _build_polling_url(request, trigger_token, existing.workflow_run_id),
+            },
+            status_code=status.HTTP_200_OK,
+        )
+
+    HttpTrigger.objects.filter(pk=trigger.pk).update(last_triggered_at=timezone.now())
+
+    return api_response(
+        success=True,
+        message="Workflow execution queued successfully.",
+        data={
+            "workflow_run_id": str(workflow_run.id),
+            "status": "queued",
+            "idempotent": False,
+            "polling_url": _build_polling_url(request, trigger_token, workflow_run.id),
+        },
+        status_code=status.HTTP_202_ACCEPTED,
+    )
+
+
+@api_view(["GET"])
+@permission_classes([AllowAny])
+@throttle_classes([HttpTriggerThrottle])
+def get_workflow_run_via_http_trigger(request, trigger_token, run_id):
+    """Public run-status polling endpoint for HTTP-trigger callers.
+
+    Auth: ``X-Trigger-Secret`` header against the same trigger that
+    created the run. Visibility is scoped to runs this trigger started
+    (looked up via the idempotency-key map) — runs from the manual
+    trigger or other HTTP triggers on the same workflow are not exposed
+    through this endpoint.
+
+    The response contains run-level status plus a per-node summary.
+    Raw stdout/stderr log URLs are intentionally omitted; those remain
+    behind Clerk auth in the Autosage UI.
+    """
+    from triggers.models import HttpTrigger, HttpTriggerIdempotencyKey
+    from triggers.utils import verify_secret
+
+    try:
+        trigger = HttpTrigger.objects.get(trigger_token=trigger_token)
+    except HttpTrigger.DoesNotExist:
+        return api_response(
+            success=False,
+            message="Trigger not found.",
+            status_code=status.HTTP_404_NOT_FOUND,
+        )
+
+    presented_secret = request.headers.get("X-Trigger-Secret", "")
+    if not presented_secret or not verify_secret(presented_secret, trigger.secret_hash):
+        return api_response(
+            success=False,
+            message="Invalid trigger secret.",
+            status_code=status.HTTP_401_UNAUTHORIZED,
+        )
+
+    # Run must have been created by THIS trigger (idempotency-key linkage).
+    if not HttpTriggerIdempotencyKey.objects.filter(
+        trigger=trigger, workflow_run_id=run_id
+    ).exists():
+        return api_response(
+            success=False,
+            message="Workflow run not found for this trigger.",
+            status_code=status.HTTP_404_NOT_FOUND,
+        )
+
+    try:
+        run = WorkflowRun.objects.get(id=run_id)
+    except WorkflowRun.DoesNotExist:
+        return api_response(
+            success=False,
+            message="Workflow run not found for this trigger.",
+            status_code=status.HTTP_404_NOT_FOUND,
+        )
+
+    nodes = [
+        {
+            "node_id": nr.node_id,
+            "node_label": nr.node_label,
+            "status": nr.status,
+            "execution_order": nr.execution_order,
+            "exit_code": nr.exit_code,
+            "error_message": nr.error_message,
+            "started_at": nr.started_at.isoformat() if nr.started_at else None,
+            "finished_at": nr.finished_at.isoformat() if nr.finished_at else None,
+        }
+        for nr in run.node_runs.all().order_by("execution_order")
+    ]
+
+    return api_response(
+        success=True,
+        message="Workflow run status.",
+        data={
+            "workflow_run_id": str(run.id),
+            "status": run.status,
+            "error_message": run.error_message,
+            "created_at": run.created_at.isoformat(),
+            "started_at": run.started_at.isoformat() if run.started_at else None,
+            "finished_at": run.finished_at.isoformat() if run.finished_at else None,
+            "nodes": nodes,
+        },
     )
 
 

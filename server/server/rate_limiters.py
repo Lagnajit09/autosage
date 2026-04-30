@@ -1,4 +1,4 @@
-from rest_framework.throttling import UserRateThrottle
+from rest_framework.throttling import SimpleRateThrottle, UserRateThrottle
 
 class WorkflowBurstThrottle(UserRateThrottle):
     scope = 'workflow_burst'
@@ -32,3 +32,14 @@ class ExecutionBurstThrottle(UserRateThrottle):
 
 class ExecutionSustainedThrottle(UserRateThrottle):
     scope = 'execution_sustained'
+
+
+class HttpTriggerThrottle(SimpleRateThrottle):
+    """Throttle public HTTP trigger calls per trigger_token (no auth user)."""
+    scope = 'http_trigger'
+
+    def get_cache_key(self, request, view):
+        token = view.kwargs.get('trigger_token') if hasattr(view, 'kwargs') else None
+        if not token:
+            return None
+        return self.cache_format % {'scope': self.scope, 'ident': token}

@@ -63,6 +63,7 @@ INSTALLED_APPS = [
     'vault.apps.VaultConfig',
     'scripts.apps.ScriptsConfig',
     'execution_engine.apps.ExecutionEngineConfig',
+    'triggers.apps.TriggersConfig',
 ]
 
 REST_FRAMEWORK = {
@@ -91,6 +92,7 @@ REST_FRAMEWORK = {
         'vault_create': '10/minute',
         'execution_burst': '30/minute',
         'execution_sustained': '500/day',
+        'http_trigger': '60/minute',
     }
 }
 
