@@ -39,6 +39,7 @@ def _build_trigger_url(request, trigger_token: str) -> str:
 
 def _trigger_payload(request, trigger: HttpTrigger, *, plain_secret: str | None = None) -> dict:
     payload = {
+        "id": str(trigger.id),
         "node_id": trigger.node_id,
         "trigger_url": _build_trigger_url(request, trigger.trigger_token),
         "secret_last4": trigger.secret_last4,
@@ -47,6 +48,7 @@ def _trigger_payload(request, trigger: HttpTrigger, *, plain_secret: str | None 
         "last_triggered_at": (
             trigger.last_triggered_at.isoformat() if trigger.last_triggered_at else None
         ),
+        "is_active": trigger.is_active,
     }
     if plain_secret is not None:
         payload["secret"] = plain_secret
@@ -146,7 +148,7 @@ def http_trigger_detail(request, workflow_id, node_id):
     return api_response(
         success=True,
         message="HTTP trigger deleted.",
-        status_code=status.HTTP_204_NO_CONTENT,
+        status_code=status.HTTP_200_OK,
     )
 
 
@@ -191,6 +193,7 @@ def regenerate_http_trigger_secret(request, workflow_id, node_id):
 def _schedule_payload(schedule: ScheduleTrigger) -> dict:
     """Build the standard response dict for a ScheduleTrigger."""
     return {
+        "id": str(schedule.id),
         "node_id": schedule.node_id,
         "cron_expression": schedule.cron_expression,
         "timezone": schedule.timezone,
@@ -315,5 +318,5 @@ def schedule_trigger_detail(request, workflow_id, node_id):
     return api_response(
         success=True,
         message="Schedule trigger deleted.",
-        status_code=status.HTTP_204_NO_CONTENT,
+        status_code=status.HTTP_200_OK,
     )

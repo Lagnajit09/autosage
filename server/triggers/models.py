@@ -2,6 +2,8 @@ import uuid
 
 from django.db import models
 from django.conf import settings
+from django.db.models.signals import post_delete
+from django.dispatch import receiver
 
 
 class HttpTrigger(models.Model):
@@ -134,3 +136,27 @@ class ScheduleTrigger(models.Model):
             f"ScheduleTrigger [{self.cron_expression}] "
             f"(workflow {self.workflow_id}, node {self.node_id})"
         )
+
+
+@receiver(post_delete, sender=ScheduleTrigger)
+def cleanup_periodic_task(sender, instance, **kwargs):
+    """Ensure the linked PeriodicTask is removed when a ScheduleTrigger is deleted.
+    
+    This handles deletions via the API, node deletion in the UI, and cascading 
+    deletions when a Workflow is removed.
+    """
+    from triggers.utils import delete_beat_task
+    if instance.periodic_task_name:
+        delete_beat_task(instance.periodic_task_name)
+
+
+@receiver(post_delete, sender=HttpTrigger)
+def cleanup_http_trigger(sender, instance, **kwargs):
+    """Placeholder for any future HTTP trigger cleanup logic.
+    
+    Currently handles logging and ensures consistency with ScheduleTrigger behavior.
+    """
+    import logging
+    logger = logging.getLogger(__name__)
+    logger.info("HttpTrigger %s for workflow %s node %s deleted.", 
+                instance.trigger_token, instance.workflow_id, instance.node_id)

@@ -128,6 +128,13 @@ def trigger_workflow_via_http(request, trigger_token):
             status_code=status.HTTP_404_NOT_FOUND,
         )
 
+    if not trigger.is_active:
+        return api_response(
+            success=False,
+            message="Trigger is disabled.",
+            status_code=status.HTTP_403_FORBIDDEN,
+        )
+
     presented_secret = request.headers.get("X-Trigger-Secret", "")
     if not presented_secret or not verify_secret(presented_secret, trigger.secret_hash):
         return api_response(
@@ -273,6 +280,13 @@ def get_workflow_run_via_http_trigger(request, trigger_token, run_id):
             success=False,
             message="Trigger not found.",
             status_code=status.HTTP_404_NOT_FOUND,
+        )
+
+    if not trigger.is_active:
+        return api_response(
+            success=False,
+            message="Trigger is disabled.",
+            status_code=status.HTTP_403_FORBIDDEN,
         )
 
     presented_secret = request.headers.get("X-Trigger-Secret", "")

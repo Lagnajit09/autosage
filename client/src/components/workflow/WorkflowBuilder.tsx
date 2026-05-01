@@ -8,9 +8,10 @@ import {
   Controls,
   Background,
   Connection,
-  Node,
   ReactFlowProvider,
   ReactFlowInstance,
+  NodeChange,
+  Node,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 
@@ -34,7 +35,7 @@ import {
   updateWorkflow,
   deleteWorkflow,
 } from "@/lib/actions/workflow";
-import { deleteHttpTrigger } from "@/lib/actions/triggers";
+import { deleteHttpTrigger, deleteScheduleTrigger } from "@/lib/actions/triggers";
 import { useAuth } from "@clerk/clerk-react";
 
 const nodeTypes = {
@@ -67,6 +68,8 @@ const WorkflowBuilderContent = ({
   const [showVault, setShowVault] = useState(false);
   const [showAIGenerator, setShowAIGenerator] = useState(false);
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [nodeDeleteModalOpen, setNodeDeleteModalOpen] = useState(false);
+  const [pendingRemovals, setPendingRemovals] = useState<NodeChange<Node>[]>([]);
   const [reactFlowInstance, setReactFlowInstance] =
     useState<ReactFlowInstance | null>(null);
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
@@ -257,36 +260,92 @@ const WorkflowBuilderContent = ({
     [setEdges],
   );
 
-  const deleteNode = useCallback(
-    (nodeId: string) => {
-      const nodeToDelete = nodes.find((n) => n.id === nodeId);
-
-      setNodes((nds) => nds.filter((node) => node.id !== nodeId));
+  const performNodeDeletion = useCallback(
+    (node: Node) => {
+      const nodeId = node.id;
+      setNodes((nds) => nds.filter((n) => n.id !== nodeId));
       setEdges((eds) =>
         eds.filter((edge) => edge.source !== nodeId && edge.target !== nodeId),
       );
-      setSelectedNode(null);
+      if (selectedNode?.id === nodeId) {
+        setSelectedNode(null);
+      }
 
-      // Best-effort cleanup of the server-side HTTP trigger record so
-      // orphaned tokens don't accumulate. Failure is logged but doesn't
-      // block the local delete — the user can also retry via re-save.
-      if (
-        workflowId &&
-        nodeToDelete?.type === "trigger" &&
-        nodeToDelete?.data?.type === "http" &&
-        nodeToDelete?.data?.httpTrigger
-      ) {
-        (async () => {
-          try {
-            const token = await getToken();
-            await deleteHttpTrigger(workflowId, nodeId, token);
-          } catch (err) {
-            console.warn("Failed to delete HTTP trigger on server:", err);
-          }
-        })();
+      if (workflowId && node.type === "trigger") {
+        if (node.data?.type === "http" && node.data?.httpTrigger) {
+          (async () => {
+            try {
+              const token = await getToken();
+              await deleteHttpTrigger(workflowId, nodeId, token);
+            } catch (err) {
+              console.warn("Failed to delete HTTP trigger on server:", err);
+            }
+          })();
+        } else if (
+          node.data?.type === "schedule" &&
+          node.data?.scheduleConfigured
+        ) {
+          (async () => {
+            try {
+              const token = await getToken();
+              await deleteScheduleTrigger(workflowId, nodeId, token);
+            } catch (err) {
+              console.warn("Failed to delete schedule trigger on server:", err);
+            }
+          })();
+        }
       }
     },
-    [setNodes, setEdges, nodes, workflowId, getToken],
+    [setNodes, setEdges, selectedNode, workflowId, getToken],
+  );
+
+  const handleNodesChangeWrapper = useCallback(
+    (changes: NodeChange<Node>[]) => {
+      const removals = changes.filter((c) => c.type === "remove");
+      const safeChanges = changes.filter((c) => c.type !== "remove");
+
+      if (safeChanges.length > 0) {
+        onNodesChange(safeChanges);
+      }
+
+      if (removals.length > 0) {
+        const triggersToRemove = removals
+          .map((r) => nodes.find((n) => n.id === r.id))
+          .filter(
+            (n) =>
+              n &&
+              n.type === "trigger" &&
+              (n.data?.httpConfigured || n.data?.scheduleConfigured),
+          );
+
+        if (triggersToRemove.length > 0) {
+          setPendingRemovals(removals);
+          setNodeDeleteModalOpen(true);
+        } else {
+          // If no triggers are configured, just delete normally
+          onNodesChange(removals);
+        }
+      }
+    },
+    [nodes, onNodesChange],
+  );
+
+  const deleteNode = useCallback(
+    (nodeId: string) => {
+      const node = nodes.find((n) => n.id === nodeId);
+      if (!node) return;
+
+      if (
+        node.type === "trigger" &&
+        (node.data?.httpConfigured || node.data?.scheduleConfigured)
+      ) {
+        setPendingRemovals([{ type: "remove", id: nodeId }]);
+        setNodeDeleteModalOpen(true);
+      } else {
+        performNodeDeletion(node);
+      }
+    },
+    [nodes, performNodeDeletion],
   );
 
   const deleteEdge = useCallback(
@@ -594,7 +653,7 @@ const WorkflowBuilderContent = ({
               <ReactFlow
                 nodes={nodes}
                 edges={edges}
-                onNodesChange={onNodesChange}
+                onNodesChange={handleNodesChangeWrapper}
                 onEdgesChange={onEdgesChange}
                 onConnect={onConnect}
                 onInit={handleReactFlowInit}
@@ -705,6 +764,28 @@ const WorkflowBuilderContent = ({
         onConfirm={performDeleteWorkflow}
         title="Delete Workflow?"
         description={`Are you sure you want to delete "${workflowName || "this workflow"}"? This action cannot be undone.`}
+      />
+
+      <DeleteConfirmationModal
+        isOpen={nodeDeleteModalOpen}
+        onClose={() => {
+          setNodeDeleteModalOpen(false);
+          setPendingRemovals([]);
+        }}
+        onConfirm={() => {
+          pendingRemovals.forEach((removal) => {
+            if (removal.type === "remove") {
+              const node = nodes.find((n) => n.id === removal.id);
+              if (node) {
+                performNodeDeletion(node);
+              }
+            }
+          });
+          setNodeDeleteModalOpen(false);
+          setPendingRemovals([]);
+        }}
+        title="Delete Trigger Node?"
+        description="Deleting this node will also permanently delete its underlying trigger configuration from the server. Are you sure you want to proceed?"
       />
     </div>
   );

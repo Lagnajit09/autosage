@@ -87,21 +87,20 @@ export interface NodeData {
 
   // Trigger Specific
   schedule?: string;
-  watchPath?: string;
-  webhookUrl?: string;
-  webhookMethod?: "GET" | "POST" | "PUT" | "DELETE" | "PATCH";
-  webhookHeaders?: Record<string, string>;
-  webhookBody?: string;
+  scheduleConfigured?: boolean;
   // HTTP-trigger metadata (server is source of truth; this is a denormalized
   // copy so the UI can render before re-fetching). The plaintext secret is
   // never stored here.
   httpTrigger?: {
+    id: string;
     triggerUrl: string;
     secretLast4: string;
+    isActive: boolean;
     createdAt: string;
     rotatedAt?: string | null;
     lastTriggeredAt?: string | null;
   };
+  httpConfigured?: boolean;
 
   // Email Specific
   from?: string;

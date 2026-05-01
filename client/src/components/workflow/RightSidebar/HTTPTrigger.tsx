@@ -12,14 +12,18 @@ import {
   createHttpTrigger,
   getHttpTrigger,
   regenerateHttpTriggerSecret,
+  deleteHttpTrigger,
+  updateHttpTriggerStatus,
 } from "@/lib/actions/triggers";
 import { getWorkflowByID } from "@/lib/actions/workflow";
 
 import { HttpTriggerSecretModal } from "./HttpTriggerSecretModal";
 
 interface HttpTriggerInfo {
+  id: string;
   triggerUrl: string;
   secretLast4: string;
+  isActive: boolean;
   createdAt: string;
   rotatedAt?: string | null;
   lastTriggeredAt?: string | null;
@@ -45,6 +49,8 @@ export const HTTPTrigger: React.FC<BaseConfigProps> = ({
     rotated: boolean;
   } | null>(null);
   const [fetchedNodes, setFetchedNodes] = useState<Node[] | null>(null);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [showRegenerateConfirm, setShowRegenerateConfirm] = useState(false);
 
   useEffect(() => {
     if (!workflowId || !isSignedIn) return;
@@ -116,19 +122,27 @@ export const HTTPTrigger: React.FC<BaseConfigProps> = ({
       if (response?.success && response.data) {
         const d = response.data;
         const next: HttpTriggerInfo = {
+          id: d.id,
           triggerUrl: d.trigger_url,
           secretLast4: d.secret_last4,
+          isActive: d.is_active,
           createdAt: d.created_at,
           rotatedAt: d.rotated_at,
           lastTriggeredAt: d.last_triggered_at,
         };
         setInfo(next);
-        onUpdateNode(selectedNode.id, { httpTrigger: next });
+        onUpdateNode(selectedNode.id, {
+          httpTrigger: next,
+          httpConfigured: true,
+        });
       } else {
         // 404 or unsuccessful — no trigger exists on the server
         setInfo(null);
         if (selectedNode.data?.httpTrigger) {
-          onUpdateNode(selectedNode.id, { httpTrigger: undefined });
+          onUpdateNode(selectedNode.id, {
+            httpTrigger: undefined,
+            httpConfigured: false,
+          });
         }
       }
     } catch {
@@ -144,20 +158,23 @@ export const HTTPTrigger: React.FC<BaseConfigProps> = ({
   }, [refresh]);
 
   const persistInfoFromCreate = (data: {
+    id: string;
     trigger_url: string;
     secret_last4: string;
     created_at: string;
     rotated_at: string | null;
   }) => {
     const next: HttpTriggerInfo = {
+      id: data.id,
       triggerUrl: data.trigger_url,
       secretLast4: data.secret_last4,
+      isActive: true, // newly created are active
       createdAt: data.created_at,
       rotatedAt: data.rotated_at,
       lastTriggeredAt: null,
     };
     setInfo(next);
-    onUpdateNode(selectedNode.id, { httpTrigger: next });
+    onUpdateNode(selectedNode.id, { httpTrigger: next, httpConfigured: true });
   };
 
   const handleGenerate = async () => {
@@ -194,14 +211,8 @@ export const HTTPTrigger: React.FC<BaseConfigProps> = ({
 
   const handleRegenerate = async () => {
     if (!workflowId) return;
-    if (
-      !window.confirm(
-        "Regenerating will invalidate the current secret. Any caller still using it will start receiving 401 Unauthorized. Continue?",
-      )
-    ) {
-      return;
-    }
     setWorking(true);
+    setShowRegenerateConfirm(false);
     try {
       const token = await getToken();
       const response = await regenerateHttpTriggerSecret(
@@ -213,6 +224,7 @@ export const HTTPTrigger: React.FC<BaseConfigProps> = ({
         throw new Error(response?.message || "Failed to regenerate secret");
       }
       persistInfoFromCreate({
+        id: response.data.id,
         trigger_url: response.data.trigger_url,
         secret_last4: response.data.secret_last4,
         created_at: info?.createdAt ?? new Date().toISOString(),
@@ -228,6 +240,61 @@ export const HTTPTrigger: React.FC<BaseConfigProps> = ({
       toast.error(
         err instanceof Error ? err.message : "Failed to regenerate secret",
       );
+    } finally {
+      setWorking(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!workflowId) return;
+    setWorking(true);
+    try {
+      const token = await getToken();
+      const response = await deleteHttpTrigger(
+        workflowId,
+        selectedNode.id,
+        token,
+      );
+      if (response?.success || response?.status_code === 204) {
+        setInfo(null);
+        onUpdateNode(selectedNode.id, {
+          httpTrigger: undefined,
+          httpConfigured: false,
+        });
+        toast.success("HTTP trigger configuration deleted.");
+      } else {
+        throw new Error(response?.message || "Failed to delete HTTP trigger");
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error(
+        err instanceof Error ? err.message : "Failed to delete HTTP trigger",
+      );
+    } finally {
+      setWorking(false);
+    }
+  };
+
+  const handleToggleActive = async () => {
+    if (!info || working) return;
+    setWorking(true);
+    try {
+      const token = await getToken();
+      const nextActive = !info.isActive;
+      const response = await updateHttpTriggerStatus(
+        info.id,
+        nextActive,
+        token,
+      );
+      if (response?.success) {
+        setInfo({ ...info, isActive: nextActive });
+        toast.success(nextActive ? "Trigger enabled" : "Trigger disabled");
+      } else {
+        throw new Error(response?.message || "Failed to update status");
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error("Failed to update status");
     } finally {
       setWorking(false);
     }
@@ -351,7 +418,7 @@ export const HTTPTrigger: React.FC<BaseConfigProps> = ({
             </Label>
             <Input
               readOnly
-              value={`whsk_••••••••••••${info.secretLast4}`}
+              value={`••••••••••${info.secretLast4}`}
               className="bg-gray-50 dark:bg-gray-950 border-gray-200 dark:border-gray-800 font-mono text-xs"
             />
             <p className="text-xs text-gray-500 dark:text-gray-500 mt-1">
@@ -366,19 +433,123 @@ export const HTTPTrigger: React.FC<BaseConfigProps> = ({
             </div>
           )}
 
-          <Button
-            onClick={handleRegenerate}
-            disabled={working || !workflowId}
-            variant="outline"
-            className="w-full"
-          >
-            {working ? (
-              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-            ) : (
-              <RefreshCw className="w-4 h-4 mr-2" />
-            )}
-            Regenerate Secret
-          </Button>
+          {!showRegenerateConfirm ? (
+            <Button
+              onClick={() => setShowRegenerateConfirm(true)}
+              disabled={working || !workflowId}
+              variant="outline"
+              className="w-full"
+            >
+              {working ? (
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+              ) : (
+                <RefreshCw className="w-4 h-4 mr-2" />
+              )}
+              Regenerate Secret
+            </Button>
+          ) : (
+            <div className="p-3 bg-amber-50 dark:bg-amber-900/10 border border-amber-200 dark:border-amber-900/50 rounded-md">
+              <p className="text-xs text-amber-800 dark:text-amber-300 mb-3 font-medium">
+                Regenerating will invalidate the current secret. Any caller
+                still using it will start receiving 401 Unauthorized. Continue?
+              </p>
+              <div className="flex gap-2">
+                <Button
+                  onClick={() => setShowRegenerateConfirm(false)}
+                  disabled={working}
+                  variant="outline"
+                  size="sm"
+                  className="flex-1 h-8 text-xs bg-white dark:bg-gray-900"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={handleRegenerate}
+                  disabled={working}
+                  size="sm"
+                  className="flex-1 h-8 text-xs bg-amber-600 hover:bg-amber-700 text-white border-none"
+                >
+                  {working ? (
+                    <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                  ) : (
+                    <RefreshCw className="w-3 h-3 mr-1" />
+                  )}
+                  Regenerate
+                </Button>
+              </div>
+            </div>
+          )}
+
+          <div className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-950 border border-gray-200 dark:border-gray-800 rounded-lg">
+            <div className="space-y-0.5">
+              <div className="text-xs font-medium text-gray-700 dark:text-gray-300">
+                Trigger Status
+              </div>
+              <div className="text-[10px] text-gray-500">
+                {info.isActive
+                  ? "Accepting incoming requests"
+                  : "Ignoring incoming requests"}
+              </div>
+            </div>
+            <Button
+              variant={info.isActive ? "outline" : "default"}
+              size="sm"
+              onClick={handleToggleActive}
+              disabled={working}
+              className={`h-8 px-3 text-xs ${
+                info.isActive
+                  ? "text-red-600 hover:text-red-700 border-red-200 hover:bg-red-50"
+                  : "bg-green-600 hover:bg-green-700 text-white border-none"
+              }`}
+            >
+              {working ? (
+                <Loader2 className="w-3 h-3 animate-spin" />
+              ) : info.isActive ? (
+                "Disable"
+              ) : (
+                "Enable"
+              )}
+            </Button>
+          </div>
+
+          {!showDeleteConfirm ? (
+            <Button
+              onClick={() => setShowDeleteConfirm(true)}
+              disabled={working || !workflowId}
+              variant="outline"
+              className="w-full text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20 border-red-200 dark:border-red-900/50"
+            >
+              Delete Configuration
+            </Button>
+          ) : (
+            <div className="p-3 bg-red-50 dark:bg-red-900/10 border border-red-200 dark:border-red-900/50 rounded-md">
+              <p className="text-xs text-red-800 dark:text-red-300 mb-3 font-medium">
+                Are you sure you want to delete this HTTP trigger configuration?
+              </p>
+              <div className="flex gap-2">
+                <Button
+                  onClick={() => setShowDeleteConfirm(false)}
+                  disabled={working}
+                  variant="outline"
+                  size="sm"
+                  className="flex-1 h-8 text-xs bg-white dark:bg-gray-900"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={handleDelete}
+                  disabled={working}
+                  size="sm"
+                  className="flex-1 h-8 text-xs bg-red-600 hover:bg-red-700 text-white"
+                >
+                  {working ? (
+                    <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                  ) : null}
+                  Delete
+                </Button>
+              </div>
+            </div>
+          )}
         </>
       ) : (
         <Button

@@ -11,6 +11,8 @@ import { Button } from "@/components/ui/button";
 import {
   upsertScheduleTrigger,
   getScheduleTrigger,
+  deleteScheduleTrigger,
+  updateScheduleTriggerStatus,
   ScheduleTriggerInfoResponse,
 } from "@/lib/actions/triggers";
 
@@ -23,6 +25,7 @@ export const ScheduleTrigger: React.FC<BaseConfigProps> = ({
   const [info, setInfo] = useState<ScheduleTriggerInfoResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [working, setWorking] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [cronExpression, setCronExpression] = useState(
     String(selectedNode.data?.schedule || "0 9 * * 1-5"),
   );
@@ -51,13 +54,18 @@ export const ScheduleTrigger: React.FC<BaseConfigProps> = ({
           setCronExpression(response.data.cron_expression);
           onUpdateNode(selectedNode.id, {
             schedule: response.data.cron_expression,
+            scheduleConfigured: true,
           });
+        } else {
+          onUpdateNode(selectedNode.id, { scheduleConfigured: true });
         }
       } else {
         setInfo(null);
+        onUpdateNode(selectedNode.id, { scheduleConfigured: false });
       }
     } catch {
       setInfo(null);
+      onUpdateNode(selectedNode.id, { scheduleConfigured: false });
     } finally {
       setLoading(false);
     }
@@ -86,13 +94,72 @@ export const ScheduleTrigger: React.FC<BaseConfigProps> = ({
         throw new Error(response?.message || "Failed to save schedule trigger");
       }
       setInfo(response.data);
-      onUpdateNode(selectedNode.id, { schedule: cronExpression });
+      onUpdateNode(selectedNode.id, {
+        schedule: cronExpression,
+        scheduleConfigured: true,
+      });
       toast.success("Schedule trigger saved.");
     } catch (err) {
       console.error(err);
       toast.error(
         err instanceof Error ? err.message : "Failed to save schedule trigger",
       );
+    } finally {
+      setWorking(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!workflowId) return;
+    setWorking(true);
+    try {
+      const token = await getToken();
+      const response = await deleteScheduleTrigger(
+        workflowId,
+        selectedNode.id,
+        token,
+      );
+      if (response?.success || response?.status_code === 204) {
+        setInfo(null);
+        onUpdateNode(selectedNode.id, { scheduleConfigured: false });
+        toast.success("Schedule trigger configuration deleted.");
+      } else {
+        throw new Error(
+          response?.message || "Failed to delete schedule trigger",
+        );
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error(
+        err instanceof Error
+          ? err.message
+          : "Failed to delete schedule trigger",
+      );
+    } finally {
+      setWorking(false);
+    }
+  };
+
+  const handleToggleActive = async () => {
+    if (!info || working) return;
+    setWorking(true);
+    try {
+      const token = await getToken();
+      const nextActive = !info.is_active;
+      const response = await updateScheduleTriggerStatus(
+        info.id,
+        nextActive,
+        token,
+      );
+      if (response?.success) {
+        setInfo({ ...info, is_active: nextActive });
+        toast.success(nextActive ? "Schedule enabled" : "Schedule disabled");
+      } else {
+        throw new Error(response?.message || "Failed to update status");
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error("Failed to update status");
     } finally {
       setWorking(false);
     }
@@ -146,6 +213,77 @@ export const ScheduleTrigger: React.FC<BaseConfigProps> = ({
         {working ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
         Save Schedule
       </Button>
+
+      {info && (
+        <div className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-950 border border-gray-200 dark:border-gray-800 rounded-lg">
+          <div className="space-y-0.5">
+            <div className="text-xs font-medium text-gray-700 dark:text-gray-300">
+              Schedule Status
+            </div>
+            <div className="text-[10px] text-gray-500">
+              {info.is_active ? "Running on schedule" : "Schedule paused"}
+            </div>
+          </div>
+          <Button
+            variant={info.is_active ? "outline" : "default"}
+            size="sm"
+            onClick={handleToggleActive}
+            disabled={working}
+            className={`h-8 px-3 text-xs ${
+              info.is_active
+                ? "text-red-600 hover:text-red-700 border-red-200 hover:bg-red-50"
+                : "bg-green-600 hover:bg-green-700 text-white border-none"
+            }`}
+          >
+            {working ? (
+              <Loader2 className="w-3 h-3 animate-spin" />
+            ) : info.is_active ? (
+              "Disable"
+            ) : (
+              "Enable"
+            )}
+          </Button>
+        </div>
+      )}
+
+      {info && !showDeleteConfirm && (
+        <Button
+          onClick={() => setShowDeleteConfirm(true)}
+          disabled={working || !workflowId}
+          variant="outline"
+          className="w-full text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20 border-red-200 dark:border-red-900/50 mt-2"
+        >
+          Delete Configuration
+        </Button>
+      )}
+
+      {info && showDeleteConfirm && (
+        <div className="mt-2 p-3 bg-red-50 dark:bg-red-900/10 border border-red-200 dark:border-red-900/50 rounded-md">
+          <p className="text-xs text-red-800 dark:text-red-300 mb-3 font-medium">
+            Are you sure you want to delete this schedule trigger configuration?
+          </p>
+          <div className="flex gap-2">
+            <Button
+              onClick={() => setShowDeleteConfirm(false)}
+              disabled={working}
+              variant="outline"
+              size="sm"
+              className="flex-1 h-8 text-xs bg-white dark:bg-gray-900"
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleDelete}
+              disabled={working}
+              size="sm"
+              className="flex-1 h-8 text-xs bg-red-600 hover:bg-red-700 text-white"
+            >
+              {working ? <Loader2 className="w-3 h-3 mr-1 animate-spin" /> : null}
+              Delete
+            </Button>
+          </div>
+        </div>
+      )}
 
       {info && (
         <div className="pt-2 space-y-2 border-t border-gray-200 dark:border-gray-800 mt-4 text-xs text-gray-500 dark:text-gray-400">

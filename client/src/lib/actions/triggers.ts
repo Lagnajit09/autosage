@@ -1,6 +1,7 @@
 import { apiRequest } from "../api-client";
 
 export interface HttpTriggerCreateResponse {
+  id: string;
   node_id: string;
   trigger_url: string;
   secret: string;
@@ -11,12 +12,14 @@ export interface HttpTriggerCreateResponse {
 }
 
 export interface HttpTriggerInfoResponse {
+  id: string;
   node_id: string;
   trigger_url: string;
   secret_last4: string;
   created_at: string;
   rotated_at: string | null;
   last_triggered_at: string | null;
+  is_active: boolean;
 }
 
 export const createHttpTrigger = async (
@@ -71,6 +74,7 @@ export const deleteHttpTrigger = async (
 };
 
 export interface ScheduleTriggerInfoResponse {
+  id: string;
   node_id: string;
   cron_expression: string;
   timezone: string;
@@ -91,7 +95,10 @@ export const upsertScheduleTrigger = async (
     `/api/workflows/${workflowId}/triggers/schedule/`,
     {
       method: "POST",
-      body: JSON.stringify({ node_id: nodeId, cron_expression: cronExpression }),
+      body: JSON.stringify({
+        node_id: nodeId,
+        cron_expression: cronExpression,
+      }),
     },
     token,
   );
