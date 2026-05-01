@@ -17,3 +17,6 @@ graphify-out/
 
 # Local audit/tool temp files
 .tmp/
+
+# Claude Rules
+.claude

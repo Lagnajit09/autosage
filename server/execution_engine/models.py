@@ -52,6 +52,12 @@ class WorkflowRun(models.Model):
         ('cancelled', 'Cancelled'),
     ]
 
+    TRIGGER_SOURCE_CHOICES = [
+        ('manual', 'Manual'),
+        ('http', 'HTTP'),
+        ('schedule', 'Schedule'),
+    ]
+
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     workflow = models.ForeignKey('workflows.Workflow', on_delete=models.CASCADE, related_name='runs')
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='workflow_runs')
@@ -68,6 +74,15 @@ class WorkflowRun(models.Model):
     send_email = models.BooleanField(default=False)
     notification_email = models.EmailField(blank=True)
 
+    # Run-source metadata: allows distinguishing manual, HTTP, and scheduled
+    # runs in history, admin, and future analytics without touching the node graph.
+    trigger_source = models.CharField(
+        max_length=20,
+        choices=TRIGGER_SOURCE_CHOICES,
+        default='manual',
+    )
+    trigger_node_id = models.CharField(max_length=255, blank=True)
+
     error_message = models.TextField(blank=True)
     started_at = models.DateTimeField(null=True, blank=True)
     finished_at = models.DateTimeField(null=True, blank=True)
@@ -78,6 +93,7 @@ class WorkflowRun(models.Model):
         indexes = [
             models.Index(fields=['status', 'created_at']),
             models.Index(fields=['workflow', 'status']),
+            models.Index(fields=['trigger_source', 'created_at']),
         ]
         verbose_name = "Workflow Run"
         verbose_name_plural = "Workflow Runs"
