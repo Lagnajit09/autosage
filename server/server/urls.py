@@ -26,6 +26,7 @@ def health_check(request):
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('api/workflows/', include('workflows.urls')),
+    path('api/triggers/', include('triggers.urls_global')),
     path('api/vault/', include('vault.urls')),
     path('api/scripts/', include('scripts.urls')),
     path('api/execution-engine/', include('execution_engine.urls')),

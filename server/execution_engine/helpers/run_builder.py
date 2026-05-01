@@ -46,6 +46,8 @@ def enqueue_workflow_run(
     inputs: dict[str, Any] | None = None,
     send_email: bool = False,
     user_email: str = "",
+    trigger_source: str = "manual",
+    trigger_node_id: str = "",
 ) -> WorkflowRun:
     """Validate the workflow, persist a WorkflowRun + WorkflowNodeRuns, and
     dispatch the Celery executor task. Returns the persisted run.
@@ -179,6 +181,8 @@ def enqueue_workflow_run(
         inputs=masked_inputs,
         send_email=send_email,
         notification_email=user_email if send_email else "",
+        trigger_source=trigger_source,
+        trigger_node_id=trigger_node_id,
     )
 
     execution_order = 0

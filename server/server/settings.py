@@ -59,6 +59,7 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'corsheaders',
     'rest_framework',
+    'django_celery_beat',
     'workflows.apps.WorkflowsConfig',
     'vault.apps.VaultConfig',
     'scripts.apps.ScriptsConfig',
@@ -279,6 +280,16 @@ CELERY_TIMEZONE          = 'UTC'
 CELERY_TASK_TRACK_STARTED = True
 CELERY_TASK_SOFT_TIME_LIMIT = 1800   # 30 minutes per workflow
 CELERY_TASK_TIME_LIMIT      = 3600   # hard kill after 1 hour
+
+# Celery Beat — use the database scheduler so schedules are dynamic and
+# survive restarts without editing settings.py.
+CELERY_BEAT_SCHEDULER = 'django_celery_beat.schedulers:DatabaseScheduler'
+
+# Route the lightweight schedule-dispatch task to its own queue so it is
+# never blocked behind long-running execute_workflow tasks.
+CELERY_TASK_ROUTES = {
+    'triggers.tasks.fire_scheduled_workflow': {'queue': 'scheduler'},
+}
 
 # Email (Gmail SMTP, app password). Used by Django to notify the user when
 # their workflow run completes (Send-Email checkbox on the Execution page).
