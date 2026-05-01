@@ -12,6 +12,7 @@ import {
   Sun,
   User,
   Workflow,
+  Zap,
 } from "lucide-react";
 import React from "react";
 import { Button } from "@/components/ui/button";
@@ -36,6 +37,11 @@ export const NavItems = ({ mobile = false }: { mobile?: boolean }) => {
       ),
       label: "All Workflows",
       onClick: () => navigate("/workflows"),
+    },
+    {
+      icon: <Zap className={cn("w-6 h-6", mobile ? "w-5 h-5 mr-2" : "")} />,
+      label: "Triggers",
+      onClick: () => navigate("/triggers"),
     },
     {
       icon: (

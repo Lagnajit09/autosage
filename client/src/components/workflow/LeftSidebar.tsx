@@ -7,6 +7,7 @@ import {
   Mail,
   GitBranch,
   LucideIcon,
+  Clock,
 } from "lucide-react";
 import { NodeData } from "@/utils/types";
 import Logo from "../Logo";
@@ -44,8 +45,8 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
   // Define available triggers
   const triggers = [
     { type: "manual", label: "Manual Trigger", icon: Play, color: "emerald" },
-    { type: "http", label: "HTTP Request", icon: Globe, color: "emerald" },
-    { type: "event", label: "Event Trigger", icon: Zap, color: "emerald" },
+    { type: "http", label: "HTTP Webhook", icon: Globe, color: "emerald" },
+    { type: "schedule", label: "Job Scheduler", icon: Clock, color: "emerald" },
   ];
 
   // Define available actions
