@@ -19,6 +19,7 @@ import "./App.css";
 import { ThemeProvider } from "./contexts/theme/theme-context";
 import AutobotChat from "./pages/AutobotChat";
 import Workflows from "./pages/Workflows";
+import Triggers from "./pages/Triggers";
 import Templates from "./pages/Templates";
 import Settings from "./pages/Settings";
 import Profile from "./pages/Profile";
@@ -81,6 +82,7 @@ const App = () => {
                       element={<WorkflowExecution />}
                     />
                     <Route path="/workflows" element={<Workflows />} />
+                    <Route path="/triggers" element={<Triggers />} />
                     <Route path="/templates" element={<Templates />} />
                     <Route path="/dashboard" element={<Dashboard />} />
                     <Route path="/script-editor" element={<ScriptEditor />} />

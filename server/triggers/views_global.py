@@ -56,7 +56,7 @@ def manage_http_trigger(request, trigger_id):
         return api_response(
             success=True,
             message="HTTP trigger deleted.",
-            status_code=status.HTTP_204_NO_CONTENT,
+            status_code=status.HTTP_200_OK,
         )
     
     # PATCH
@@ -90,7 +90,7 @@ def manage_schedule_trigger(request, trigger_id):
         return api_response(
             success=True,
             message="Schedule trigger deleted.",
-            status_code=status.HTTP_204_NO_CONTENT,
+            status_code=status.HTTP_200_OK,
         )
     
     # PATCH
