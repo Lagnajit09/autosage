@@ -32,24 +32,25 @@ interface HttpTriggersTableProps {
   triggers: HttpTrigger[];
   onToggle: (id: string, current: boolean) => void;
   onDelete: (id: string) => void;
+  itemsPerPage?: number;
 }
 
 export const HttpTriggersTable = ({
   triggers,
   onToggle,
   onDelete,
+  itemsPerPage = 10,
 }: HttpTriggersTableProps) => {
   const [searchQuery, setSearchQuery] = useState("");
   const [debouncedQuery, setDebouncedQuery] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 5;
 
   // 1s latency for search
   useEffect(() => {
     const timer = setTimeout(() => {
       setDebouncedQuery(searchQuery);
       setCurrentPage(1); // Reset to page 1 on search
-    }, 1000);
+    }, 800);
 
     return () => clearTimeout(timer);
   }, [searchQuery]);
@@ -205,6 +206,9 @@ export const HttpTriggersTable = ({
           )}
         </>
       )}
+      <p className="text-xs text-gray-500 dark:text-gray-400 italic px-1">
+        * Note: Deleting a trigger only removes the trigger configuration. It does not delete the associated workflow.
+      </p>
     </div>
   );
 };

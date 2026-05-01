@@ -1,4 +1,15 @@
 import { useState, useEffect } from "react";
+import {
+  listAllTriggers,
+  updateHttpTriggerStatus,
+  updateScheduleTriggerStatus,
+  deleteGlobalHttpTrigger,
+  deleteGlobalScheduleTrigger,
+} from "@/lib/actions/triggers";
+import { ScheduleTriggersTable } from "@/components/Workflows/Triggers/ScheduleTriggersTable";
+import { HttpTriggersTable } from "@/components/Workflows/Triggers/HttpTriggersTable";
+import { Loader2 } from "lucide-react";
+
 import LeftNav, { NavItems } from "@/components/LeftNav";
 import { Button } from "@/components/ui/button";
 import { LayoutGrid, List, Plus, Search, Menu } from "lucide-react";
@@ -34,6 +45,22 @@ const Workflows = () => {
   const [token, setToken] = useState<string | null>(null);
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [workflowToDelete, setWorkflowToDelete] = useState<string | null>(null);
+
+  // Filter Tabs
+  const [activeTab, setActiveTab] = useState<"workflows" | "http" | "schedule">(
+    "workflows",
+  );
+
+  // Triggers State
+  const [httpTriggers, setHttpTriggers] = useState<any[]>([]);
+  const [scheduleTriggers, setScheduleTriggers] = useState<any[]>([]);
+  const [triggersLoading, setTriggersLoading] = useState(false);
+  const [deleteTriggerModalOpen, setDeleteTriggerModalOpen] = useState(false);
+  const [triggerToDelete, setTriggerToDelete] = useState<{
+    id: string;
+    type: "http" | "schedule";
+  } | null>(null);
+  const [deletingTrigger, setDeletingTrigger] = useState(false);
 
   const navigate = useNavigate();
   const { getToken, isSignedIn } = useAuth();
@@ -169,13 +196,131 @@ const Workflows = () => {
     }
   };
 
-  // if (loading) {
-  //   return (
-  //     <div className="min-h-screen flex items-center justify-center bg-gray-100 dark:bg-workflow-void/90">
-  //       <Loader />
-  //     </div>
-  //   );
-  // }
+  // --- TRIGGERS LOGIC ---
+  const fetchTriggers = async () => {
+    if (!isSignedIn) return;
+    setTriggersLoading(true);
+    try {
+      const clerkToken = await getToken();
+      const res = await listAllTriggers(clerkToken);
+      if (res?.success) {
+        setHttpTriggers(res.data.http_triggers || []);
+        setScheduleTriggers(res.data.schedule_triggers || []);
+      } else {
+        toast2.error("Failed to load triggers");
+      }
+    } catch (err) {
+      console.error(err);
+      toast2.error("Error fetching triggers");
+    } finally {
+      setTriggersLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (
+      (activeTab === "http" || activeTab === "schedule") &&
+      httpTriggers.length === 0 &&
+      scheduleTriggers.length === 0
+    ) {
+      fetchTriggers();
+    }
+  }, [activeTab, isSignedIn, getToken]);
+
+  const handleToggleHttp = async (id: string, current: boolean) => {
+    toast2.loading(`${!current ? "Enabling" : "Disabling"} trigger...`);
+    try {
+      const clerkToken = await getToken();
+      const res = await updateHttpTriggerStatus(id, !current, clerkToken);
+      if (res?.success) {
+        toast2.success(`HTTP Trigger ${!current ? "enabled" : "disabled"}`);
+        setHttpTriggers((prev) =>
+          prev.map((t) => (t.id === id ? { ...t, is_active: !current } : t)),
+        );
+      } else {
+        toast2.error("Failed to update trigger");
+      }
+    } catch (err) {
+      console.error(err);
+      toast2.error("Error updating trigger");
+    } finally {
+      toast2.dismiss();
+    }
+  };
+
+  const handleToggleSchedule = async (id: string, current: boolean) => {
+    toast2.loading(`${!current ? "Enabling" : "Disabling"} trigger...`);
+    try {
+      const clerkToken = await getToken();
+      const res = await updateScheduleTriggerStatus(id, !current, clerkToken);
+      if (res?.success) {
+        toast2.success(`Schedule Trigger ${!current ? "enabled" : "disabled"}`);
+        setScheduleTriggers((prev) =>
+          prev.map((t) => (t.id === id ? { ...t, is_active: !current } : t)),
+        );
+      } else {
+        toast2.error("Failed to update trigger");
+      }
+    } catch (err) {
+      console.error(err);
+      toast2.error("Error updating trigger");
+    } finally {
+      toast2.dismiss();
+    }
+  };
+
+  const handleDeleteHttp = async (id: string) => {
+    try {
+      const clerkToken = await getToken();
+      const res = await deleteGlobalHttpTrigger(id, clerkToken);
+      if (res?.success || res?.status_code === 204) {
+        toast2.success("HTTP Trigger deleted");
+        setHttpTriggers((prev) => prev.filter((t) => t.id !== id));
+      } else {
+        toast2.error("Failed to delete trigger");
+      }
+    } catch (err) {
+      console.error(err);
+      toast2.error("Error deleting trigger");
+    }
+  };
+
+  const handleDeleteSchedule = async (id: string) => {
+    try {
+      const clerkToken = await getToken();
+      const res = await deleteGlobalScheduleTrigger(id, clerkToken);
+      if (res?.success || res?.status_code === 204) {
+        toast2.success("Schedule Trigger deleted");
+        setScheduleTriggers((prev) => prev.filter((t) => t.id !== id));
+      } else {
+        toast2.error("Failed to delete trigger");
+      }
+    } catch (err) {
+      console.error(err);
+      toast2.error("Error deleting trigger");
+    }
+  };
+
+  const confirmDeleteTrigger = async () => {
+    if (!triggerToDelete) return;
+    setDeletingTrigger(true);
+    try {
+      if (triggerToDelete.type === "http") {
+        await handleDeleteHttp(triggerToDelete.id);
+      } else {
+        await handleDeleteSchedule(triggerToDelete.id);
+      }
+    } finally {
+      setDeletingTrigger(false);
+      setDeleteTriggerModalOpen(false);
+      setTriggerToDelete(null);
+    }
+  };
+
+  const openDeleteTriggerModal = (id: string, type: "http" | "schedule") => {
+    setTriggerToDelete({ id, type });
+    setDeleteTriggerModalOpen(true);
+  };
 
   return (
     <div className="flex w-full h-screen bg-gray-100 dark:bg-workflow-void/90 overflow-hidden">
@@ -250,7 +395,58 @@ const Workflows = () => {
                 </Button>
               </div>
 
-              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div className="w-full flex justify-between items-center">
+                <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
+                  <Button
+                    variant={activeTab === "workflows" ? "default" : "outline"}
+                    onClick={() => setActiveTab("workflows")}
+                    className={
+                      activeTab === "workflows"
+                        ? "bg-[#a768d0] hover:bg-[#9556bf] text-white shadow-md"
+                        : "bg-white dark:bg-gray-800"
+                    }
+                  >
+                    All Workflows
+                  </Button>
+                  <Button
+                    variant={activeTab === "http" ? "default" : "outline"}
+                    onClick={() => setActiveTab("http")}
+                    className={
+                      activeTab === "http"
+                        ? "bg-[#a768d0] hover:bg-[#9556bf] text-white shadow-md"
+                        : "bg-white dark:bg-gray-800"
+                    }
+                  >
+                    HTTP Webhooks
+                  </Button>
+                  <Button
+                    variant={activeTab === "schedule" ? "default" : "outline"}
+                    onClick={() => setActiveTab("schedule")}
+                    className={
+                      activeTab === "schedule"
+                        ? "bg-[#a768d0] hover:bg-[#9556bf] text-white shadow-md"
+                        : "bg-white dark:bg-gray-800"
+                    }
+                  >
+                    Job Schedulers
+                  </Button>
+                </div>
+                <Button
+                  className="hidden md:flex bg-[#a768d0] hover:bg-[#9556bf] text-white shadow-md shadow-purple-500/20 transition-all hover:shadow-purple-500/40"
+                  onClick={() => navigate("/workflow/new")}
+                >
+                  <Plus className="w-4 h-4 mr-2" />
+                  New Workflow
+                </Button>
+              </div>
+
+              <div
+                className={
+                  activeTab === "workflows"
+                    ? "flex flex-col md:flex-row md:items-center justify-between gap-4"
+                    : "hidden"
+                }
+              >
                 <div className="relative w-full md:w-80">
                   <Search className="absolute left-2 top-2.5 h-4 w-4 text-gray-500 dark:text-gray-400" />
                   <Input
@@ -290,75 +486,95 @@ const Workflows = () => {
                       <List className="w-4 h-4" />
                     </Button>
                   </div>
-
-                  <Button
-                    className="hidden md:flex bg-[#a768d0] hover:bg-[#9556bf] text-white shadow-md shadow-purple-500/20 transition-all hover:shadow-purple-500/40"
-                    onClick={() => navigate("/workflow/new")}
-                  >
-                    <Plus className="w-4 h-4 mr-2" />
-                    New Workflow
-                  </Button>
                 </div>
               </div>
             </div>
 
-            {loading ? (
-              <div
-                className={cn(
-                  "animate-in fade-in slide-in-from-bottom-4 duration-500",
-                  viewMode === "grid"
-                    ? "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6"
-                    : "flex flex-col space-y-4",
-                )}
-              >
-                {Array.from({ length: 3 }).map((_, i) =>
-                  viewMode === "grid" ? (
-                    <WorkflowCardSkeleton key={i} />
-                  ) : (
-                    <WorkflowListItemSkeleton key={i} />
-                  ),
-                )}
-              </div>
-            ) : (
-              <div
-                className={cn(
-                  "animate-in fade-in slide-in-from-bottom-4 duration-500",
-                  viewMode === "grid"
-                    ? "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6"
-                    : "flex flex-col space-y-4",
-                )}
-              >
-                {filteredWorkflows.length > 0 ? (
-                  filteredWorkflows.map((workflow) =>
-                    viewMode === "grid" ? (
-                      <WorkflowCard
-                        key={workflow.id}
-                        workflow={workflow}
-                        onDelete={handleDeleteClick}
-                      />
-                    ) : (
-                      <WorkflowListItem
-                        key={workflow.id}
-                        workflow={workflow}
-                        onDelete={handleDeleteClick}
-                      />
-                    ),
-                  )
+            {activeTab === "workflows" ? (
+              <>
+                {loading ? (
+                  <div
+                    className={cn(
+                      "animate-in fade-in slide-in-from-bottom-4 duration-500",
+                      viewMode === "grid"
+                        ? "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6"
+                        : "flex flex-col space-y-4",
+                    )}
+                  >
+                    {Array.from({ length: 3 }).map((_, i) =>
+                      viewMode === "grid" ? (
+                        <WorkflowCardSkeleton key={i} />
+                      ) : (
+                        <WorkflowListItemSkeleton key={i} />
+                      ),
+                    )}
+                  </div>
                 ) : (
-                  <div className="col-span-full flex flex-col items-center justify-center py-12 text-center">
-                    <div className="bg-gray-100 dark:bg-gray-800/50 p-4 rounded-full mb-4">
-                      <Search className="w-8 h-8 text-gray-400" />
-                    </div>
-                    <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
-                      No workflows found
-                    </h3>
-                    <p className="text-gray-500 dark:text-gray-400 mt-1 max-w-sm">
-                      We couldn't find any workflows matching "{searchQuery}".
-                      Try adjusting your search terms.
-                    </p>
+                  <div
+                    className={cn(
+                      "animate-in fade-in slide-in-from-bottom-4 duration-500",
+                      viewMode === "grid"
+                        ? "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6"
+                        : "flex flex-col space-y-4",
+                    )}
+                  >
+                    {filteredWorkflows.length > 0 ? (
+                      filteredWorkflows.map((workflow) =>
+                        viewMode === "grid" ? (
+                          <WorkflowCard
+                            key={workflow.id}
+                            workflow={workflow}
+                            onDelete={handleDeleteClick}
+                          />
+                        ) : (
+                          <WorkflowListItem
+                            key={workflow.id}
+                            workflow={workflow}
+                            onDelete={handleDeleteClick}
+                          />
+                        ),
+                      )
+                    ) : (
+                      <div className="col-span-full flex flex-col items-center justify-center py-12 text-center">
+                        <div className="bg-gray-100 dark:bg-gray-800/50 p-4 rounded-full mb-4">
+                          <Search className="w-8 h-8 text-gray-400" />
+                        </div>
+                        <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                          No workflows found
+                        </h3>
+                        <p className="text-gray-500 dark:text-gray-400 mt-1 max-w-sm">
+                          We couldn't find any workflows matching "{searchQuery}
+                          ". Try adjusting your search terms.
+                        </p>
+                      </div>
+                    )}
                   </div>
                 )}
+              </>
+            ) : activeTab === "http" ? (
+              triggersLoading ? (
+                <div className="flex items-center justify-center h-40">
+                  <Loader2 className="h-8 w-8 animate-spin text-purple-600" />
+                </div>
+              ) : (
+                <HttpTriggersTable
+                  triggers={httpTriggers}
+                  onToggle={handleToggleHttp}
+                  onDelete={(id) => openDeleteTriggerModal(id, "http")}
+                  itemsPerPage={10}
+                />
+              )
+            ) : triggersLoading ? (
+              <div className="flex items-center justify-center h-40">
+                <Loader2 className="h-8 w-8 animate-spin text-purple-600" />
               </div>
+            ) : (
+              <ScheduleTriggersTable
+                triggers={scheduleTriggers}
+                onToggle={handleToggleSchedule}
+                onDelete={(id) => openDeleteTriggerModal(id, "schedule")}
+                itemsPerPage={10}
+              />
             )}
           </div>
         </main>
@@ -370,6 +586,15 @@ const Workflows = () => {
         title="Delete Workflow?"
         description={`Are you sure you want to delete this workflow? This action cannot be undone.`}
         isLoading={loading}
+      />
+
+      <DeleteConfirmationModal
+        isOpen={deleteTriggerModalOpen}
+        onClose={() => setDeleteTriggerModalOpen(false)}
+        onConfirm={confirmDeleteTrigger}
+        title={`Delete ${triggerToDelete?.type === "http" ? "HTTP" : "Schedule"} Trigger?`}
+        description={`Are you sure you want to delete this ${triggerToDelete?.type === "http" ? "HTTP" : "Schedule"} trigger? This action cannot be undone.`}
+        isLoading={deletingTrigger}
       />
     </div>
   );

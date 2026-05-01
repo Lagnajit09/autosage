@@ -34,36 +34,41 @@ interface ScheduleTriggersTableProps {
   triggers: ScheduleTrigger[];
   onToggle: (id: string, current: boolean) => void;
   onDelete: (id: string) => void;
+  itemsPerPage?: number;
 }
 
 export const ScheduleTriggersTable = ({
   triggers,
   onToggle,
   onDelete,
+  itemsPerPage = 10,
 }: ScheduleTriggersTableProps) => {
   const [searchQuery, setSearchQuery] = useState("");
   const [debouncedQuery, setDebouncedQuery] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 5;
 
   // 1s latency for search
   useEffect(() => {
     const timer = setTimeout(() => {
       setDebouncedQuery(searchQuery);
       setCurrentPage(1); // Reset to page 1 on search
-    }, 1000);
+    }, 800);
 
     return () => clearTimeout(timer);
   }, [searchQuery]);
 
-  const filteredTriggers = triggers.filter((t) =>
-    t.workflow_name.toLowerCase().includes(debouncedQuery.toLowerCase()) ||
-    t.cron_expression.toLowerCase().includes(debouncedQuery.toLowerCase())
+  const filteredTriggers = triggers.filter(
+    (t) =>
+      t.workflow_name.toLowerCase().includes(debouncedQuery.toLowerCase()) ||
+      t.cron_expression.toLowerCase().includes(debouncedQuery.toLowerCase()),
   );
 
   const totalPages = Math.ceil(filteredTriggers.length / itemsPerPage);
   const startIndex = (currentPage - 1) * itemsPerPage;
-  const paginatedTriggers = filteredTriggers.slice(startIndex, startIndex + itemsPerPage);
+  const paginatedTriggers = filteredTriggers.slice(
+    startIndex,
+    startIndex + itemsPerPage,
+  );
 
   return (
     <div className="space-y-4">
@@ -83,7 +88,9 @@ export const ScheduleTriggersTable = ({
 
       {filteredTriggers.length === 0 ? (
         <div className="text-sm text-gray-500 py-8 text-center bg-white dark:bg-gray-900 rounded-md border border-dashed border-gray-300 dark:border-gray-700">
-          {searchQuery ? "No triggers match your search." : "No schedule triggers configured."}
+          {searchQuery
+            ? "No triggers match your search."
+            : "No schedule triggers configured."}
         </div>
       ) : (
         <>
@@ -91,12 +98,24 @@ export const ScheduleTriggersTable = ({
             <Table>
               <TableHeader>
                 <TableRow className="border-b border-gray-200 dark:border-gray-800 hover:bg-transparent">
-                  <TableHead className="text-gray-500 dark:text-gray-400">Workflow</TableHead>
-                  <TableHead className="text-gray-500 dark:text-gray-400">Cron Expression</TableHead>
-                  <TableHead className="text-gray-500 dark:text-gray-400 hidden md:table-cell">Timezone</TableHead>
-                  <TableHead className="text-gray-500 dark:text-gray-400 hidden sm:table-cell">Last Triggered</TableHead>
-                  <TableHead className="text-gray-500 dark:text-gray-400">Status</TableHead>
-                  <TableHead className="text-right text-gray-500 dark:text-gray-400">Actions</TableHead>
+                  <TableHead className="text-gray-500 dark:text-gray-400">
+                    Workflow
+                  </TableHead>
+                  <TableHead className="text-gray-500 dark:text-gray-400">
+                    Cron Expression
+                  </TableHead>
+                  <TableHead className="text-gray-500 dark:text-gray-400 hidden md:table-cell">
+                    Timezone
+                  </TableHead>
+                  <TableHead className="text-gray-500 dark:text-gray-400 hidden sm:table-cell">
+                    Last Triggered
+                  </TableHead>
+                  <TableHead className="text-gray-500 dark:text-gray-400">
+                    Status
+                  </TableHead>
+                  <TableHead className="text-right text-gray-500 dark:text-gray-400">
+                    Actions
+                  </TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -125,7 +144,10 @@ export const ScheduleTriggersTable = ({
                         ? new Date(t.last_triggered_at).toLocaleString()
                         : "Never"}
                       {t.last_error && (
-                        <div className="text-red-500 mt-1 truncate max-w-xs" title={t.last_error}>
+                        <div
+                          className="text-red-500 mt-1 truncate max-w-xs"
+                          title={t.last_error}
+                        >
                           Error: {t.last_error}
                         </div>
                       )}
@@ -165,7 +187,9 @@ export const ScheduleTriggersTable = ({
                 <span className="font-medium">
                   {Math.min(startIndex + itemsPerPage, filteredTriggers.length)}
                 </span>{" "}
-                of <span className="font-medium">{filteredTriggers.length}</span> results
+                of{" "}
+                <span className="font-medium">{filteredTriggers.length}</span>{" "}
+                results
               </p>
               <div className="flex items-center gap-2">
                 <Button
@@ -181,7 +205,9 @@ export const ScheduleTriggersTable = ({
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                  onClick={() =>
+                    setCurrentPage((p) => Math.min(totalPages, p + 1))
+                  }
                   disabled={currentPage === totalPages}
                   className="bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800"
                 >
@@ -193,6 +219,9 @@ export const ScheduleTriggersTable = ({
           )}
         </>
       )}
+      <p className="text-xs text-gray-500 dark:text-gray-400 italic px-1">
+        * Note: Deleting a trigger only removes the trigger configuration. It does not delete the associated workflow.
+      </p>
     </div>
   );
 };

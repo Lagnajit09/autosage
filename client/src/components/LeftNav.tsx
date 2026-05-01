@@ -39,11 +39,6 @@ export const NavItems = ({ mobile = false }: { mobile?: boolean }) => {
       onClick: () => navigate("/workflows"),
     },
     {
-      icon: <Zap className={cn("w-6 h-6", mobile ? "w-5 h-5 mr-2" : "")} />,
-      label: "Triggers",
-      onClick: () => navigate("/triggers"),
-    },
-    {
       icon: (
         <ListPlus className={cn("w-6 h-6", mobile ? "w-5 h-5 mr-2" : "")} />
       ),

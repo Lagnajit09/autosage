@@ -30,7 +30,6 @@ interface NavItem {
 const navItems: NavItem[] = [
   { icon: LayoutGrid, label: "Dashboard", route: "/dashboard" },
   { icon: Workflow, label: "All Workflows", route: "/workflows" },
-  { icon: Zap, label: "Triggers", route: "/triggers" },
   { icon: ListPlus, label: "Templates", route: "/templates" },
   { icon: Code2, label: "Editor", route: "/script-editor" },
   { icon: AutobotIcon, label: "Autobot", route: "/ai/autobot" },
