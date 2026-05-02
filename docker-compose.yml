@@ -47,6 +47,7 @@ services:
     # Belt-and-braces: ensure Python never buffers stdout/stderr
     environment:
       PYTHONUNBUFFERED: "1"
+      GOOGLE_APPLICATION_CREDENTIALS: /run/secrets/gcs-key.json
 
     # Bind-mount GCS service-account key read-only.
     # Inside the container the path is /run/secrets/gcs-key.json.
@@ -95,6 +96,7 @@ services:
       # Override EXEC_WORKER_URL to use Docker-internal DNS instead of localhost.
       # The exec-worker service is reachable by its service name on autosage-net.
       EXEC_WORKER_URL: "http://exec-worker:8020/api/worker/execute"
+      GOOGLE_APPLICATION_CREDENTIALS: /run/secrets/gcs-key.json
 
     volumes:
       - ./gcs-key.json:/run/secrets/gcs-key.json:ro
@@ -143,6 +145,7 @@ services:
       - .env.server
     environment:
       PYTHONUNBUFFERED: "1"
+      GOOGLE_APPLICATION_CREDENTIALS: /run/secrets/gcs-key.json
     volumes:
       - ./gcs-key.json:/run/secrets/gcs-key.json:ro
     networks:
@@ -169,6 +172,7 @@ services:
       - .env.server
     environment:
       PYTHONUNBUFFERED: "1"
+      GOOGLE_APPLICATION_CREDENTIALS: /run/secrets/gcs-key.json
     volumes:
       - ./gcs-key.json:/run/secrets/gcs-key.json:ro
     networks:
@@ -196,6 +200,7 @@ services:
       - .env.server
     environment:
       PYTHONUNBUFFERED: "1"
+      GOOGLE_APPLICATION_CREDENTIALS: /run/secrets/gcs-key.json
     volumes:
       - ./gcs-key.json:/run/secrets/gcs-key.json:ro
     networks:
