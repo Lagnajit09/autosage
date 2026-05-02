@@ -25,17 +25,17 @@ const Dashboard = () => {
   const [setupTimer, setSetupTimer] = useState(0);
 
   // TODO: Remove this in Production
-  useEffect(() => {
-    const getClerkToken = async () => {
-      try {
-        const clerkToken = await getToken({ template: "LongLivedJWT" });
-        // console.log("LongLivedJWT clerkToken", clerkToken);
-      } catch (error) {
-        console.error("Failed to get token:", error);
-      }
-    };
-    getClerkToken();
-  }, [getToken]);
+  // useEffect(() => {
+  //   const getClerkToken = async () => {
+  //     try {
+  //       const clerkToken = await getToken({ template: "LongLivedJWT" });
+  //       // console.log("LongLivedJWT clerkToken", clerkToken);
+  //     } catch (error) {
+  //       console.error("Failed to get token:", error);
+  //     }
+  //   };
+  //   getClerkToken();
+  // }, [getToken]);
 
   useEffect(() => {
     if (showFirstVisitWelcome) {

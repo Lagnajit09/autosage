@@ -28,7 +28,6 @@ export const signin = async (data: SignInData): Promise<AuthResponse> => {
     });
 
     if (tokenData.auth_token) {
-      localStorage.setItem("authToken", tokenData.auth_token);
       return { success: true, message: "Signed in successfully!" };
     } else {
       return { success: false, message: "Failed to retrieve access token." };

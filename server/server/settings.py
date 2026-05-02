@@ -281,6 +281,19 @@ CELERY_TASK_TRACK_STARTED = True
 CELERY_TASK_SOFT_TIME_LIMIT = 1800   # 30 minutes per workflow
 CELERY_TASK_TIME_LIMIT      = 3600   # hard kill after 1 hour
 
+# Robustness settings for remote Redis (like Upstash)
+# These help prevent 'Timeout reading from socket' errors on Windows.
+CELERY_BROKER_TRANSPORT_OPTIONS = {
+    'visibility_timeout': 3600,
+    'socket_timeout': 30,
+    'socket_connect_timeout': 30,
+    'socket_keepalive': True,
+    'retry_on_timeout': True,
+}
+CELERY_REDIS_BACKEND_HEALTH_CHECK_INTERVAL = 30
+CELERY_BROKER_CONNECTION_RETRY_ON_STARTUP = True
+CELERY_BROKER_POOL_LIMIT = None  # Disable connection pooling to avoid stale connections
+
 # Celery Beat — use the database scheduler so schedules are dynamic and
 # survive restarts without editing settings.py.
 CELERY_BEAT_SCHEDULER = 'django_celery_beat.schedulers:DatabaseScheduler'

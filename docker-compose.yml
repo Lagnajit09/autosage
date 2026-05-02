@@ -125,3 +125,82 @@ services:
       timeout: 5s
       retries: 3
       start_period: 30s
+
+  # ── Celery worker (workflow execution) ───────────────────────────────────────
+  # Handles long-running execute_workflow tasks dispatched by enqueue_workflow_run.
+  worker:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    image: autosage-server:latest
+    container_name: autosage-worker
+    command: >
+      celery -A server worker
+      --loglevel=info
+      --queues=celery
+      --concurrency=4
+    env_file:
+      - .env.server
+    environment:
+      PYTHONUNBUFFERED: "1"
+    volumes:
+      - ./gcs-key.json:/run/secrets/gcs-key.json:ro
+    networks:
+      - autosage-net
+    depends_on:
+      server:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # ── Celery Beat (schedule dispatcher) ────────────────────────────────────────
+  # IMPORTANT: run exactly ONE beat instance in production.
+  # Uses the DatabaseScheduler so PeriodicTask rows are the source of truth.
+  beat:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    image: autosage-server:latest
+    container_name: autosage-beat
+    command: >
+      celery -A server beat
+      --scheduler django_celery_beat.schedulers:DatabaseScheduler
+      --loglevel=info
+    env_file:
+      - .env.server
+    environment:
+      PYTHONUNBUFFERED: "1"
+    volumes:
+      - ./gcs-key.json:/run/secrets/gcs-key.json:ro
+    networks:
+      - autosage-net
+    depends_on:
+      server:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # ── Scheduler worker (lightweight dispatch) ───────────────────────────────────
+  # Dedicated worker for the 'scheduler' queue so fire_scheduled_workflow tasks
+  # are never queued behind long-running execute_workflow tasks.
+  scheduler-worker:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    image: autosage-server:latest
+    container_name: autosage-scheduler-worker
+    command: >
+      celery -A server worker
+      --loglevel=info
+      --queues=scheduler
+      --concurrency=2
+    env_file:
+      - .env.server
+    environment:
+      PYTHONUNBUFFERED: "1"
+    volumes:
+      - ./gcs-key.json:/run/secrets/gcs-key.json:ro
+    networks:
+      - autosage-net
+    depends_on:
+      server:
+        condition: service_healthy
+    restart: unless-stopped
