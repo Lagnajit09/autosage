@@ -21,61 +21,89 @@ At a high level, Autosage has:
 - A FastAPI-based execution worker that performs actual script execution.
 - Supabase Postgres as the main relational database.
 - Google Cloud Storage (GCS) for file/object storage.
+- Redis as the message broker for Celery and for real-time log pub/sub.
 
 ## 2. High-Level Architecture
 
 Autosage is split into two main backend responsibilities:
 
-1. **Control plane** — the Django server.
-2. **Execution plane** — the FastAPI exec-worker.
+1. **Control plane** — the Django server (`/server`).
+2. **Execution plane** — the FastAPI exec-worker (`/exec-worker`).
 
-This separation is important because the web/API layer should remain lightweight while execution work can be slow, bursty, and resource-intensive.
+This separation ensures the web/API layer remains responsive while heavy execution work is handled by the worker.
 
-### 2.1 Request Flow Summary
+### 2.1 The Execution Flow
 
-Typical request flow:
+Typical workflow execution flow:
 
-- User opens the React client.
-- User signs in through Clerk.
-- React uses the authenticated session/token to call the Django API.
-- Django validates identity/authorization, stores metadata, prepares workflow execution state, and coordinates with downstream services.
-- For execution, Django delegates to the exec-worker rather than running scripts directly inside the web process.
-- Execution outputs, logs, artifacts, and metadata are persisted using Supabase DB and GCS as appropriate.
+1.  **Trigger**: A workflow is triggered via the UI (manual), an HTTP webhook, or a Cron schedule.
+2.  **Enqueuing**: The Django server creates a `WorkflowRun` and its constituent `NodeRun` records in the database.
+3.  **Celery Task**: Django enqueues a `workflows.execute_workflow` task to Redis.
+4.  **DAG Traversal**: A Celery worker picks up the task, builds a Directed Acyclic Graph (DAG) from the workflow definition, and determines the execution order.
+5.  **Node Execution**: For each node:
+    - **Action Node**: Django resolves parameters (masking secrets), fetches the script from GCS, and makes a streaming HTTP POST request to the `exec-worker`.
+    - **Decision Node**: Django evaluates conditions based on upstream node outputs and prunes branches accordingly.
+6.  **Streaming Logs**: The `exec-worker` streams stdout/stderr back to Django, which publishes them to Redis Pub/Sub.
+7.  **SSE**: The React client subscribes to a Server-Sent Events (SSE) endpoint on Django, which relays logs from Redis Pub/Sub in real-time.
+8.  **Completion**: Once finished, Django uploads the full log bundle to GCS and marks the run as `success` or `failed`.
 
-### 2.2 Recommended Queue-Oriented Execution Flow
+## 3. Celery & Redis Configuration
 
-For architecture-aware agents, the preferred long-term flow is:
+Celery is the backbone of background execution in Autosage.
 
-- User requests a workflow run.
-- Django creates a workflow run record with a state such as `queued`.
-- Django publishes a job to a queue.
-- The exec-worker consumes the job asynchronously.
-- The exec-worker performs script execution and updates run state to `running`, `success`, or `failed`.
-- Logs, outputs, and artifacts are stored and linked back to the run record.
+### 3.1 Broker & Backend
+- **Broker**: Redis is used as the message broker (`CELERY_BROKER_URL`).
+- **Result Backend**: Redis is also used to store task results (`CELERY_RESULT_BACKEND`).
 
-This pattern is preferred over synchronous end-to-end waiting from Django because Autosage is an execution platform and burst handling matters.
+### 3.2 Stability & Robustness
+Because Autosage often uses remote Redis (like Upstash) and runs on Windows in development, specific settings are applied in `settings.py`:
+- `visibility_timeout`: Set to 3600s (1 hour) to allow long-running workflows to complete without being re-enqueued.
+- `socket_timeout` & `socket_connect_timeout`: Set to 30s to handle network latency.
+- `retry_on_timeout`: Enabled for robustness.
+- `CELERY_BROKER_POOL_LIMIT`: Disabled (`None`) to avoid stale connection issues in long-lived workers.
 
-## 3. Repository Structure
+### 3.3 Task Routing
+To ensure system responsiveness, tasks are routed to specific queues:
+- **`scheduler` queue**: Reserved for the lightweight `fire_scheduled_workflow` task. This prevents cron triggers from being blocked by a backlog of long-running workflow executions.
+- **Default queue**: Used for the heavy `execute_workflow` tasks.
+
+## 4. Trigger System
+
+Autosage supports multiple ways to trigger automation.
+
+### 4.1 HTTP Trigger (Webhooks)
+Allows external systems (GitHub, CI/CD, etc.) to trigger workflows.
+- **Authentication**: Uses a per-trigger `trigger_token` in the URL and an `X-Trigger-Secret` header. Only the bcrypt hash of the secret is stored in the DB.
+- **Idempotency**: Requires an `Idempotency-Key` header. Repeat requests with the same key return the original `WorkflowRun` metadata instead of starting a new one.
+- **Public Polling**: Callers receive a `polling_url` to check run status without needing Clerk authentication.
+
+### 4.2 Cron Scheduler (Celery Beat)
+Allows workflows to run on a recurring schedule.
+- **Database Scheduler**: Uses `django_celery_beat.schedulers:DatabaseScheduler`. Schedules are stored in the database, allowing them to be managed dynamically via the UI/API without restarting the service.
+- **Sync Logic**: When a user creates/updates a schedule in the UI, Django idempotently syncs a `PeriodicTask` and a `CrontabSchedule` in the `django-celery-beat` tables.
+- **Overlap Policy**: By default, if a scheduled run is already queued or running, the next scheduled fire for that specific workflow is skipped to prevent resource exhaustion.
+
+## 5. Repository Structure
 
 This repository contains multiple projects with different technology stacks.
 
-### 3.1 Frontend (`/client`)
+### 5.1 Frontend (`/client`)
 
 - **Technologies:** React, TypeScript, Vite, Radix UI, Tailwind CSS.
 - **Purpose:** User-facing web application.
 
-### 3.2 Current Backends (`/server` and `/exec-worker`)
+### 5.2 Current Backends (`/server` and `/exec-worker`)
 
 - **`/server`**: Django backend.
 - **`/exec-worker`**: FastAPI execution worker.
 - **Note:** These are the active backend services in the current version.
 
-### 3.3 Legacy Backend (`/server_v1`)
+### 5.3 Legacy Backend (`/server_v1`)
 
 - **Technologies:** Node.js, Express, OpenAI, Azure AI Inference.
 - **Status:** Old backend, not used in the current version.
 
-## 4. Django Server Responsibilities (`/server`)
+## 6. Django Server Responsibilities (`/server`)
 
 The Django server is the primary application backend and should be treated as the **control plane**.
 
@@ -92,7 +120,7 @@ It is responsible for:
 
 The Django server should **not** be the place where long-running script execution happens directly. That work belongs in the exec-worker or an asynchronous execution pipeline.
 
-### 4.1 Django Deployment Model
+### 6.1 Django Deployment Model
 
 Current/expected deployment characteristics:
 
@@ -110,7 +138,7 @@ For Autosage, Django should be optimized for:
 
 Agents should avoid introducing heavy synchronous processing into Django request handlers.
 
-### 4.2 How Django Should Handle Workflow Executions
+### 6.2 How Django Should Handle Workflow Executions
 
 Preferred pattern:
 
@@ -129,7 +157,7 @@ Avoid pattern:
 
 Because the host is resource-constrained, the avoid pattern can easily cause slowdowns under concurrent usage.
 
-## 5. Exec-Worker Responsibilities (`/exec-worker`)
+## 7. Exec-Worker Responsibilities (`/exec-worker`)
 
 The exec-worker is the **execution plane** and should be treated as the service responsible for actual runtime automation work.
 
@@ -145,7 +173,7 @@ It is responsible for:
 
 The exec-worker should contain execution logic, not product-level business logic that belongs in Django.
 
-### 5.1 Exec-Worker Deployment Model
+### 7.1 Exec-Worker Deployment Model
 
 Current/expected deployment characteristics:
 
@@ -160,7 +188,7 @@ Agents should design worker-facing changes with the expectation that:
 - Requests/jobs may be concurrent.
 - Long-running executions should not depend on Django keeping an open HTTP request alive.
 
-### 5.2 Queue Placement
+### 7.2 Queue Placement
 
 For Autosage, the queue mechanism belongs around the execution path between Django and the exec-worker.
 
@@ -172,7 +200,7 @@ Recommended model:
 
 This is preferable to using Django as a long-lived synchronous caller of the worker for every execution.
 
-## 6. Authentication: Clerk
+## 8. Authentication: Clerk
 
 Clerk handles authentication and user identity for Autosage.
 
@@ -190,7 +218,7 @@ Expected backend behavior:
 
 Agents should treat Clerk as the identity provider and Django as the enforcement point for authorization/business rules.
 
-## 7. Data Layer: Supabase DB
+## 9. Data Layer: Supabase DB
 
 Supabase is used for the database layer.
 
@@ -223,7 +251,7 @@ Suggested workflow run statuses:
 
 Agents should preserve data integrity and avoid schema changes that blur the line between metadata in DB and large binary artifacts in object storage.
 
-## 8. File/Object Storage: GCS
+## 10. File/Object Storage: GCS
 
 Google Cloud Storage (GCS) is used for object storage.
 
@@ -240,42 +268,42 @@ Best practice expectations:
 - Database records should store paths, URLs, metadata, content hashes, or object references rather than large blobs.
 - Access control for stored artifacts should be handled carefully and consistently with authenticated user permissions.
 
-## 9. Current Deployment View
+## 11. Current Deployment View
 
-### 9.1 Frontend
+### 11.1 Frontend
 
 - React application deployed separately from backend services.
 - Uses Clerk for auth and calls the Django API.
 
-### 9.2 Django Server
+### 11.2 Django Server
 
 - Deployed on a Google Compute Engine VM.
 - Current context suggests a small **e2-micro** instance.
 - Suitable for control-plane/API responsibilities, not heavy job execution.
 
-### 9.3 Exec-Worker
+### 11.3 Exec-Worker
 
 - Deployed on Google Cloud Run.
 - Handles actual script/workflow execution.
 - Can be scaled more independently than the Django VM.
 
-### 9.4 Storage and Data
+### 11.4 Storage and Data
 
 - Supabase DB for relational/application state.
 - GCS for files and execution artifacts.
 
-## 10. Concurrency and Scaling Model
+## 12. Concurrency and Scaling Model
 
 Autosage is an execution platform, so concurrency design matters.
 
-### 10.1 What to Optimize For
+### 12.1 What to Optimize For
 
 - Multiple users launching workflows at the same time.
 - Long-running remote executions.
 - Isolation between API traffic and execution traffic.
 - Clear lifecycle tracking for every run.
 
-### 10.2 Preferred Scaling Direction
+### 12.2 Preferred Scaling Direction
 
 Scale these independently:
 
@@ -285,17 +313,17 @@ Scale these independently:
 
 If load balancing is introduced for Django, it should improve API concurrency but should not be treated as the main solution for execution load. Queue-based async execution is more important for Autosage’s architecture.
 
-## 11. Guidance for Agents Making Changes
+## 13. Guidance for Agents Making Changes
 
 When modifying Autosage, agents should preserve these architectural boundaries:
 
-### 11.1 Put logic in the right service
+### 13.1 Put logic in the right service
 
 - Put product/business/orchestration logic in Django.
 - Put execution/runtime/remote-script logic in exec-worker.
 - Put UI logic in the React client.
 
-### 11.2 Avoid architectural drift
+### 13.2 Avoid architectural drift
 
 Do **not**:
 
@@ -304,7 +332,7 @@ Do **not**:
 - Assume synchronous execution is acceptable for all workflow runs.
 - Mix identity verification with authorization shortcuts.
 
-### 11.3 Favor explicit lifecycle tracking
+### 13.3 Favor explicit lifecycle tracking
 
 When building run/execution features, prefer explicit fields for:
 
@@ -316,16 +344,16 @@ When building run/execution features, prefer explicit fields for:
 - `triggered_by`
 - `execution_target`
 
-### 11.4 Think in control plane vs execution plane
+### 13.4 Think in control plane vs execution plane
 
 If a feature is about:
 
 - policy, permissions, metadata, configuration, templates, workflow creation -> Django.
 - job pickup, script runtime, shell/powershell/python execution, remote VM activity, streaming logs -> exec-worker.
 
-## 12. Build, Lint, and Test Commands
+## 14. Build, Lint, and Test Commands
 
-### 12.1 Frontend (Client - JavaScript/TypeScript/React)
+### 14.1 Frontend (Client - JavaScript/TypeScript/React)
 
 - **Location:** `/client`
 - **Install Dependencies:** `npm install`
@@ -336,7 +364,7 @@ If a feature is about:
   - `npx vitest <path/to/test-file.test.ts>`
   - `npx jest <path/to/test-file.test.ts>`
 
-### 12.2 Python Backends (Server & Exec-Worker)
+### 14.2 Python Backends (Server & Exec-Worker)
 
 - **Locations:** `/server` and `/exec-worker`
 - **Install Dependencies:** `pip install -r requirements.txt`
@@ -344,7 +372,7 @@ If a feature is about:
 - **Test:** `pytest`
 - **Run a Single Test:** `pytest <path/to/test_file.py::test_function_name>`
 
-### 12.3 Legacy Node.js Backend (`/server_v1`)
+### 14.3 Legacy Node.js Backend (`/server_v1`)
 
 - **Install Dependencies:** `npm install`
 - **Start Server:** `npm start` or `node server.js`
@@ -354,28 +382,28 @@ If a feature is about:
 - **Test:** `npm test` or `jest`
 - **Run a Single Test:** `npx jest <path/to/test-file.test.js>`
 
-## 13. Code Style and Conventions
+## 15. Code Style and Conventions
 
-### 13.1 Naming Conventions
+### 15.1 Naming Conventions
 
 - **Variables and Functions:** `camelCase` for JavaScript/TypeScript, `snake_case` for Python.
 - **Classes and Types:** `PascalCase`.
 - **Constants:** `UPPER_SNAKE_CASE`.
 
-### 13.2 Error Handling
+### 15.2 Error Handling
 
 - Handle errors gracefully and provide informative messages.
 - Use `try-catch` in JavaScript/TypeScript.
 - Use `try-except` in Python.
 - Handle promise rejections and asynchronous failures explicitly.
 
-### 13.3 Comments
+### 15.3 Comments
 
 - Explain complex logic and important design decisions.
 - Focus comments on **why**, not just **what**.
 - Keep comments concise and updated.
 
-### 13.4 Frontend Code Style
+### 15.4 Frontend Code Style
 
 - Absolute imports are preferred when configured.
 - Follow ESLint rules.
@@ -383,7 +411,7 @@ If a feature is about:
 - Use functional React components with hooks.
 - Use Tailwind CSS as the primary styling approach.
 
-### 13.5 Python Backend Code Style
+### 15.5 Python Backend Code Style
 
 - Prefer absolute imports.
 - Organize imports by standard library, third-party, then local modules.
@@ -391,13 +419,13 @@ If a feature is about:
 - Use Python type hints.
 - Use `snake_case` for variables, functions, and modules; `PascalCase` for classes.
 
-### 13.6 Legacy Node Backend Style
+### 15.6 Legacy Node Backend Style
 
 - Use CommonJS `require()`.
 - Follow ESLint rules.
 - Use centralized Express error handling patterns where applicable.
 
-## 14. Operational Notes for Future Agents
+## 16. Operational Notes for Future Agents
 
 Before making major changes, agents should answer these questions:
 
@@ -415,6 +443,6 @@ Preferred direction for future work:
 - Keep run status explicit.
 - Design for bursty concurrent execution.
 
-## 15. Cursor/Copilot Rules
+## 17. Cursor/Copilot Rules
 
 No specific `.cursor/rules/` or `.github/copilot-instructions.md` files were found in this repository. Agents should rely on this document as the primary architecture and coding guidance unless more specific repository-local instructions are added later.
