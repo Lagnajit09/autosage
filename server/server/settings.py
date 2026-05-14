@@ -47,6 +47,15 @@ GOOGLE_APPLICATION_CREDENTIALS = config('GOOGLE_APPLICATION_CREDENTIALS', defaul
 
 ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='localhost,127.0.0.1', cast=Csv())
 
+# We sit behind nginx, which terminates TLS and proxies to us in plain HTTP
+# on the internal docker bridge. Trust nginx's X-Forwarded-Proto header so
+# Django knows the original request was HTTPS — this fixes request.scheme,
+# request.is_secure(), and `request.build_absolute_uri()`-derived URLs
+# (e.g. trigger_url, polling_url) returning `http://...` instead of `https://...`.
+# Only safe because nginx is the sole ingress and unconditionally sets the
+# header on every proxied request — see nginx/autosage.conf.
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+
 
 # Application definition
 
