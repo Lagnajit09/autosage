@@ -85,14 +85,14 @@ export const HttpTriggersTable = ({
       </div>
 
       {filteredTriggers.length === 0 ? (
-        <div className="text-sm text-gray-500 py-8 text-center bg-white dark:bg-gray-900 rounded-md border border-dashed border-gray-300 dark:border-gray-700">
+        <div className="text-sm text-gray-500 py-8 text-center bg-white dark:bg-gray-900/30 rounded-md border border-dashed border-gray-300 dark:border-gray-700">
           {searchQuery
             ? "No triggers match your search."
             : "No HTTP triggers configured."}
         </div>
       ) : (
         <>
-          <div className="rounded-md border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 overflow-x-auto scrollbar-hide">
+          <div className="rounded-md border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900/30 overflow-x-auto scrollbar-hide">
             <Table>
               <TableHeader>
                 <TableRow className="border-b border-gray-200 dark:border-gray-800 hover:bg-transparent">
@@ -207,7 +207,8 @@ export const HttpTriggersTable = ({
         </>
       )}
       <p className="text-xs text-gray-500 dark:text-gray-400 italic px-1">
-        * Note: Deleting a trigger only removes the trigger configuration. It does not delete the associated workflow.
+        * Note: Deleting a trigger only removes the trigger configuration. It
+        does not delete the associated workflow.
       </p>
     </div>
   );

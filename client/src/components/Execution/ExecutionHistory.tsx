@@ -209,7 +209,7 @@ const ExecutionHistory = ({ workflowId }: ExecutionHistoryProps) => {
           size="sm"
           onClick={fetchHistory}
           disabled={isLoading}
-          className="w-8 h-8 text-xs mr-4"
+          className="w-8 h-8 text-xs mr-4 dark:text-gray-200 dark:hover:text-gray-100 dark:hover:bg-transparent"
         >
           {isLoading ? (
             <Loader2 className="h-4 w-4 animate-spin mr-2" />
@@ -243,7 +243,7 @@ const ExecutionHistory = ({ workflowId }: ExecutionHistoryProps) => {
             </TableHeader>
             <TableBody>
               {isLoading && runs.length === 0 ? (
-                <TableRow>
+                <TableRow className="dark:hover:bg-transparent">
                   <TableCell colSpan={5} className="h-32 text-center">
                     <div className="flex flex-col items-center justify-center gap-2 text-muted-foreground">
                       <Loader2 className="h-6 w-6 animate-spin text-purple-500" />
@@ -252,7 +252,7 @@ const ExecutionHistory = ({ workflowId }: ExecutionHistoryProps) => {
                   </TableCell>
                 </TableRow>
               ) : runs.length === 0 ? (
-                <TableRow>
+                <TableRow className="dark:hover:bg-transparent">
                   <TableCell colSpan={5} className="h-32 text-center">
                     <div className="flex flex-col items-center justify-center gap-1 text-muted-foreground">
                       <p className="text-sm font-medium">No history yet</p>

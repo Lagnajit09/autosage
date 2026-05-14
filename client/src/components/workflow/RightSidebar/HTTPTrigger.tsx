@@ -457,9 +457,8 @@ export const HTTPTrigger: React.FC<BaseConfigProps> = ({
                 <Button
                   onClick={() => setShowRegenerateConfirm(false)}
                   disabled={working}
-                  variant="outline"
                   size="sm"
-                  className="flex-1 h-8 text-xs bg-white dark:bg-gray-900"
+                  className="flex-1 h-8 text-xs bg-white dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-gray-800"
                 >
                   Cancel
                 </Button>
@@ -530,9 +529,8 @@ export const HTTPTrigger: React.FC<BaseConfigProps> = ({
                 <Button
                   onClick={() => setShowDeleteConfirm(false)}
                   disabled={working}
-                  variant="outline"
                   size="sm"
-                  className="flex-1 h-8 text-xs bg-white dark:bg-gray-900"
+                  className="flex-1 h-8 text-xs bg-white dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-gray-800"
                 >
                   Cancel
                 </Button>

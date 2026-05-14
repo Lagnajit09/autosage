@@ -266,9 +266,8 @@ export const ScheduleTrigger: React.FC<BaseConfigProps> = ({
             <Button
               onClick={() => setShowDeleteConfirm(false)}
               disabled={working}
-              variant="outline"
               size="sm"
-              className="flex-1 h-8 text-xs bg-white dark:bg-gray-900"
+              className="flex-1 h-8 text-xs bg-white dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-gray-800"
             >
               Cancel
             </Button>
@@ -278,7 +277,9 @@ export const ScheduleTrigger: React.FC<BaseConfigProps> = ({
               size="sm"
               className="flex-1 h-8 text-xs bg-red-600 hover:bg-red-700 text-white"
             >
-              {working ? <Loader2 className="w-3 h-3 mr-1 animate-spin" /> : null}
+              {working ? (
+                <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+              ) : null}
               Delete
             </Button>
           </div>

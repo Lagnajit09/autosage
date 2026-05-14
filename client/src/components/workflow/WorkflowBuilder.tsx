@@ -20,6 +20,7 @@ import { TriggerNode } from "./nodes/TriggerNode";
 import { ActionNode } from "./nodes/ActionNode";
 import { LeftSidebar } from "./LeftSidebar";
 import { Edge, NodeData, WorkflowData } from "@/utils/types";
+import { validateConnection } from "@/utils/graph";
 import { ImportWorkflowDialog } from "./ImportWorkflowDialog";
 import { DeleteConfirmationModal } from "@/components/DeleteConfirmationModal";
 import { DecisionNode } from "./nodes/DecisionNode";
@@ -73,6 +74,10 @@ const WorkflowBuilderContent = ({
   const [reactFlowInstance, setReactFlowInstance] =
     useState<ReactFlowInstance | null>(null);
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
+  // Holds the most recent rejection reason produced by isValidConnection so
+  // we can surface it once on onConnectEnd (toast on actual failed drop, not
+  // on every mousemove during the drag).
+  const rejectionReasonRef = useRef<string | null>(null);
 
   // Load workflow from localStorage on component mount
   useEffect(() => {
@@ -151,7 +156,23 @@ const WorkflowBuilderContent = ({
 
   const onConnect = useCallback(
     (params: Connection) => {
-      const { sourceHandle } = params;
+      const { source, target, sourceHandle } = params;
+      // Backstop in case isValidConnection was bypassed (programmatic drops,
+      // future React Flow version changes, etc.). Matches the same rules.
+      if (source && target) {
+        const reason = validateConnection(
+          source,
+          target,
+          sourceHandle,
+          edges,
+          nodes,
+        );
+        if (reason) {
+          toast2.error(reason);
+          return;
+        }
+      }
+
       let edgeOptions = {};
 
       if (sourceHandle === "true") {
@@ -170,8 +191,44 @@ const WorkflowBuilderContent = ({
 
       setEdges((eds) => addEdge({ ...params, ...edgeOptions }, eds));
     },
-    [setEdges],
+    [setEdges, edges, nodes],
   );
+
+  // Runs while the user is dragging a new edge. Returning false makes
+  // React Flow refuse the drop (red indicator on the target handle). We
+  // stash the reason so onConnectEnd can toast it exactly once.
+  const isValidConnection = useCallback(
+    (conn: Connection | Edge) => {
+      const { source, target, sourceHandle } = conn;
+      if (!source || !target) return false;
+      const reason = validateConnection(
+        source,
+        target,
+        sourceHandle,
+        edges,
+        nodes,
+      );
+      if (reason) {
+        rejectionReasonRef.current = reason;
+        return false;
+      }
+      rejectionReasonRef.current = null;
+      return true;
+    },
+    [edges, nodes],
+  );
+
+  const onConnectStart = useCallback(() => {
+    rejectionReasonRef.current = null;
+  }, []);
+
+  const onConnectEnd = useCallback(() => {
+    const reason = rejectionReasonRef.current;
+    if (reason) {
+      toast2.error(reason);
+      rejectionReasonRef.current = null;
+    }
+  }, []);
 
   const onDragOver = useCallback((event: React.DragEvent) => {
     event.preventDefault();
@@ -366,6 +423,21 @@ const WorkflowBuilderContent = ({
   // edge creation handler for decision nodes
   const handleCreateEdge = useCallback(
     (sourceId: string, targetId: string, sourceHandle?: string) => {
+      // Mirror the same guard onConnect uses so programmatic edge creation
+      // can't sneak past the cycle/decision rules.
+      const reason = validateConnection(
+        sourceId,
+        targetId,
+        sourceHandle,
+        edges,
+        nodes,
+      );
+      if (reason) {
+        console.warn("handleCreateEdge rejected:", reason);
+        toast2.error(reason);
+        return;
+      }
+
       const newEdge: Edge = {
         id: `${sourceId}-${targetId}-${sourceHandle || "default"}`,
         source: sourceId,
@@ -398,7 +470,7 @@ const WorkflowBuilderContent = ({
         return [...filteredEdges, newEdge];
       });
     },
-    [setEdges],
+    [setEdges, edges, nodes],
   );
 
   const handleClearCanvas = () => {
@@ -656,6 +728,9 @@ const WorkflowBuilderContent = ({
                 onNodesChange={handleNodesChangeWrapper}
                 onEdgesChange={onEdgesChange}
                 onConnect={onConnect}
+                isValidConnection={isValidConnection}
+                onConnectStart={onConnectStart}
+                onConnectEnd={onConnectEnd}
                 onInit={handleReactFlowInit}
                 onDrop={onDrop}
                 onDragOver={onDragOver}

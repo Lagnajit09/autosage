@@ -160,7 +160,7 @@ const ExecutionResponse = ({
           <Button
             variant="ghost"
             size="icon"
-            className="h-8 w-8 shrink-0"
+            className="h-8 w-8 shrink-0 dark:text-gray-100 dark:hover:text-gray-900"
             onClick={fetchHistory}
             title="Refresh history"
           >
