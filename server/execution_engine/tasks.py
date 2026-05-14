@@ -514,25 +514,39 @@ def execute_workflow(self, workflow_run_id: str, raw_inputs: dict = None):
 
         elif node_type == NODE_TYPE_DECISION:
             conditions = data.get('conditions', [])
+            # Node-level combinator: '&&' means ALL must pass, '||' means ANY must pass.
+            # Defaults to '&&' for backwards compatibility with existing workflows.
+            combinator = data.get('combinator', '&&')
             decision_result = True
-            
+
             try:
+                cond_results = []
                 for cond in conditions:
                     raw_field = cond.get('field', '')
                     operator = cond.get('operator', '==')
                     raw_target = cond.get('value', '')
-                    
+
                     field_val = resolve_condition_value(raw_field, node_outputs)
                     target_val = resolve_condition_value(raw_target, node_outputs)
-                    
+
                     cond_result = _evaluate_condition(field_val, operator, target_val)
+                    cond_results.append(cond_result)
                     publish_workflow_log(workflow_run_id, 'log', {
-                        'stdout': f"[EVAL] Evaluated '{raw_field}' ({field_val}) {operator} '{raw_target}' ({target_val}) -> {cond_result}"
+                        'stdout': f"[EVAL] '{raw_field}' ({field_val}) {operator} '{raw_target}' ({target_val}) -> {cond_result}"
                     })
 
-                    if not cond_result:
-                        decision_result = False
-                        break
+                if not cond_results:
+                    # No conditions defined — always True
+                    decision_result = True
+                elif combinator == '||':
+                    decision_result = any(cond_results)
+                else:
+                    # '&&' (default)
+                    decision_result = all(cond_results)
+
+                publish_workflow_log(workflow_run_id, 'log', {
+                    'stdout': f"[EVAL] Combinator: {'ANY (OR)' if combinator == '||' else 'ALL (AND)'} -> decision = {decision_result}"
+                })
             except Exception as e:
                 node_run.status = 'failed'
                 node_run.error_message = f"Condition evaluation error: {str(e)}"

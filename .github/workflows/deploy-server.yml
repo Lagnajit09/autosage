@@ -6,6 +6,9 @@ on:
       - main
     paths:
       - "server/**"
+      - "docker-compose.oci.yml"
+      - "nginx/**"
+      - ".github/workflows/deploy-server.yml"
 
   workflow_dispatch:
 
@@ -13,10 +16,12 @@ env:
   REGISTRY: ghcr.io
   IMAGE_NAME: lagnajit09/autosage/autosage-server
   CONTAINER_NAME: autosage-server
+  COMPOSE_FILE: docker-compose.oci.yml
+  HOST_DIR: /home/ubuntu/autosage-server
 
 jobs:
   build-and-push:
-    name: Build & Push Docker Image
+    name: Build & Push Docker Image (linux/arm64)
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -44,6 +49,13 @@ jobs:
           tags: |
             type=raw,value=latest
 
+      # OCI Ampere A1 is aarch64; the host runner is amd64.
+      # QEMU lets buildx emulate arm64 during the build.
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
@@ -52,6 +64,7 @@ jobs:
         uses: docker/build-push-action@v5
         with:
           context: ./server
+          platforms: linux/arm64
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
@@ -59,11 +72,39 @@ jobs:
           cache-to: type=gha,mode=max
 
   deploy:
-    name: Deploy to GCP VM
+    name: Deploy to OCI Ampere A1
     runs-on: ubuntu-latest
     needs: build-and-push
 
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # Substitute the DuckDNS hostname into the nginx config before scp'ing it.
+      # The placeholder __DUCKDNS_DOMAIN__ appears in nginx/autosage.conf for
+      # server_name and ssl_certificate paths.
+      - name: Substitute DuckDNS domain into nginx config
+        run: |
+          set -e
+          if [ -z "${{ secrets.DUCKDNS_DOMAIN }}" ]; then
+            echo "DUCKDNS_DOMAIN secret is not set."
+            exit 1
+          fi
+          sed -i "s/__DUCKDNS_DOMAIN__/${{ secrets.DUCKDNS_DOMAIN }}/g" nginx/autosage.conf
+          echo ">>> Resulting server_name lines:"
+          grep -n 'server_name' nginx/autosage.conf || true
+
+      - name: Copy compose + nginx configs to host
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.VM_HOST }}
+          username: ${{ secrets.VM_USER }}
+          key: ${{ secrets.VM_SSH_KEY }}
+          port: ${{ secrets.VM_SSH_PORT }}
+          source: "docker-compose.oci.yml,nginx/autosage.conf,nginx/autosage-bootstrap.conf"
+          target: ${{ env.HOST_DIR }}/
+          overwrite: true
+
       - name: Deploy via SSH
         uses: appleboy/ssh-action@v1.0.3
         with:
@@ -74,31 +115,40 @@ jobs:
           script_stop: true
           script: |
             set -e
+            cd ${{ env.HOST_DIR }}
 
             echo ">>> Logging into GHCR..."
             echo "${{ secrets.GHCR_PAT }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
 
-            echo ">>> Pulling latest image..."
-            docker pull ghcr.io/${{ env.IMAGE_NAME }}:latest
+            echo ">>> Ensuring nginx/active.conf exists (first-run safety net)..."
+            if [ ! -f nginx/active.conf ]; then
+              echo "    active.conf missing — seeding with bootstrap config so nginx can start."
+              cp nginx/autosage-bootstrap.conf nginx/active.conf
+            fi
 
-            echo ">>> Stopping and removing existing container (if any)..."
-            docker stop ${{ env.CONTAINER_NAME }} 2>/dev/null || true
-            docker rm ${{ env.CONTAINER_NAME }} 2>/dev/null || true
+            echo ">>> Pulling latest image (linux/arm64)..."
+            docker compose -f ${{ env.COMPOSE_FILE }} pull
 
-            echo ">>> Starting new container..."
-            docker run -d \
-              -p 8000:8000 \
-              --env-file ~/autosage-server/server.env \
-              -e GOOGLE_APPLICATION_CREDENTIALS=/app/creds/service-account.json \
-              -v ~/autosage-server/gcs_key.json:/app/creds/service-account.json:ro \
-              --name ${{ env.CONTAINER_NAME }} \
-              --restart unless-stopped \
-              ghcr.io/${{ env.IMAGE_NAME }}:latest
+            echo ">>> Bringing the stack up..."
+            docker compose -f ${{ env.COMPOSE_FILE }} up -d --remove-orphans
 
-            echo ">>> Removing dangling images to free disk space..."
+            echo ">>> Checking whether Let's Encrypt cert is already provisioned..."
+            if docker compose -f ${{ env.COMPOSE_FILE }} run --rm \
+                 --entrypoint sh certbot \
+                 -c "test -f /etc/letsencrypt/live/${{ secrets.DUCKDNS_DOMAIN }}/fullchain.pem" 2>/dev/null; then
+              echo ">>> Cert present — syncing nginx/active.conf to autosage.conf and reloading..."
+              cp nginx/autosage.conf nginx/active.conf
+              docker compose -f ${{ env.COMPOSE_FILE }} exec -T nginx nginx -t
+              docker compose -f ${{ env.COMPOSE_FILE }} exec -T nginx nginx -s reload
+            else
+              echo ">>> No cert yet — leaving nginx/active.conf untouched (bootstrap phase)."
+              echo ">>> Run the manual bootstrap once to obtain the cert; future deploys will switch to autosage.conf automatically."
+            fi
+
+            echo ">>> Pruning dangling images..."
             docker image prune -f
 
-            echo ">>> Container started successfully."
+            echo ">>> Deploy finished."
 
   health-check:
     name: Health Check
@@ -106,7 +156,7 @@ jobs:
     needs: deploy
 
     steps:
-      - name: Health check inside VM
+      - name: External health check over HTTPS
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.VM_HOST }}
@@ -114,20 +164,35 @@ jobs:
           key: ${{ secrets.VM_SSH_KEY }}
           port: ${{ secrets.VM_SSH_PORT }}
           script: |
-            echo ">>> Waiting 30s for server to warm up..."
+            set -e
+            cd ${{ env.HOST_DIR }}
+
+            echo ">>> Waiting 30s for the new containers to warm up..."
             sleep 30
 
-            echo ">>> Hitting health endpoint..."
-            RESPONSE=$(curl --silent --max-time 15 --write-out "\n%{http_code}" http://localhost:8000/api/health/)
+            echo ">>> Internal Django healthcheck (via docker exec, bypasses nginx)..."
+            docker compose -f ${{ env.COMPOSE_FILE }} exec -T django \
+              python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health/').read()" \
+              || { echo "Internal Django health check FAILED"; exit 1; }
+            echo "Internal Django health check PASSED."
+
+            echo ">>> Public HTTPS health check via https://${{ secrets.DUCKDNS_DOMAIN }}/api/health/ ..."
+            RESPONSE=$(curl --silent --max-time 15 --write-out "\n%{http_code}" "https://${{ secrets.DUCKDNS_DOMAIN }}/api/health/")
             HTTP_BODY=$(echo "$RESPONSE" | head -n -1)
             HTTP_CODE=$(echo "$RESPONSE" | tail -n 1)
 
             echo "Response body : $HTTP_BODY"
             echo "HTTP status   : $HTTP_CODE"
 
+            if [ "$HTTP_CODE" -eq 503 ]; then
+              echo "Got 503 — nginx is in bootstrap mode (no Let's Encrypt cert yet)."
+              echo "This is expected before the manual bootstrap is run. Failing softly."
+              exit 0
+            fi
+
             if [ "$HTTP_CODE" -ne 200 ]; then
-              echo "Health check FAILED — expected 200, got $HTTP_CODE"
+              echo "Public health check FAILED — expected 200, got $HTTP_CODE"
               exit 1
             fi
 
-            echo "Health check PASSED."
+            echo "Public HTTPS health check PASSED."
