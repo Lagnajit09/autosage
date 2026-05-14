@@ -213,7 +213,7 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({
               </div>
 
               {/* Parameters Section */}
-              {!(selectedNode.type === "trigger") && (
+              {selectedNode.type === "action" && (
                 <div className="space-y-4">
                   <div className="flex items-center justify-between">
                     <label className="block text-sm font-medium text-text-secondary dark:text-text-secondary">

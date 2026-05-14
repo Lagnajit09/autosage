@@ -403,7 +403,7 @@ const Workflows = () => {
                     className={
                       activeTab === "workflows"
                         ? "bg-[#a768d0] hover:bg-[#9556bf] text-white shadow-md"
-                        : "bg-white dark:bg-gray-800"
+                        : "bg-white dark:bg-gray-800 dark:text-gray-200"
                     }
                   >
                     All Workflows
@@ -414,7 +414,7 @@ const Workflows = () => {
                     className={
                       activeTab === "http"
                         ? "bg-[#a768d0] hover:bg-[#9556bf] text-white shadow-md"
-                        : "bg-white dark:bg-gray-800"
+                        : "bg-white dark:bg-gray-800 dark:text-gray-200"
                     }
                   >
                     HTTP Webhooks
@@ -425,7 +425,7 @@ const Workflows = () => {
                     className={
                       activeTab === "schedule"
                         ? "bg-[#a768d0] hover:bg-[#9556bf] text-white shadow-md"
-                        : "bg-white dark:bg-gray-800"
+                        : "bg-white dark:bg-gray-800 dark:text-gray-200"
                     }
                   >
                     Job Schedulers

@@ -37,17 +37,12 @@ export const DecisionConf: React.FC<DecisionConfigProps> = ({
       operator: "==",
       value: "",
       valueSource: "manual",
-      logicalOperator: conditions.length > 0 ? "&&" : undefined,
     };
     updateConditions([...conditions, newCondition]);
   };
 
   const removeCondition = (id: string) => {
     const newConditions = conditions.filter((c) => c.id !== id);
-    // Ensure the first condition doesn't have a logical operator
-    if (newConditions.length > 0) {
-      newConditions[0].logicalOperator = undefined;
-    }
     updateConditions(newConditions);
   };
 
@@ -103,32 +98,37 @@ export const DecisionConf: React.FC<DecisionConfigProps> = ({
           </Button>
         </div>
 
+        {conditions.length >= 2 && (
+          <div className="flex items-center gap-3 p-2 px-3 rounded-lg bg-blue-50/50 dark:bg-blue-900/10 border border-blue-100/50 dark:border-blue-800/30">
+            <span className="text-[10px] font-semibold uppercase tracking-wider text-blue-600/70 dark:text-blue-400/70">
+              Match
+            </span>
+            <Select
+              value={selectedNode.data?.combinator || "&&"}
+              onValueChange={(val: "&&" | "||") =>
+                onUpdateNode(selectedNode.id, { combinator: val })
+              }
+            >
+              <SelectTrigger className="h-7 w-24 text-[10px] bg-white dark:bg-gray-950 dark:text-gray-100 border-blue-100 dark:border-blue-800">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent className="dark:bg-gray-950 dark:text-gray-100">
+                <SelectItem value="&&">ALL (AND)</SelectItem>
+                <SelectItem value="||">ANY (OR)</SelectItem>
+              </SelectContent>
+            </Select>
+            <span className="text-[10px] text-blue-600/60 dark:text-blue-400/60">
+              of the rules
+            </span>
+          </div>
+        )}
+
         <div className="space-y-3">
           {conditions.map((cond, index) => (
             <div
               key={cond.id}
               className="relative p-3 rounded-lg border border-gray-100 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-900/50 space-y-3"
             >
-              {index > 0 && (
-                <div className="flex items-center gap-2 mb-2">
-                  <Select
-                    value={cond.logicalOperator}
-                    onValueChange={(val: "&&" | "||") =>
-                      updateCondition(cond.id, { logicalOperator: val })
-                    }
-                  >
-                    <SelectTrigger className="h-6 w-20 text-[10px] bg-white dark:bg-gray-950 dark:text-gray-100">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent className="dark:bg-gray-950 dark:text-gray-100">
-                      <SelectItem value="&&">AND</SelectItem>
-                      <SelectItem value="||">OR</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <div className="h-px flex-1 bg-gray-200 dark:bg-gray-800" />
-                </div>
-              )}
-
               <div className="flex items-start justify-between gap-2">
                 <div className="flex-1 space-y-3">
                   {/* Field Section */}

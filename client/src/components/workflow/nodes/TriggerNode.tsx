@@ -1,6 +1,6 @@
 import { TriggerNodeData } from "@/utils/types";
 import { Handle, Position } from "@xyflow/react";
-import { Globe, Play, Zap } from "lucide-react";
+import { Clock, Globe, Play } from "lucide-react";
 
 // Helper function to get the appropriate icon based on trigger type
 const getIcon = (type: string) => {
@@ -13,9 +13,9 @@ const getIcon = (type: string) => {
       return (
         <Play size={12} className="text-emerald-600 dark:text-emerald-400" />
       );
-    case "event":
+    case "schedule":
       return (
-        <Zap size={12} className="text-emerald-600 dark:text-emerald-400" />
+        <Clock size={12} className="text-emerald-600 dark:text-emerald-400" />
       );
     default:
       return (

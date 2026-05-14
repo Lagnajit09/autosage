@@ -365,7 +365,7 @@ export const HTTPTrigger: React.FC<BaseConfigProps> = ({
           readOnly
           value={inputBodyTemplate}
           rows={Math.min(8, 3 + inputParamCount)}
-          className="bg-gray-50 dark:bg-gray-950 border-gray-200 dark:border-gray-800 font-mono text-xs resize-none"
+          className="bg-gray-50 dark:bg-gray-950 border-gray-200 dark:border-gray-800 font-mono text-xs resize-none dark:text-gray-200"
         />
         <p className="text-xs text-gray-500 dark:text-gray-500 mt-1">
           {inputParamCount === 0
@@ -395,7 +395,7 @@ export const HTTPTrigger: React.FC<BaseConfigProps> = ({
               <Input
                 readOnly
                 value={info.triggerUrl}
-                className="bg-gray-50 dark:bg-gray-950 border-gray-200 dark:border-gray-800 font-mono text-xs"
+                className="bg-gray-50 dark:bg-gray-950 border-gray-200 dark:border-gray-800 font-mono text-xs dark:text-gray-200"
               />
               <Button
                 variant="outline"
@@ -406,7 +406,7 @@ export const HTTPTrigger: React.FC<BaseConfigProps> = ({
                 {copied ? (
                   <Check className="w-4 h-4 text-green-500" />
                 ) : (
-                  <Copy className="w-4 h-4 text-gray-900 dark:text-gray-100" />
+                  <Copy className="w-4 h-4 text-gray-900" />
                 )}
               </Button>
             </div>
@@ -419,7 +419,7 @@ export const HTTPTrigger: React.FC<BaseConfigProps> = ({
             <Input
               readOnly
               value={`••••••••••${info.secretLast4}`}
-              className="bg-gray-50 dark:bg-gray-950 border-gray-200 dark:border-gray-800 font-mono text-xs"
+              className="bg-gray-50 dark:bg-gray-950 border-gray-200 dark:border-gray-800 font-mono text-xs dark:text-gray-200"
             />
             <p className="text-xs text-gray-500 dark:text-gray-500 mt-1">
               Only the last 4 characters are shown. Regenerate to obtain a new

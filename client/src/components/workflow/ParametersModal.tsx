@@ -53,7 +53,7 @@ export const ParametersModal: React.FC<ParametersModalProps> = ({
       );
       setLastOpenNodeId(nodeId || "unknown");
     }
-    
+
     if (!isOpen) {
       setLastOpenNodeId(null);
     }
@@ -338,7 +338,7 @@ export const ParametersModal: React.FC<ParametersModalProps> = ({
                               htmlFor={`value-${param.id}`}
                               className="text-[10px] text-slate-500 dark:text-gray-400 mb-1 block uppercase tracking-wider font-semibold"
                             >
-                              Static Value
+                              Default Value
                             </Label>
                             {param.type === "boolean" ? (
                               <Select

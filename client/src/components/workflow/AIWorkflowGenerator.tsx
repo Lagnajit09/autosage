@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Wand2 } from "lucide-react";
+import { Image, Wand2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -16,6 +16,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { useTheme } from "@/contexts/theme/theme-context";
 
 interface AIWorkflowGeneratorProps {
   isOpen: boolean;
@@ -32,6 +33,7 @@ export const AIWorkflowGenerator: React.FC<AIWorkflowGeneratorProps> = ({
   const [isGenerating, setIsGenerating] = useState(false);
   const [workflowType, setWorkflowType] = useState("");
   const [generationType, setGenerationType] = useState("");
+  const { isDark } = useTheme();
   const handleGenerate = async () => {
     if (!prompt.trim()) return;
 
@@ -53,7 +55,7 @@ export const AIWorkflowGenerator: React.FC<AIWorkflowGeneratorProps> = ({
               prompt: prompt.trim(),
               // Script type optional
             }),
-          }
+          },
         );
       } else {
         console.log("Workflow requested.");
@@ -106,7 +108,7 @@ export const AIWorkflowGenerator: React.FC<AIWorkflowGeneratorProps> = ({
             generationType === "complete"
               ? "Generated fallback workflow+scripts:"
               : "Generated fallback workflow:",
-            data.message
+            data.message,
           );
         }
       } else {
@@ -117,7 +119,7 @@ export const AIWorkflowGenerator: React.FC<AIWorkflowGeneratorProps> = ({
         generationType === "complete"
           ? "Error generating workflow+scripts:"
           : "Error generating workflow:",
-        error
+        error,
       );
       // setError(
       //   error instanceof Error ? error.message : "An unexpected error occurred"
@@ -131,12 +133,15 @@ export const AIWorkflowGenerator: React.FC<AIWorkflowGeneratorProps> = ({
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="max-w-lg bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 text-gray-900 dark:text-gray-100">
         <DialogHeader>
-          <DialogTitle className="text-gray-900 dark:text-gray-100 flex items-center">
-            <Wand2
-              size={18}
-              className="mr-2 text-purple-400 dark:text-purple-400"
+          <DialogTitle className="text-gray-900 dark:text-gray-100 flex items-center gap-2">
+            <img
+              src={isDark ? "/autobot-dark.svg" : "/autobot-light.svg"}
+              alt="Logo"
+              width={100}
+              height={100}
+              className="h-8 w-auto"
             />
-            Ask SageAI
+            Ask Autobot
           </DialogTitle>
         </DialogHeader>
 

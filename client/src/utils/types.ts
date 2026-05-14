@@ -82,6 +82,7 @@ export interface NodeData {
 
   // Decision Specific
   conditions?: ConditionItem[];
+  combinator?: LogicalOperator;
   trueLabel?: string[];
   falseLabel?: string[];
 
