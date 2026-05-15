@@ -54,6 +54,21 @@ class Credential(models.Model):
     def __str__(self):
         return f"{self.name} ({self.get_credential_type_display()})"
 
+    def save(self, *args, **kwargs):
+        if self.credential_type == self.Type.USERNAME_PASSWORD:
+            self.ssh_key = None
+            self.cert_pem = None
+        elif self.credential_type == self.Type.SSH_KEY:
+            self.username = None
+            self.password = None
+            self.cert_pem = None
+        elif self.credential_type == self.Type.CERTIFICATE:
+            self.username = None
+            self.password = None
+            self.ssh_key = None
+            
+        super().save(*args, **kwargs)
+
 class Server(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     class ConnectionMethod(models.TextChoices):

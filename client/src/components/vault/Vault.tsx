@@ -75,6 +75,7 @@ export function Vault({
   const handleCreateVault = async () => {
     if (!newVaultName.trim()) return;
     try {
+      setIsLoading(true);
       const token = await getToken();
       const response = await apiRequest(
         "/api/vault/vaults/",
@@ -98,6 +99,8 @@ export function Vault({
     } catch (error) {
       console.error("Failed to create vault:", error);
       toast.error("Failed to create vault");
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -260,7 +263,11 @@ export function Vault({
                     onClick={handleCreateVault}
                     className="bg-blue-600 hover:bg-blue-500 text-white"
                   >
-                    Create Vault
+                    {isLoading ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      "Create Vault"
+                    )}
                   </Button>
                 </div>
               </CardContent>

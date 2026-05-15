@@ -75,10 +75,16 @@ export function CredentialsManager({
       };
 
       if (type === "username_password") {
-        payload.username = username;
-        payload.password = password;
+        if (username) {
+          payload.username = username;
+        }
+        if (password) {
+          payload.password = password;
+        }
       } else if (type === "ssh_key") {
-        payload.ssh_key = sshKey;
+        if (sshKey) {
+          payload.ssh_key = sshKey;
+        }
       }
 
       const endpoint = editId
@@ -315,7 +321,7 @@ export function CredentialsManager({
                   <TableCell className="font-medium text-gray-900 dark:text-gray-100">
                     {cred.name}
                   </TableCell>
-                  <TableCell className="capitalize text-gray-700 dark:text-gray-300">
+                  <TableCell className="lowercase text-gray-700 dark:text-gray-300">
                     {cred.credential_type.replace("_", " ")}
                   </TableCell>
                   <TableCell className="text-muted-foreground text-sm text-gray-500 dark:text-gray-400">
