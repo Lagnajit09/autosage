@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import {
   Code,
   Upload,
@@ -24,7 +24,6 @@ import {
   OutputField,
 } from "@/utils/types";
 import { Label } from "@/components/ui/label";
-import { Input } from "@/components/ui/input";
 import { useAuth } from "@clerk/clerk-react";
 import { apiRequest } from "@/lib/api-client";
 import { toast } from "sonner";
@@ -41,6 +40,7 @@ export const ScriptConf: React.FC<BaseConfigProps> = ({
   const [isSchemaModalOpen, setIsSchemaModalOpen] = useState(false);
   const [savedScripts, setSavedScripts] = useState<ScriptFile[]>([]);
   const [isLoadingScripts, setIsLoadingScripts] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const fetchScripts = useCallback(async () => {
     setIsLoadingScripts(true);
@@ -95,68 +95,74 @@ export const ScriptConf: React.FC<BaseConfigProps> = ({
   const currentScriptType =
     selectedNode.data?.selectedScript?.type || "Python Script";
 
-  const handleUploadScript = () => {
-    const input = document.createElement("input");
-    input.type = "file";
-    input.accept = ".py,.ps1,.sh,.js";
-    input.onchange = async (e) => {
-      const file = (e.target as HTMLInputElement).files?.[0];
-      if (file) {
-        const reader = new FileReader();
-        reader.onload = async (e) => {
-          const content = e.target?.result as string;
-          const token = await getToken();
+  const handleFileUpload = async (
+    event: React.ChangeEvent<HTMLInputElement>,
+  ) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
 
-          if (!token) {
-            toast.error("Please sign in to upload scripts");
-            return;
-          }
+    // Clear input so same file can be uploaded again if needed
+    event.target.value = "";
 
-          try {
-            // Determine language
-            let language = "javascript";
-            if (file.name.endsWith(".py")) language = "python";
-            else if (file.name.endsWith(".ps1")) language = "powershell";
-            else if (file.name.endsWith(".sh")) language = "shell";
+    const fileName = file.name;
+    const ext = fileName.split(".").pop()?.toLowerCase();
 
-            const basename = file.name.replace(/\.[^/.]+$/, "");
+    if (ext !== "ps1" && ext !== "sh" && ext !== "py" && ext !== "js") {
+      toast.error("Only .py, .js, .ps1 and .sh files are allowed for upload.");
+      return;
+    }
 
-            const createdScript = await scriptService.create(
-              basename,
-              language,
-              content,
-              token,
-            );
-            const newFile = mapScriptToScriptFile(createdScript, content);
+    let basename = fileName.replace(/\.[^/.]+$/, "");
 
-            setSavedScripts((prev) => [...prev, newFile]);
-            toast.success("Script uploaded successfully");
+    if (savedScripts.some((f) => f.name.toLowerCase() === fileName.toLowerCase())) {
+      const randomSuffix = Math.random().toString(36).substring(2, 6);
+      basename = `${basename}_${randomSuffix}`;
+    }
 
-            // Auto-select the uploaded script
-            onUpdateNode(selectedNode.id, {
-              selectedScript: {
-                type:
-                  language === "python"
-                    ? "Python Script"
-                    : language === "powershell"
-                      ? "Powershell Script"
-                      : "Shell Script",
-                scriptId: createdScript.id.toString(),
-              },
-            });
-          } catch (error: unknown) {
-            console.error("Upload failed", error);
-            const errorMessage =
-              error instanceof Error
-                ? error.message
-                : "Failed to upload script";
-            toast.error(errorMessage);
-          }
-        };
-        reader.readAsText(file);
+    try {
+      const content = await file.text();
+      const token = await getToken();
+
+      if (!token) {
+        toast.error("Please sign in to upload scripts");
+        return;
       }
-    };
-    input.click();
+
+      // Determine language
+      let language = "javascript";
+      if (ext === "py") language = "python";
+      else if (ext === "ps1") language = "powershell";
+      else if (ext === "sh") language = "shell";
+
+      const createdScript = await scriptService.create(
+        basename,
+        language,
+        content,
+        token,
+      );
+      const newFile = mapScriptToScriptFile(createdScript, content);
+
+      setSavedScripts((prev) => [...prev, newFile]);
+      toast.success("Script uploaded successfully");
+
+      // Auto-select the uploaded script
+      onUpdateNode(selectedNode.id, {
+        selectedScript: {
+          type:
+            language === "python"
+              ? "Python Script"
+              : language === "powershell"
+                ? "Powershell Script"
+                : "Shell Script",
+          scriptId: createdScript.id.toString(),
+        },
+      });
+    } catch (error: unknown) {
+      console.error("Upload failed", error);
+      const errorMessage =
+        error instanceof Error ? error.message : "Failed to upload script";
+      toast.error(errorMessage);
+    }
   };
 
   const getSavedScripts = () => {
@@ -302,15 +308,24 @@ export const ScriptConf: React.FC<BaseConfigProps> = ({
             </Button>
           </Link>
 
-          <Button
-            onClick={handleUploadScript}
-            size="sm"
-            variant="outline"
-            className="w-full text-sm py-2.5 bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700 border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white transition-all duration-200"
-          >
-            <Upload size={14} className="mr-2" />
-            Upload Script
-          </Button>
+          <div className="relative">
+            <input
+              type="file"
+              ref={fileInputRef}
+              accept=".ps1,.sh"
+              onChange={handleFileUpload}
+              className="hidden"
+            />
+            <Button
+              onClick={() => fileInputRef.current?.click()}
+              size="sm"
+              variant="outline"
+              className="w-full text-sm py-2.5 bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700 border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white transition-all duration-200"
+            >
+              <Upload size={14} className="mr-2" />
+              Upload Script
+            </Button>
+          </div>
         </div>
 
         <div>

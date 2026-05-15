@@ -118,26 +118,93 @@ export function useScriptEditor() {
         return {
           language: "python",
           extension: "py",
-          template:
-            '#!/usr/bin/env python3\n\n# Python Script\n\ndef main():\n    print("Hello, World!")\n\nif __name__ == "__main__":\n    main()\n',
+          template: `#!/usr/bin/env python3
+
+# Python Script
+
+# def main():
+#     print("Hello, World!")
+
+# if __name__ == "__main__":
+#     main()
+
+# --- INSTRUCTIONS ---
+# You can mention template variables / parameters in your script using the {{PARAMETER_NAME}} syntax.
+# To use it, simply place {{PARAMETER_NAME}} wherever you need the parameter value to be injected.
+# The parameter matching is case insensitive, but the spelling must match exactly.
+# There are different types of parameters available, such as string, number, boolean, and password.
+#
+# SPECIAL INSTRUCTION ON PASSWORD TYPE PARAMETERS:
+# Password type parameters should NOT be used with the {{}} syntax.
+# Instead, password parameters are securely passed as environment variables.
+# They should be read from the env (e.g., os.getenv("PARAM_NAME")).
+# --------------------
+`,
         };
       case "powershell":
         return {
           language: "powershell",
           extension: "ps1",
-          template: '# PowerShell Script\n\nWrite-Host "Hello, World!"\n',
+          template: `# PowerShell Script
+
+# Write-Host "Hello, World!"
+
+# --- INSTRUCTIONS ---
+# You can mention template variables / parameters in your script using the {{PARAMETER_NAME}} syntax.
+# To use it, simply place {{PARAMETER_NAME}} wherever you need the parameter value to be injected.
+# The parameter matching is case insensitive, but the spelling must match exactly.
+# There are different types of parameters available, such as string, number, boolean, and password.
+#
+# SPECIAL INSTRUCTION ON PASSWORD TYPE PARAMETERS:
+# Password type parameters should NOT be used with the {{}} syntax.
+# Instead, password parameters are securely passed as environment variables.
+# They should be read from the env (e.g., $env:PARAM_NAME).
+# --------------------
+`,
         };
       case "shell":
         return {
           language: "shell",
           extension: "sh",
-          template: '#!/bin/bash\n\n# Shell Script\n\necho "Hello, World!"\n',
+          template: `#!/bin/bash
+
+# Shell Script
+
+# echo "Hello, World!"
+
+# --- INSTRUCTIONS ---
+# You can mention template variables / parameters in your script using the {{PARAMETER_NAME}} syntax.
+# To use it, simply place {{PARAMETER_NAME}} wherever you need the parameter value to be injected.
+# The parameter matching is case insensitive, but the spelling must match exactly.
+# There are different types of parameters available, such as string, number, boolean, and password.
+#
+# SPECIAL INSTRUCTION ON PASSWORD TYPE PARAMETERS:
+# Password type parameters should NOT be used with the {{}} syntax.
+# Instead, password parameters are securely passed as environment variables.
+# They should be read from the env (e.g., $PARAM_NAME).
+# --------------------
+`,
         };
       default:
         return {
           language: "javascript",
           extension: "js",
-          template: '// JavaScript\n\nconsole.log("Hello, World!");\n',
+          template: `// JavaScript
+
+// console.log("Hello, World!");
+
+// --- INSTRUCTIONS ---
+// You can mention template variables / parameters in your script using the {{PARAMETER_NAME}} syntax.
+// To use it, simply place {{PARAMETER_NAME}} wherever you need the parameter value to be injected.
+// The parameter matching is case insensitive, but the spelling must match exactly.
+// There are different types of parameters available, such as string, number, boolean, and password.
+//
+// SPECIAL INSTRUCTION ON PASSWORD TYPE PARAMETERS:
+// Password type parameters should NOT be used with the {{}} syntax.
+// Instead, password parameters are securely passed as environment variables.
+// They should be read from the env (e.g., process.env.PARAM_NAME).
+// --------------------
+`,
         };
     }
   };
@@ -397,7 +464,6 @@ export function useScriptEditor() {
   const handleCreateSubmit = async (name: string) => {
     setIsLoading(true);
     const trimmedName = name.trim();
-    toast.loading(`Creating file: ${trimmedName}...`);
 
     if (!trimmedName) {
       clientToast({
@@ -405,18 +471,20 @@ export function useScriptEditor() {
         title: "Invalid Filename",
         description: "Filename cannot be empty.",
       });
+      setIsCreatingFile(false);
       return;
     }
 
     const ext = trimmedName.split(".").pop()?.toLowerCase();
-    const validExtensions = ["py", "js", "sh", "ps1"];
+    const validExtensions = ["ps1", "sh"];
 
     if (!ext || !validExtensions.includes(ext)) {
       clientToast({
         variant: "destructive",
         title: "Invalid Extension",
-        description: "Supported extensions: .py, .js, .sh, .ps1",
+        description: "Supported extensions: .ps1, .sh",
       });
+      setIsCreatingFile(false);
       return;
     }
 
@@ -426,8 +494,11 @@ export function useScriptEditor() {
         title: "Duplicate Filename",
         description: "A file with this name already exists.",
       });
+      setIsCreatingFile(false);
       return;
     }
+
+    toast.loading(`Creating file: ${trimmedName}...`);
 
     try {
       const language = getLanguageFromExtension(trimmedName);
@@ -468,6 +539,83 @@ export function useScriptEditor() {
         variant: "destructive",
         title: "Create Failed",
         description: (error as Error).message || "Failed to create script.",
+      });
+    } finally {
+      setIsLoading(false);
+      toast.dismiss();
+    }
+  };
+
+  const handleFileUpload = async (
+    event: React.ChangeEvent<HTMLInputElement>,
+  ) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    // Clear the input value so the same file can be uploaded again if needed
+    event.target.value = "";
+
+    const fileName = file.name;
+    const ext = fileName.split(".").pop()?.toLowerCase();
+
+    if (ext !== "ps1" && ext !== "sh") {
+      clientToast({
+        variant: "destructive",
+        title: "Invalid Extension",
+        description: "Only .ps1 and .sh files are allowed for upload.",
+      });
+      return;
+    }
+
+    let basename = fileName.replace(/\.[^/.]+$/, "");
+    let finalFileName = fileName;
+
+    if (files.some((f) => f.name.toLowerCase() === fileName.toLowerCase())) {
+      const randomSuffix = Math.random().toString(36).substring(2, 6);
+      basename = `${basename}_${randomSuffix}`;
+      finalFileName = `${basename}.${ext}`;
+    }
+
+    setIsLoading(true);
+    toast.loading(`Uploading script: ${finalFileName}...`);
+
+    try {
+      const content = await file.text();
+      const language = getLanguageFromExtension(finalFileName);
+      const clerkToken = await getToken();
+
+      const createdScript = await scriptService.create(
+        basename,
+        language,
+        content,
+        clerkToken,
+      );
+
+      const newFile = mapScriptToScriptFile(createdScript, content);
+      setFiles((prev) => [...prev, newFile]);
+      navigate(`/script-editor/${newFile.name}`);
+
+      setOpenTabs((prev) => {
+        const newTabs = [...prev, newFile];
+        localStorage.setItem(
+          "openTabs",
+          JSON.stringify(newTabs.map((t) => t.id)),
+        );
+        return newTabs;
+      });
+
+      setHasUnsavedChanges(false);
+
+      clientToast({
+        title: "Uploaded",
+        description: "Script uploaded successfully.",
+      });
+    } catch (error: unknown) {
+      console.error("Failed to upload file:", error);
+      clientToast({
+        variant: "destructive",
+        title: "Upload Failed",
+        description: (error as Error).message || "Failed to upload script.",
       });
     } finally {
       setIsLoading(false);
@@ -735,6 +883,7 @@ export function useScriptEditor() {
     closeTab,
     startCreateFile,
     handleCreateSubmit,
+    handleFileUpload,
     handleRenameSubmit,
     handleDeleteScriptClick,
     confirmDeleteScript,

@@ -1,3 +1,4 @@
+import { useRef } from "react";
 import { File } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import Editor, { OnMount } from "@monaco-editor/react";
@@ -9,6 +10,7 @@ interface EditorPaneProps {
   onMount: OnMount;
   onChange: (value: string | undefined) => void;
   onCreateFile: () => void;
+  onUploadFile: (e: React.ChangeEvent<HTMLInputElement>) => void;
 }
 
 export function EditorPane({
@@ -17,7 +19,10 @@ export function EditorPane({
   onMount,
   onChange,
   onCreateFile,
+  onUploadFile,
 }: EditorPaneProps) {
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
   if (!currentFile) {
     return (
       <div className="flex items-center justify-center h-full bg-gray-100 dark:bg-gray-900/50">
@@ -29,13 +34,29 @@ export function EditorPane({
           <p className="text-gray-500 dark:text-gray-500 text-sm mb-4">
             No file selected
           </p>
-          <Button
-            onClick={onCreateFile}
-            variant="outline"
-            className="text-gray-700 dark:text-gray-300 dark:bg-gray-950 dark:border-gray-950 dark:hover:bg-gray-950/50"
-          >
-            Create New Script
-          </Button>
+          <div className="flex flex-col gap-3 items-center justify-center">
+            <Button
+              onClick={onCreateFile}
+              variant="outline"
+              className="w-full text-gray-700 dark:text-gray-300 dark:bg-gray-950 dark:border-gray-950 dark:hover:bg-gray-950/50"
+            >
+              Create New Script
+            </Button>
+            <input
+              type="file"
+              ref={fileInputRef}
+              accept=".ps1,.sh"
+              onChange={onUploadFile}
+              className="hidden"
+            />
+            <Button
+              onClick={() => fileInputRef.current?.click()}
+              variant="outline"
+              className="w-full text-gray-700 dark:text-gray-300 dark:bg-gray-950 dark:border-gray-950 dark:hover:bg-gray-950/50"
+            >
+              Upload Script
+            </Button>
+          </div>
         </div>
       </div>
     );

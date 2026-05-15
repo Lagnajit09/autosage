@@ -37,6 +37,7 @@ const ScriptEditor = () => {
     closeTab,
     startCreateFile,
     handleCreateSubmit,
+    handleFileUpload,
     handleRenameSubmit,
     handleDeleteScriptClick,
     confirmDeleteScript,
@@ -94,6 +95,7 @@ const ScriptEditor = () => {
           isCreatingFile={isCreatingFile}
           renamingFileId={renamingFileId}
           onCreateSubmit={handleCreateSubmit}
+          onUploadFile={handleFileUpload}
           onRenameSubmit={handleRenameSubmit}
           onCancelCreate={() => setIsCreatingFile(false)}
           onCancelRename={() => setRenamingFileId(null)}
@@ -125,6 +127,7 @@ const ScriptEditor = () => {
                 onMount={configureMonacoEditor}
                 onChange={handleEditorChange}
                 onCreateFile={startCreateFile}
+                onUploadFile={handleFileUpload}
               />
               <ScriptExecutionDrawer
                 isOpen={isExecutionOpen}

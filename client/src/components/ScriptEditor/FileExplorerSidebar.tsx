@@ -34,6 +34,7 @@ import {
   Trash2,
   Copy as CopyIcon,
   Download,
+  Upload,
   ChevronRight,
   Loader2,
 } from "lucide-react";
@@ -57,6 +58,7 @@ interface FileExplorerSidebarProps {
   isCreatingFile: boolean;
   renamingFileId: string | null;
   onCreateSubmit: (name: string) => void;
+  onUploadFile: (e: React.ChangeEvent<HTMLInputElement>) => void;
   onRenameSubmit: (id: string, name: string) => void;
   onCancelCreate: () => void;
   onCancelRename: () => void;
@@ -76,6 +78,7 @@ export const FileExplorerSidebar: React.FC<FileExplorerSidebarProps> = ({
   isCreatingFile,
   renamingFileId,
   onCreateSubmit,
+  onUploadFile,
   onRenameSubmit,
   onCancelCreate,
   onCancelRename,
@@ -83,6 +86,7 @@ export const FileExplorerSidebar: React.FC<FileExplorerSidebarProps> = ({
   const { state } = useSidebar();
   const [inputValue, setInputValue] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (isCreatingFile) {
@@ -144,20 +148,43 @@ export const FileExplorerSidebar: React.FC<FileExplorerSidebarProps> = ({
             )}
           </div>
           {state === "expanded" && (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-8 w-8 hover:bg-gray-200 dark:hover:bg-gray-700 dark:hover:text-gray-100 mr-2"
-                  onClick={onCreateFile}
-                  disabled={isCreatingFile}
-                >
-                  <FilePlus className="h-4 w-4" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>New File</TooltipContent>
-            </Tooltip>
+            <div className="flex items-center gap-1 mr-2">
+              <input
+                type="file"
+                ref={fileInputRef}
+                accept=".ps1,.sh"
+                onChange={onUploadFile}
+                className="hidden"
+              />
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8 hover:bg-gray-200 dark:hover:bg-gray-700 dark:hover:text-gray-100"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={isCreatingFile}
+                  >
+                    <Upload className="h-4 w-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Upload Script</TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8 hover:bg-gray-200 dark:hover:bg-gray-700 dark:hover:text-gray-100"
+                    onClick={onCreateFile}
+                    disabled={isCreatingFile}
+                  >
+                    <FilePlus className="h-4 w-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>New File</TooltipContent>
+              </Tooltip>
+            </div>
           )}
         </div>
       </SidebarHeader>

@@ -73,7 +73,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
   return (
     <div className="w-56 h-[98%] my-auto bg-white dark:bg-gray-950 border border-gray-200 dark:border-gray-800 p-4 flex flex-col relative rounded-3xl shadow-sm z-20 shrink-0 ml-2">
       {/* Header */}
-      <div className="">
+      <div className="shrink-0">
         <div className="flex items-center gap-2 mb-2">
           <Logo />
         </div>
@@ -96,7 +96,8 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
         </div>
       </div>
 
-      {/* Triggers Section */}
+      <div className="flex-1 overflow-y-auto pr-2 -mr-2 [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-gray-300 dark:[&::-webkit-scrollbar-thumb]:bg-gray-700 [&::-webkit-scrollbar-thumb]:rounded-full">
+        {/* Triggers Section */}
       <div className="mb-6 relative z-10">
         <div className="text-xs text-green-600 dark:text-green-400 mb-4 uppercase tracking-wider font-medium flex items-center">
           <div className="w-1 h-1 bg-green-600 dark:bg-green-400 rounded-full mr-2"></div>
@@ -221,8 +222,10 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
         </div>
       </div>
 
+      </div>
+
       {/* Save Button at bottom */}
-      <div className="mt-auto pt-4 border-t border-gray-300 dark:border-borders-primary/20 relative z-10">
+      <div className="shrink-0 mt-auto pt-4 border-t border-gray-300 dark:border-borders-primary/20 relative z-10">
         <Button
           onClick={onSaveWorkflow}
           className="w-full bg-purple-600 hover:bg-purple-700 dark:bg-purple-600 dark:hover:bg-purple-700 
