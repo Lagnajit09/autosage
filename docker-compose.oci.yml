@@ -4,6 +4,8 @@
 # ────────
 #   nginx              TLS terminator + reverse proxy   → host :80, :443
 #   django             Uvicorn ASGI (Django + SSE)       → internal :8000
+#   redis              self-hosted broker + Pub/Sub      → internal :6379
+#                      (replaces Upstash on production — see CELERY_BROKER_URL)
 #   celery             execute_workflow worker (queue: celery)
 #   beat               Celery Beat (DatabaseScheduler, single instance)
 #   scheduler-worker   fire_scheduled_workflow worker (queue: scheduler)
@@ -49,8 +51,39 @@ networks:
 volumes:
   letsencrypt:      # /etc/letsencrypt — certs + account, shared nginx ↔ certbot
   certbot-webroot:  # /var/www/certbot — ACME http-01 challenge files
+  redis-data:       # /data — Redis RDB snapshots for warm restarts
 
 services:
+  # ── Redis (Celery broker + result backend + SSE Pub/Sub) ─────────────────
+  # Replaces Upstash in production. Local docker-bridge connection → ~0.1 ms
+  # latency and no per-command billing. Capped at 256 MB with LRU eviction
+  # for belt-and-braces against any unexpected growth (Celery normally keeps
+  # itself well under that — broker items pop on consumption, result keys
+  # TTL via CELERY_RESULT_EXPIRES, Pub/Sub is ephemeral).
+  redis:
+    image: redis:7-alpine
+    container_name: autosage-redis
+    command: >
+      redis-server
+      --maxmemory 256mb
+      --maxmemory-policy allkeys-lru
+      --save 60 1
+      --appendonly no
+      --loglevel warning
+    expose:
+      - "6379"
+    networks:
+      - autosage-net
+    volumes:
+      - redis-data:/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+
   # ── Django ASGI (Uvicorn) ────────────────────────────────────────────────
   django:
     image: ghcr.io/lagnajit09/autosage/autosage-server:latest
@@ -65,6 +98,9 @@ services:
       - "8000"
     networks:
       - autosage-net
+    depends_on:
+      redis:
+        condition: service_healthy
     restart: unless-stopped
     healthcheck:
       test:
@@ -95,6 +131,8 @@ services:
     depends_on:
       django:
         condition: service_healthy
+      redis:
+        condition: service_healthy
     restart: unless-stopped
 
   # ── Celery Beat (cron dispatcher, DatabaseScheduler) ─────────────────────
@@ -116,6 +154,8 @@ services:
     depends_on:
       django:
         condition: service_healthy
+      redis:
+        condition: service_healthy
     restart: unless-stopped
 
   # ── Scheduler worker (fire_scheduled_workflow, `scheduler` queue) ────────
@@ -135,6 +175,8 @@ services:
       - autosage-net
     depends_on:
       django:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     restart: unless-stopped
 

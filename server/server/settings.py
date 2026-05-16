@@ -286,9 +286,21 @@ CELERY_ACCEPT_CONTENT    = ['json']
 CELERY_TASK_SERIALIZER   = 'json'
 CELERY_RESULT_SERIALIZER = 'json'
 CELERY_TIMEZONE          = 'UTC'
-CELERY_TASK_TRACK_STARTED = True
 CELERY_TASK_SOFT_TIME_LIMIT = 1800   # 30 minutes per workflow
 CELERY_TASK_TIME_LIMIT      = 3600   # hard kill after 1 hour
+
+# No view ever calls `task.get()` — run state is tracked in Supabase
+# (WorkflowRun.status) and cancellation uses control.revoke (a pub/sub
+# channel, not the result backend). Skipping result writes eliminates
+# per-task SET/EXPIRE on the broker — important on cost-billed Redis
+# (Upstash), still good hygiene on self-hosted Redis. If a future code
+# path needs results, set `task.ignore_result = False` on that task only.
+CELERY_TASK_IGNORE_RESULT = True
+CELERY_TASK_STORE_ERRORS_EVEN_IF_IGNORED = False
+CELERY_TASK_TRACK_STARTED = False
+# Belt-and-braces: even if a result somehow lands, it auto-expires in 1h
+# (Celery default is 24h).
+CELERY_RESULT_EXPIRES = 3600
 
 # Robustness settings for remote Redis (like Upstash)
 # These help prevent 'Timeout reading from socket' errors on Windows.
