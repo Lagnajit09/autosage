@@ -99,68 +99,72 @@ const Dashboard = () => {
     }
   }, [user, getToken]);
 
-  // Mock Data
-  const stats = {
-    workflows: 1,
-    scripts: 1,
-    executions: 1,
+  const [loading, setLoading] = useState(true);
+  const [stats, setStats] = useState({ workflows: 0, scripts: 0, executions: 0 });
+  const [recentWorkflows, setRecentWorkflows] = useState<any[]>([]);
+  const [recentScripts, setRecentScripts] = useState<any[]>([]);
+  const [recentExecutions, setRecentExecutions] = useState<any[]>([]);
+
+  const getRelativeTime = (dateString: string) => {
+    if (!dateString) return "";
+    const date = new Date(dateString);
+    const now = new Date();
+    const diffInSeconds = Math.floor((now.getTime() - date.getTime()) / 1000);
+
+    if (diffInSeconds < 60) return "Just now";
+    const diffInMinutes = Math.floor(diffInSeconds / 60);
+    if (diffInMinutes < 60) return `${diffInMinutes} mins ago`;
+    const diffInHours = Math.floor(diffInMinutes / 60);
+    if (diffInHours < 24) {
+      return diffInHours === 1 ? "1 hour ago" : `${diffInHours} hours ago`;
+    }
+    const diffInDays = Math.floor(diffInHours / 24);
+    if (diffInDays === 1) return "yesterday";
+    if (diffInDays < 30) return `${diffInDays} days ago`;
+    return date.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
   };
 
-  const recentWorkflows = [
-    {
-      title: "Data Scraper Pro",
-      type: "workflow" as const,
-      date: "2 hours ago",
-      status: "active" as const,
-      total_nodes: 5,
-      total_edges: 4,
-    },
-    // {
-    //   title: "Email Automator",
-    //   type: "workflow" as const,
-    //   date: "1 day ago",
-    //   status: "active" as const,
-    // },
-    // {
-    //   title: "Report Generator",
-    //   type: "workflow" as const,
-    //   date: "3 days ago",
-    //   status: "draft" as const,
-    // },
-  ];
+  useEffect(() => {
+    const fetchDashboardData = async () => {
+      try {
+        const token = await getToken();
+        if (token) {
+          const response = await apiRequest("/api/dashboard/", { method: "GET" }, token);
+          if (response.success && response.data) {
+            setStats(response.data.stats);
+            setRecentWorkflows(
+              response.data.recentWorkflows.map((item: any) => ({
+                ...item,
+                date: getRelativeTime(item.date),
+              }))
+            );
+            setRecentScripts(
+              response.data.recentScripts.map((item: any) => ({
+                ...item,
+                date: getRelativeTime(item.date),
+              }))
+            );
+            setRecentExecutions(
+              response.data.recentExecutions.map((item: any) => ({
+                ...item,
+                time: getRelativeTime(item.time),
+              }))
+            );
+          }
+        }
+      } catch (error) {
+        console.error("Failed to fetch dashboard data:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
 
-  const recentScripts = [
-    { title: "Parse JSON Logs", type: "script" as const, date: "5 hours ago" },
-    // { title: "Image Resizer", type: "script" as const, date: "2 days ago" },
-    // { title: "Backup DB", type: "script" as const, date: "1 week ago" },
-  ];
+    if (user) {
+      fetchDashboardData();
+    }
+  }, [user, getToken]);
 
-  const recentExecutions = [
-    {
-      name: "Data Scraper Pro",
-      status: "success" as const,
-      time: "10 mins ago",
-      duration: "45s",
-    },
-    // {
-    //   name: "Email Automator",
-    //   status: "failed" as const,
-    //   time: "1 hour ago",
-    //   duration: "12s",
-    // },
-    // {
-    //   name: "Image Resizer",
-    //   status: "success" as const,
-    //   time: "3 hours ago",
-    //   duration: "1.2m",
-    // },
-    // {
-    //   name: "Backup DB",
-    //   status: "running" as const,
-    //   time: "Just now",
-    //   duration: "5s",
-    // },
-  ];
+
 
   return (
     <SidebarProvider>
@@ -219,141 +223,151 @@ const Dashboard = () => {
           <TopNav />
 
           <main className="flex-1 overflow-y-auto p-6">
-            <div className="max-w-7xl mx-auto">
-              {/* Header */}
-              <div className="mb-8">
-                <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
-                  {welcomeMessage}
-                </h1>
-                <p className="text-gray-500 dark:text-gray-400 mt-1">
-                  Here's what's happening with your automations today.
-                </p>
-              </div>
-
-              <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
-                {/* Main Content Area */}
-                {recentWorkflows.length === 0 &&
-                recentScripts.length === 0 &&
-                recentExecutions.length === 0 ? (
-                  <div className="lg:col-span-3 flex flex-col items-center justify-center min-h-[400px] text-center space-y-6 bg-white dark:bg-gray-800/40 rounded-xl border border-gray-200 dark:border-gray-700/50 border-dashed p-12">
-                    <div className="space-y-4 flex flex-col items-center">
-                      <img
-                        src="/logo.png"
-                        alt="AutoSage Logo"
-                        className="w-auto h-12 object-contain"
-                      />
-                      <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
-                        Welcome to AutoSage
-                      </h2>
-                      <p className="text-gray-500 dark:text-gray-400 max-w-md mx-auto">
-                        It looks like you haven't created anything yet. Start
-                        your automation journey by building your first workflow.
-                      </p>
-                    </div>
-                    <Button
-                      size="lg"
-                      className="bg-blue-600 hover:bg-blue-700 text-white gap-2"
-                      onClick={() => navigate("/workflow")}
-                    >
-                      <Plus className="w-5 h-5" />
-                      Start Building Your First Workflow
-                    </Button>
-                  </div>
-                ) : (
-                  <div className="lg:col-span-3 space-y-8">
-                    {/* Stats Overview */}
-                    <StatsOverview stats={stats} />
-
-                    {/* Recent Activity Grid */}
-                    {(recentWorkflows.length > 0 ||
-                      recentScripts.length > 0) && (
-                      <div
-                        className={`grid grid-cols-1 ${
-                          recentWorkflows.length > 0 && recentScripts.length > 0
-                            ? "md:grid-cols-2"
-                            : ""
-                        } gap-6`}
-                      >
-                        {/* Recent Workflows */}
-                        {recentWorkflows.length > 0 && (
-                          <div className="space-y-4">
-                            <div className="flex items-center justify-between">
-                              <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
-                                Recent Workflows
-                              </h2>
-
-                              <Button
-                                variant="link"
-                                className="text-blue-600 dark:text-blue-400 p-0 h-auto"
-                                onClick={() => navigate("/workflows")}
-                              >
-                                View All
-                              </Button>
-                            </div>
-                            <div className="space-y-3">
-                              {recentWorkflows.map((item, i) => (
-                                <RecentItemCard key={i} item={item} />
-                              ))}
-                            </div>
-                          </div>
-                        )}
-
-                        {/* Recent Scripts */}
-                        {recentScripts.length > 0 && (
-                          <div className="space-y-4">
-                            <div className="flex items-center justify-between">
-                              <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
-                                Recent Scripts
-                              </h2>
-
-                              <Button
-                                variant="link"
-                                className="text-blue-600 dark:text-blue-400 p-0 h-auto"
-                                onClick={() => navigate("/script-editor/")}
-                              >
-                                View All
-                              </Button>
-                            </div>
-                            <div className="space-y-3">
-                              {recentScripts.map((item, i) => (
-                                <RecentItemCard key={i} item={item} />
-                              ))}
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    )}
-
-                    {/* Recent Executions */}
-                    {recentExecutions.length > 0 && (
-                      <div className="bg-white dark:bg-gray-800/40 rounded-xl border border-gray-200 dark:border-gray-700/50 p-6">
-                        <div className="flex items-center justify-between mb-4">
-                          <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
-                            Recent Executions
-                          </h2>
-
-                          <Button variant="outline" size="sm">
-                            View Logs
-                          </Button>
-                        </div>
-
-                        <div className="space-y-1">
-                          {recentExecutions.map((exec, i) => (
-                            <ExecutionRow key={i} execution={exec} />
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {/* Right Sidebar / Banners */}
-                <div className="lg:col-span-1 space-y-6">
-                  <ProBanner />
-                  <AutobotBanner />
+            {loading ? (
+              <div className="flex h-full w-full items-center justify-center min-h-[400px]">
+                <div className="flex flex-col items-center gap-3">
+                  <Loader2 className="w-8 h-8 animate-spin text-blue-600 dark:text-blue-400" />
+                  <span className="text-sm font-semibold text-gray-700 dark:text-gray-300 animate-pulse">
+                    Loading Dashboard...
+                  </span>
                 </div>
               </div>
-            </div>
+            ) : (
+              <div className="max-w-7xl mx-auto">
+                {/* Header */}
+                <div className="mb-8">
+                  <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
+                    {welcomeMessage}
+                  </h1>
+                  <p className="text-gray-500 dark:text-gray-400 mt-1">
+                    Here's what's happening with your automations today.
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
+                  {/* Main Content Area */}
+                  {recentWorkflows.length === 0 &&
+                    recentScripts.length === 0 &&
+                    recentExecutions.length === 0 ? (
+                    <div className="lg:col-span-3 flex flex-col items-center justify-center min-h-[400px] text-center space-y-6 bg-white dark:bg-gray-800/40 rounded-xl border border-gray-200 dark:border-gray-700/50 border-dashed p-12">
+                      <div className="space-y-4 flex flex-col items-center">
+                        <img
+                          src="/logo.png"
+                          alt="AutoSage Logo"
+                          className="w-auto h-12 object-contain"
+                        />
+                        <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
+                          Welcome to AutoSage
+                        </h2>
+                        <p className="text-gray-500 dark:text-gray-400 max-w-md mx-auto">
+                          It looks like you haven't created anything yet. Start
+                          your automation journey by building your first workflow.
+                        </p>
+                      </div>
+                      <Button
+                        size="lg"
+                        className="bg-blue-600 hover:bg-blue-700 text-white gap-2"
+                        onClick={() => navigate("/workflow")}
+                      >
+                        <Plus className="w-5 h-5" />
+                        Start Building Your First Workflow
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="lg:col-span-3 space-y-8">
+                      {/* Stats Overview */}
+                      <StatsOverview stats={stats} />
+
+                      {/* Recent Activity Grid */}
+                      {(recentWorkflows.length > 0 ||
+                        recentScripts.length > 0) && (
+                          <div
+                            className={`grid grid-cols-1 ${recentWorkflows.length > 0 && recentScripts.length > 0
+                              ? "md:grid-cols-2"
+                              : ""
+                              } gap-6`}
+                          >
+                            {/* Recent Workflows */}
+                            {recentWorkflows.length > 0 && (
+                              <div className="space-y-4">
+                                <div className="flex items-center justify-between">
+                                  <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
+                                    Recent Workflows
+                                  </h2>
+
+                                  <Button
+                                    variant="link"
+                                    className="text-blue-600 dark:text-blue-400 p-0 h-auto"
+                                    onClick={() => navigate("/workflows")}
+                                  >
+                                    View All
+                                  </Button>
+                                </div>
+                                <div className="space-y-3">
+                                  {recentWorkflows.map((item, i) => (
+                                    <RecentItemCard key={i} item={item} />
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Recent Scripts */}
+                            {recentScripts.length > 0 && (
+                              <div className="space-y-4">
+                                <div className="flex items-center justify-between">
+                                  <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
+                                    Recent Scripts
+                                  </h2>
+
+                                  <Button
+                                    variant="link"
+                                    className="text-blue-600 dark:text-blue-400 p-0 h-auto"
+                                    onClick={() => navigate("/script-editor/")}
+                                  >
+                                    View All
+                                  </Button>
+                                </div>
+                                <div className="space-y-3">
+                                  {recentScripts.map((item, i) => (
+                                    <RecentItemCard key={i} item={item} />
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        )}
+
+                      {/* Recent Executions */}
+                      {recentExecutions.length > 0 && (
+                        <div className="bg-white dark:bg-gray-800/40 rounded-xl border border-gray-200 dark:border-gray-700/50 p-6">
+                          <div className="flex items-center justify-between mb-4">
+                            <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
+                              Recent Executions
+                            </h2>
+
+                            <Button variant="outline" size="sm">
+                              View Logs
+                            </Button>
+                          </div>
+
+                          <div className="space-y-1">
+                            {recentExecutions.map((exec, i) => (
+                              <ExecutionRow key={i} execution={exec} />
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Right Sidebar / Banners */}
+                  <div className="lg:col-span-1 space-y-6">
+                    <ProBanner />
+                    <AutobotBanner />
+                  </div>
+                </div>
+              </div>
+            )}
           </main>
         </div>
       </div>

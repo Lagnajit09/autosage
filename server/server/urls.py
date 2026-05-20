@@ -18,7 +18,7 @@ from django.contrib import admin
 from django.urls import path, include
 from django.http import JsonResponse
 from django.utils import timezone
-from server.views import update_user
+from server.views import update_user, dashboard_summary
 
 def health_check(request):
     return JsonResponse({'status': 'healthy', 'service': 'main-server', 'version': '1.0.0', 'message': 'Main server is healthy!', 'timestamp': timezone.now().isoformat()})
@@ -31,5 +31,6 @@ urlpatterns = [
     path('api/scripts/', include('scripts.urls')),
     path('api/execution-engine/', include('execution_engine.urls')),
     path('api/user/update/', update_user, name='user-update'),
+    path('api/dashboard/', dashboard_summary, name='dashboard-summary'),
     path('api/health/', health_check),
 ]

@@ -4,7 +4,24 @@ from rest_framework.response import Response
 from rest_framework import status
 import logging
 
+from workflows.models import Workflow
+from scripts.models import Script
+from execution_engine.models import ScriptExecution, WorkflowRun
+from server.utils import api_response
+
 logger = logging.getLogger(__name__)
+
+def format_duration(duration_delta):
+    if not duration_delta:
+        return "0s"
+    seconds = int(duration_delta.total_seconds())
+    if seconds < 60:
+        return f"{seconds}s"
+    minutes = seconds / 60
+    if minutes < 60:
+        return f"{minutes:.1f}m"
+    hours = minutes / 60
+    return f"{hours:.1f}h"
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
@@ -45,3 +62,92 @@ def update_user(request):
     return Response({
         "message": "No fields provided to update"
     }, status=status.HTTP_400_BAD_REQUEST)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def dashboard_summary(request):
+    """
+    Get the total workflows, scripts, and executions (both script executions and workflow runs)
+    owned by the current authenticated user, and retrieve the 3 most recent records of each.
+    """
+    user = request.user
+
+    # 1. Total counts (filtered by user/owner to ensure authorization checks)
+    workflows_count = Workflow.objects.filter(user=user).count()
+    scripts_count = Script.objects.filter(owner=user).count()
+    script_execs_count = ScriptExecution.objects.filter(user=user).count()
+    workflow_runs_count = WorkflowRun.objects.filter(user=user).count()
+    total_executions = script_execs_count + workflow_runs_count
+
+    # 2. Recent 3 Workflows (by modified_at)
+    recent_workflows_qs = Workflow.objects.filter(user=user).order_by('-modified_at')[:3]
+    recent_workflows = []
+    for wf in recent_workflows_qs:
+        recent_workflows.append({
+            'title': wf.name,
+            'type': 'workflow',
+            'date': wf.modified_at.isoformat(),
+            'status': 'active',
+            'total_nodes': len(wf.nodes) if isinstance(wf.nodes, list) else 0,
+            'total_edges': len(wf.edges) if isinstance(wf.edges, list) else 0,
+        })
+
+    # 3. Recent 3 Scripts (by updated_at)
+    recent_scripts_qs = Script.objects.filter(owner=user).order_by('-updated_at')[:3]
+    recent_scripts = []
+    for sc in recent_scripts_qs:
+        recent_scripts.append({
+            'title': sc.name,
+            'type': 'script',
+            'date': sc.updated_at.isoformat(),
+        })
+
+    # 4. Recent 3 Executions (by created_at)
+    latest_script_execs = ScriptExecution.objects.filter(user=user).order_by('-created_at')[:3]
+    latest_workflow_runs = WorkflowRun.objects.filter(user=user).order_by('-created_at')[:3]
+
+    combined_executions = []
+    for se in latest_script_execs:
+        combined_executions.append({
+            'name': f"Script: {se.script.name}" if se.script else "Unknown Script",
+            'status': 'success' if se.status == 'completed' else ('failed' if se.status in ['failed', 'cancelled'] else 'running'),
+            'time': se.created_at.isoformat(),
+            'duration': format_duration(se.duration) if se.duration else (format_duration(se.completed_at - se.started_at) if se.completed_at and se.started_at else '0s'),
+            'timestamp': se.created_at
+        })
+    for wr in latest_workflow_runs:
+        combined_executions.append({
+            'name': f"Workflow: {wr.workflow.name}" if wr.workflow else "Unknown Workflow",
+            'status': 'success' if wr.status == 'success' else ('failed' if wr.status in ['failed', 'cancelled'] else 'running'),
+            'time': wr.created_at.isoformat(),
+            'duration': format_duration(wr.finished_at - wr.started_at) if wr.finished_at and wr.started_at else '0s',
+            'timestamp': wr.created_at
+        })
+
+    # Sort combined list by timestamp descending
+    combined_executions.sort(key=lambda x: x['timestamp'], reverse=True)
+    recent_executions = combined_executions[:3]
+
+    # Clean up the internal timestamp key
+    for exec_item in recent_executions:
+        exec_item.pop('timestamp', None)
+
+    data = {
+        'stats': {
+            'workflows': workflows_count,
+            'scripts': scripts_count,
+            'executions': total_executions,
+        },
+        'recentWorkflows': recent_workflows,
+        'recentScripts': recent_scripts,
+        'recentExecutions': recent_executions,
+    }
+
+    return api_response(
+        success=True,
+        message="Dashboard summary retrieved successfully.",
+        data=data,
+        status_code=status.HTTP_200_OK
+    )
+
