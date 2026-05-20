@@ -304,7 +304,7 @@ class ScriptUpdateView(APIView):
             script.download_url = gcs_url
             script.file_size = len(new_content.encode('utf-8'))
             script.version += 1
-            script.save(update_fields=['blob_url', 'download_url', 'file_size', 'version'])
+            script.save(update_fields=['blob_url', 'download_url', 'file_size', 'version', 'updated_at'])
 
             serializer = ScriptSerializer(script)
             return api_response(
@@ -386,7 +386,7 @@ class ScriptRenameView(APIView):
                 script.pathname = new_pathname
                 script.blob_url = new_gcs_url
                 script.download_url = new_gcs_url
-                script.save(update_fields=['name', 'pathname', 'blob_url', 'download_url'])
+                script.save(update_fields=['name', 'pathname', 'blob_url', 'download_url', 'updated_at'])
 
                 # Delete old blob after successful copy + DB update
                 try:
