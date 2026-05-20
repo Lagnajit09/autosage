@@ -382,3 +382,121 @@ def health_check(request):
             message="Could not reach execution worker.",
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE
         )
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def all_executions(request):
+    """
+    GET /api/execution-engine/executions/all/
+    Fetches all script executions and workflow runs for the authenticated user,
+    with signed GCS URLs so they can be fetched when the user requests it.
+    Supports pagination via 'page' and 'page_size' query parameters.
+    """
+    from execution_engine.models import WorkflowRun, ScriptExecution
+    from execution_engine.helpers.gcs import generate_signed_url, get_blob_path_from_url
+    from django.core.paginator import Paginator, EmptyPage
+
+    user = request.user
+
+    # Pagination parameters
+    try:
+        page = int(request.GET.get('page', 1))
+        page_size = int(request.GET.get('page_size', 20))
+    except ValueError:
+        page = 1
+        page_size = 20
+
+    # 1. Fetch script executions and workflow runs
+    script_execs = ScriptExecution.objects.filter(user=user).select_related('script')
+    workflow_runs = WorkflowRun.objects.filter(user=user).select_related('workflow')
+
+    def get_signed_url(log_url):
+        if not log_url:
+            return ""
+        try:
+            path = get_blob_path_from_url(log_url)
+            return generate_signed_url(path) if path else ""
+        except Exception:
+            return ""
+
+    def format_duration(duration_delta):
+        if not duration_delta:
+            return "0s"
+        seconds = int(duration_delta.total_seconds())
+        if seconds < 60:
+            return f"{seconds}s"
+        minutes = seconds / 60
+        if minutes < 60:
+            return f"{minutes:.1f}m"
+        hours = minutes / 60
+        return f"{hours:.1f}h"
+
+    results = []
+
+    for se in script_execs:
+        duration_str = "0s"
+        if se.duration:
+            duration_str = format_duration(se.duration)
+        elif se.completed_at and se.started_at:
+            duration_str = format_duration(se.completed_at - se.started_at)
+        results.append({
+            'id': str(se.id),
+            'name': se.script.name if se.script else "Unknown Script",
+            'duration': duration_str,
+            'status': se.status,
+            'tag': 'script',
+            'stdout_signed_url': get_signed_url(se.stdout_log_url),
+            'stderr_signed_url': get_signed_url(se.stderr_log_url),
+            'logs_signed_url': get_signed_url(se.logs_url),
+            'created_at': se.created_at.isoformat(),
+            'timestamp': se.created_at,
+        })
+
+    for wr in workflow_runs:
+        duration_str = "0s"
+        if wr.finished_at and wr.started_at:
+            duration_str = format_duration(wr.finished_at - wr.started_at)
+        results.append({
+            'id': str(wr.id),
+            'name': wr.workflow.name if wr.workflow else "Unknown Workflow",
+            'workflow_id': str(wr.workflow.id) if wr.workflow else None,
+            'duration': duration_str,
+            'status': wr.status,
+            'tag': 'workflow',
+            'created_at': wr.created_at.isoformat(),
+            'timestamp': wr.created_at,
+        })
+        
+    # Sort combined results by timestamp descending
+    results.sort(key=lambda x: x['timestamp'], reverse=True)
+    
+    # Clean up the internal timestamp key
+    for item in results:
+        item.pop('timestamp', None)
+        
+    # If pagination parameters are not supplied, return full results without pagination
+    if not request.GET.get('page') and not request.GET.get('page_size'):
+        return api_response(
+            success=True,
+            message="All executions retrieved successfully.",
+            data=results,
+        )
+
+    # Apply pagination
+    paginator = Paginator(results, page_size)
+    try:
+        page_obj = paginator.page(page)
+    except EmptyPage:
+        page_obj = paginator.page(paginator.num_pages)
+
+    return api_response(
+        success=True,
+        message="All executions retrieved successfully.",
+        data={
+            "executions": page_obj.object_list,
+            "total_count": paginator.count,
+            "total_pages": paginator.num_pages,
+            "current_page": page_obj.number,
+        },
+    )

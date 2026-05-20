@@ -71,7 +71,12 @@ def dashboard_summary(request):
     Get the total workflows, scripts, and executions (both script executions and workflow runs)
     owned by the current authenticated user, and retrieve the 3 most recent records of each.
     """
+    from django.db.models import Q
+    from django.utils import timezone
+    
     user = request.user
+    now = timezone.now()
+    start_of_month = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
 
     # 1. Total counts (filtered by user/owner to ensure authorization checks)
     workflows_count = Workflow.objects.filter(user=user).count()
@@ -79,6 +84,25 @@ def dashboard_summary(request):
     script_execs_count = ScriptExecution.objects.filter(user=user).count()
     workflow_runs_count = WorkflowRun.objects.filter(user=user).count()
     total_executions = script_execs_count + workflow_runs_count
+
+    # 1b. Current month counts
+    workflows_current_month = Workflow.objects.filter(
+        Q(user=user) & (Q(created_at__gte=start_of_month) | Q(modified_at__gte=start_of_month))
+    ).distinct().count()
+
+    scripts_current_month = Script.objects.filter(
+        Q(owner=user) & (Q(uploaded_at__gte=start_of_month) | Q(updated_at__gte=start_of_month))
+    ).distinct().count()
+
+    script_execs_current_month = ScriptExecution.objects.filter(
+        Q(user=user) & (Q(created_at__gte=start_of_month) | Q(updated_at__gte=start_of_month))
+    ).distinct().count()
+
+    workflow_runs_current_month = WorkflowRun.objects.filter(
+        Q(user=user) & Q(created_at__gte=start_of_month)
+    ).distinct().count()
+
+    executions_current_month = script_execs_current_month + workflow_runs_current_month
 
     # 2. Recent 3 Workflows (by modified_at)
     recent_workflows_qs = Workflow.objects.filter(user=user).order_by('-modified_at')[:3]
@@ -136,8 +160,11 @@ def dashboard_summary(request):
     data = {
         'stats': {
             'workflows': workflows_count,
+            'workflows_current_month': workflows_current_month,
             'scripts': scripts_count,
+            'scripts_current_month': scripts_current_month,
             'executions': total_executions,
+            'executions_current_month': executions_current_month,
         },
         'recentWorkflows': recent_workflows,
         'recentScripts': recent_scripts,

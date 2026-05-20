@@ -14,6 +14,9 @@ urlpatterns = [
     # Execution History endpoint
     path("history/", views_script.execution_history, name="execution-history"),
 
+    # Unified executions history endpoint
+    path("executions/all/", views_script.all_executions, name="all-executions"),
+
     # Stop execution endpoint
     path("<uuid:execution_id>/stop/", views_script.stop_execution, name="stop-execution"),
 
