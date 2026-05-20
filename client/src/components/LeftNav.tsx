@@ -5,6 +5,7 @@ import {
 } from "@/components/ui/tooltip";
 import {
   CodeXml,
+  FileClock,
   Home,
   ListPlus,
   Moon,
@@ -49,6 +50,11 @@ export const NavItems = ({ mobile = false }: { mobile?: boolean }) => {
       icon: <CodeXml className={cn("w-6 h-6", mobile ? "w-5 h-5 mr-2" : "")} />,
       label: "Editor",
       onClick: () => navigate("/script-editor"),
+    },
+    {
+      icon: <FileClock className={cn("w-6 h-6", mobile ? "w-5 h-5 mr-2" : "")} />,
+      label: "Execution Logs",
+      onClick: () => navigate("/execution-logs"),
     },
     {
       icon: (

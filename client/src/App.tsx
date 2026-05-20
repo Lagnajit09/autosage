@@ -28,6 +28,7 @@ import { SSOCallback } from "./components/auth/SSOCallback";
 import { ClerkProvider } from "@clerk/clerk-react";
 import PublicRoute from "./components/auth/PublicRoute";
 import LimitExceed from "./pages/LimitExceed";
+import ExecutionLogs from "./pages/ExecutionLogs";
 
 const queryClient = new QueryClient();
 
@@ -89,6 +90,7 @@ const App = () => {
                       element={<ScriptEditor />}
                     />
                     <Route path="/raw/:id" element={<ScriptViewer />} />
+                    <Route path="/execution-logs" element={<ExecutionLogs />} />
                     <Route path="/ai/autobot" element={<AutobotChat />} />
                     <Route path="/ai/autobot/:id" element={<AutobotChat />} />
                     <Route path="/settings" element={<Settings />} />

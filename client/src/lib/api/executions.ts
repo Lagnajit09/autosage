@@ -3,8 +3,10 @@ import { ScriptExecution, WorkflowRun, WorkflowNodeRun } from "@/utils/types";
 
 const BASE_URL = "/api/execution-engine";
 
+import { ExecutionRecord } from "@/components/ExecutionLogs/ExecutionLogsTable";
+
 export interface ExecutionHistoryResponse {
-  executions: ScriptExecution[];
+  executions: ExecutionRecord[];
   total_count: number;
   total_pages: number;
   current_page: number;
@@ -70,6 +72,15 @@ export const executionsService = {
   ): Promise<WorkflowNodeRun[]> => {
     const response = await apiRequest(
       `${BASE_URL}/workflows/runs/${runId}/nodes/`,
+      {},
+      token,
+    );
+    return response.data;
+  },
+
+  getAllExecutions: async (token: string, page: number = 1, pageSize: number = 20): Promise<ExecutionHistoryResponse> => {
+    const response = await apiRequest(
+      `${BASE_URL}/executions/all/?page=${page}&page_size=${pageSize}`,
       {},
       token,
     );

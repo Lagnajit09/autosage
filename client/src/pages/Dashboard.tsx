@@ -100,7 +100,14 @@ const Dashboard = () => {
   }, [user, getToken]);
 
   const [loading, setLoading] = useState(true);
-  const [stats, setStats] = useState({ workflows: 0, scripts: 0, executions: 0 });
+  const [stats, setStats] = useState({
+    workflows: 0,
+    workflows_current_month: 0,
+    scripts: 0,
+    scripts_current_month: 0,
+    executions: 0,
+    executions_current_month: 0,
+  });
   const [recentWorkflows, setRecentWorkflows] = useState<any[]>([]);
   const [recentScripts, setRecentScripts] = useState<any[]>([]);
   const [recentExecutions, setRecentExecutions] = useState<any[]>([]);
@@ -345,7 +352,11 @@ const Dashboard = () => {
                               Recent Executions
                             </h2>
 
-                            <Button variant="outline" size="sm">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => navigate("/execution-logs")}
+                            >
                               View Logs
                             </Button>
                           </div>

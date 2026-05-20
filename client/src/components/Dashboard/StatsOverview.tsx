@@ -1,7 +1,18 @@
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Zap, FileText, Activity } from "lucide-react";
 
-export const StatsOverview = ({ stats }: { stats: { workflows: number; scripts: number; executions: number } }) => {
+export const StatsOverview = ({
+  stats,
+}: {
+  stats: {
+    workflows: number;
+    workflows_current_month: number;
+    scripts: number;
+    scripts_current_month: number;
+    executions: number;
+    executions_current_month: number;
+  };
+}) => {
   return (
     <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
       <Card className="bg-white dark:bg-gray-800/50 border-gray-200 dark:border-gray-700">
@@ -11,7 +22,9 @@ export const StatsOverview = ({ stats }: { stats: { workflows: number; scripts: 
         </CardHeader>
         <CardContent>
           <div className="text-2xl font-bold text-gray-900 dark:text-gray-100">{stats.workflows}</div>
-          <p className="text-xs text-gray-500 dark:text-gray-400">+2 from last week</p>
+          <p className="text-xs text-gray-500 dark:text-gray-400">
+            {stats.workflows_current_month ?? 0} active this month
+          </p>
         </CardContent>
       </Card>
       <Card className="bg-white dark:bg-gray-800/50 border-gray-200 dark:border-gray-700">
@@ -21,7 +34,9 @@ export const StatsOverview = ({ stats }: { stats: { workflows: number; scripts: 
         </CardHeader>
         <CardContent>
           <div className="text-2xl font-bold text-gray-900 dark:text-gray-100">{stats.scripts}</div>
-          <p className="text-xs text-gray-500 dark:text-gray-400">+5 new scripts</p>
+          <p className="text-xs text-gray-500 dark:text-gray-400">
+            {stats.scripts_current_month ?? 0} active this month
+          </p>
         </CardContent>
       </Card>
       <Card className="bg-white dark:bg-gray-800/50 border-gray-200 dark:border-gray-700">
@@ -31,7 +46,9 @@ export const StatsOverview = ({ stats }: { stats: { workflows: number; scripts: 
         </CardHeader>
         <CardContent>
           <div className="text-2xl font-bold text-gray-900 dark:text-gray-100">{stats.executions}</div>
-          <p className="text-xs text-gray-500 dark:text-gray-400">+12% from last month</p>
+          <p className="text-xs text-gray-500 dark:text-gray-400">
+            {stats.executions_current_month ?? 0} run this month
+          </p>
         </CardContent>
       </Card>
     </div>
