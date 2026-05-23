@@ -6,6 +6,7 @@ node_modules
 .env.production.local
 .env.server
 .env.worker
+.env.autobot
 .env.traefik
 server.env
 gcs-key.json

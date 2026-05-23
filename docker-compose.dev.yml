@@ -295,6 +295,47 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
+  # ── Autobot (FastAPI LLM assistant — hello-world scaffold for T02) ───────
+  # Built locally from ./autobot (no GHCR pull). T09 will expand main.py +
+  # requirements + Dockerfile; for now this just serves the hello-world
+  # endpoint so the nginx /api/ai/ route (T03) has something to reach.
+  #
+  # depends_on covers what later tasks will need (redis for cache, server
+  # for tool-call API). The hello-world doesn't strictly require either, but
+  # codifying it here means T11+ won't need to revisit this block.
+  autobot:
+    build:
+      context: ./autobot
+      dockerfile: Dockerfile
+    image: autosage-autobot:latest
+    container_name: autosage-autobot
+    env_file:
+      - .env.autobot
+    environment:
+      PYTHONUNBUFFERED: "1"
+    expose:
+      - "8030"
+    networks:
+      - autosage-net
+    depends_on:
+      server:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://localhost:8030/')",
+        ]
+      interval: 20s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
   # ── nginx (HTTP-only dev ingress, mirrors prod TLS terminator) ───────────
   # Faithful dev mirror of the prod nginx service in docker-compose.oci.yml,
   # minus TLS. Proxy headers, SSE buffering, and deferred-DNS upstream lookup

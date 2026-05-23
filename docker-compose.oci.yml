@@ -54,19 +54,27 @@ volumes:
   redis-data:       # /data — Redis RDB snapshots for warm restarts
 
 services:
-  # ── Redis (Celery broker + result backend + SSE Pub/Sub) ─────────────────
+  # ── Redis (Celery broker + result backend + SSE Pub/Sub + Autobot cache) ─
   # Replaces Upstash in production. Local docker-bridge connection → ~0.1 ms
-  # latency and no per-command billing. Capped at 256 MB with LRU eviction
-  # for belt-and-braces against any unexpected growth (Celery normally keeps
-  # itself well under that — broker items pop on consumption, result keys
-  # TTL via CELERY_RESULT_EXPIRES, Pub/Sub is ephemeral).
+  # latency and no per-command billing.
+  #
+  # Capped at 1 GB (24 GB A1 host has ample headroom) with volatile-lru
+  # eviction. Why volatile-lru and not allkeys-lru:
+  #   • Celery list items (broker queue on /0) have NO TTL — they're LPUSH
+  #     /BRPOPLPUSH list entries, not SET-with-EXPIRE keys. Under volatile-
+  #     lru only keys with an explicit TTL are evictable, so Celery queue
+  #     items can NEVER be evicted under memory pressure.
+  #   • CELERY_TASK_IGNORE_RESULT=True means no result keys are written.
+  #   • Autobot conversation cache keys (DB /2) carry explicit TTLs, so they
+  #     ARE evictable — Autobot can pressure-eject its own state, never
+  #     Celery's. This is the safe sharing topology.
   redis:
     image: redis:7-alpine
     container_name: autosage-redis
     command: >
       redis-server
-      --maxmemory 256mb
-      --maxmemory-policy allkeys-lru
+      --maxmemory 1gb
+      --maxmemory-policy volatile-lru
       --save 60 1
       --appendonly no
       --loglevel warning
@@ -179,6 +187,49 @@ services:
       redis:
         condition: service_healthy
     restart: unless-stopped
+
+  # ── Autobot (FastAPI LLM assistant — scaffold only until T23 ships CI) ───
+  # Profile-gated so `docker compose pull` / `up -d` (no profile) skips this
+  # service entirely. The GHCR image won't exist until the deploy-autobot CI
+  # workflow lands; until then this entry is documentation + future-readiness.
+  #
+  # To start autobot in prod once the image is available:
+  #   docker compose --profile autobot up -d autobot
+  # At T23, drop the `profiles:` line so the default `up -d` brings it up.
+  #
+  # Depends on redis (Autobot uses DB /2 for hot conversation context) and
+  # django (Autobot calls /api/autobot/* for thread persistence + /api/scripts
+  # /api/workflows for tool calls).
+  autobot:
+    image: ghcr.io/lagnajit09/autosage/autosage-autobot:latest
+    container_name: autosage-autobot
+    profiles: ["autobot"]
+    env_file:
+      - /home/ubuntu/autosage-server/autobot.env
+    environment:
+      PYTHONUNBUFFERED: "1"
+    expose:
+      - "8030"
+    networks:
+      - autosage-net
+    depends_on:
+      redis:
+        condition: service_healthy
+      django:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://localhost:8030/')",
+        ]
+      interval: 20s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
 
   # ── nginx (TLS terminator, public entrypoint) ────────────────────────────
   nginx:
