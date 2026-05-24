@@ -50,8 +50,6 @@
 # • nginx mirrors the prod SSE-safe settings: proxy_buffering off, long
 #   proxy_read_timeout, deferred DNS resolution. See nginx/autosage-dev.conf.
 
-version: "3.9"
-
 networks:
   # Dedicated bridge so the services can reach each other by service name
   # (e.g., http://exec-worker:8020, http://redis:6379) without exposing
