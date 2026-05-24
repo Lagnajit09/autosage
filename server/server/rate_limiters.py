@@ -34,6 +34,21 @@ class ExecutionSustainedThrottle(UserRateThrottle):
     scope = 'execution_sustained'
 
 
+# ── Autobot (T04+) ────────────────────────────────────────────────────────
+# Scopes apply to all /api/autobot/* endpoints. The dedicated
+# AutobotMessageCreateThrottle is wired in T13+ when SSE chat lands —
+# isolating it lets us tighten message-creation throttle later without
+# affecting CRUD on threads / configs / settings.
+class AutobotBurstThrottle(UserRateThrottle):
+    scope = 'autobot_burst'
+
+class AutobotSustainedThrottle(UserRateThrottle):
+    scope = 'autobot_sustained'
+
+class AutobotMessageCreateThrottle(UserRateThrottle):
+    scope = 'autobot_message_create'
+
+
 class HttpTriggerThrottle(SimpleRateThrottle):
     """Throttle public HTTP trigger calls per trigger_token (no auth user)."""
     scope = 'http_trigger'

@@ -30,6 +30,7 @@ urlpatterns = [
     path('api/vault/', include('vault.urls')),
     path('api/scripts/', include('scripts.urls')),
     path('api/execution-engine/', include('execution_engine.urls')),
+    path('api/autobot/', include('autobot_api.urls')),
     path('api/user/update/', update_user, name='user-update'),
     path('api/dashboard/', dashboard_summary, name='dashboard-summary'),
     path('api/health/', health_check),

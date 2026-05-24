@@ -74,6 +74,7 @@ INSTALLED_APPS = [
     'scripts.apps.ScriptsConfig',
     'execution_engine.apps.ExecutionEngineConfig',
     'triggers.apps.TriggersConfig',
+    'autobot_api.apps.AutobotApiConfig',
 ]
 
 REST_FRAMEWORK = {
@@ -103,6 +104,9 @@ REST_FRAMEWORK = {
         'execution_burst': '30/minute',
         'execution_sustained': '500/day',
         'http_trigger': '60/minute',
+        'autobot_burst': '30/minute',
+        'autobot_sustained': '500/day',
+        'autobot_message_create': '60/minute',
     }
 }
 
