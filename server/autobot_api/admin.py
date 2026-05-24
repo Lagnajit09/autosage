@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from autobot_api.models import LLMConfig
+from autobot_api.models import LLMConfig, Message, Summary, Thread, UserSettings
 
 
 @admin.register(LLMConfig)
@@ -36,3 +36,57 @@ class LLMConfigAdmin(admin.ModelAdmin):
             'fields': ('created_at', 'modified_at'),
         }),
     )
+
+
+# ── Conversation models (T05) ────────────────────────────────────────────────
+
+
+class MessageInline(admin.TabularInline):
+    """Compact message list inside the Thread admin page."""
+    model = Message
+    extra = 0
+    can_delete = False
+    fields = ('role', 'created_at', 'provider', 'model_name', 'total_tokens')
+    readonly_fields = fields
+    ordering = ('created_at',)
+
+    def has_add_permission(self, request, obj=None):
+        # Admin shouldn't be injecting messages into threads; they come
+        # from the chat endpoint only.
+        return False
+
+
+@admin.register(Thread)
+class ThreadAdmin(admin.ModelAdmin):
+    list_display = ('title', 'user', 'last_message_at', 'is_archived', 'modified_at')
+    list_filter = ('is_archived',)
+    search_fields = ('title', 'user__username', 'id')
+    readonly_fields = ('id', 'created_at', 'modified_at', 'last_message_at')
+    raw_id_fields = ('user', 'llm_config')
+    inlines = [MessageInline]
+
+
+@admin.register(Message)
+class MessageAdmin(admin.ModelAdmin):
+    list_display = ('id', 'thread', 'role', 'provider', 'model_name', 'total_tokens', 'created_at')
+    list_filter = ('role', 'content_type', 'provider')
+    search_fields = ('id', 'thread__id', 'thread__user__username', 'content')
+    readonly_fields = ('id', 'created_at')
+    raw_id_fields = ('thread',)
+
+
+@admin.register(Summary)
+class SummaryAdmin(admin.ModelAdmin):
+    list_display = ('id', 'thread', 'up_to_message', 'summary_tokens', 'created_at')
+    search_fields = ('id', 'thread__id', 'thread__user__username')
+    readonly_fields = ('id', 'created_at')
+    raw_id_fields = ('thread', 'up_to_message')
+
+
+@admin.register(UserSettings)
+class UserSettingsAdmin(admin.ModelAdmin):
+    list_display = ('user', 'default_llm_config', 'tone', 'expertise', 'language', 'modified_at')
+    list_filter = ('tone', 'expertise', 'language')
+    search_fields = ('user__username',)
+    readonly_fields = ('created_at', 'modified_at')
+    raw_id_fields = ('user', 'default_llm_config')
