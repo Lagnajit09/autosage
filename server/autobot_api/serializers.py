@@ -1,6 +1,6 @@
 from rest_framework import serializers
 
-from autobot_api.models import LLMConfig, Message, Summary, Thread
+from autobot_api.models import LLMConfig, Message, Summary, Thread, UserSettings
 
 
 class LLMConfigSerializer(serializers.ModelSerializer):
@@ -259,5 +259,50 @@ class SummarySerializer(serializers.ModelSerializer):
         if value.thread_id != thread_id:
             raise serializers.ValidationError(
                 'Message does not belong to this thread.'
+            )
+        return value
+
+
+# ── UserSettings (T08) ───────────────────────────────────────────────────────
+
+
+class UserSettingsSerializer(serializers.ModelSerializer):
+    """Per-user singleton — at most one row per User (enforced by OneToOne).
+
+    Security notes:
+      • `user` is NOT in `fields`. The view's `get_object` looks up (or
+        creates) the row scoped to `request.user`. There is no way for
+        a client to address or modify another user's settings.
+      • `default_llm_config` FK is validated to belong to the requesting
+        user (same pattern as Thread.llm_config). Prevents pointing at a
+        cross-user LLMConfig UUID.
+      • `tone` and `expertise` are enum-bound by TextChoices on the model;
+        ModelSerializer enforces choices automatically.
+      • `custom_instructions` is capped at 4000 chars (model-level).
+    """
+
+    class Meta:
+        model = UserSettings
+        fields = [
+            'default_llm_config',
+            'tone',
+            'expertise',
+            'language',
+            'custom_instructions',
+            'created_at',
+            'modified_at',
+        ]
+        read_only_fields = ['created_at', 'modified_at']
+
+    def validate_default_llm_config(self, value):
+        """Reject any FK target that doesn't belong to the requesting user."""
+        if value is None:
+            return value
+        request = self.context.get('request')
+        if request is None or not request.user.is_authenticated:
+            raise serializers.ValidationError('Authentication required.')
+        if value.user_id != request.user.id:
+            raise serializers.ValidationError(
+                'LLM config not found or access denied.'
             )
         return value

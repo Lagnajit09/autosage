@@ -8,13 +8,14 @@ from rest_framework.exceptions import NotFound
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
 
-from autobot_api.models import LLMConfig, Message, Summary, Thread
+from autobot_api.models import LLMConfig, Message, Summary, Thread, UserSettings
 from autobot_api.serializers import (
     LLMConfigRevealSerializer,
     LLMConfigSerializer,
     MessageSerializer,
     SummarySerializer,
     ThreadSerializer,
+    UserSettingsSerializer,
 )
 from server.rate_limiters import AutobotBurstThrottle, AutobotSustainedThrottle
 from server.utils import api_response
@@ -563,4 +564,72 @@ class SummaryListCreateView(_ThreadScopedView, generics.ListCreateAPIView):
             message='Summary created successfully.',
             data=self.get_serializer(summary).data,
             status_code=status.HTTP_201_CREATED,
+        )
+
+
+# ── UserSettings (T08) ───────────────────────────────────────────────────────
+#
+# Singleton-per-user resource. There is no <id> in the URL — the row is
+# always located via the OneToOne back to `request.user`. Auto-created on
+# first GET so the client never has to think about whether the row exists.
+#
+# Auth model:
+#   • Authentication: IsAuthenticated.
+#   • Authorization: implicit. `get_object` always returns the row keyed
+#     by request.user. A client literally cannot address another user's
+#     settings — there's no UUID surface to attack.
+#   • Mass-assignment: `user` is not in the serializer fields; assigned
+#     server-side via get_or_create.
+#   • IDOR on default_llm_config: serializer rejects cross-user FK
+#     targets (matches Thread.llm_config validation).
+#   • No DELETE — settings live as long as the user does (CASCADE on
+#     user delete handles cleanup).
+
+
+class UserSettingsView(generics.RetrieveUpdateAPIView):
+    """GET   /api/autobot/settings/   — retrieve (auto-creates on first call)
+    PATCH /api/autobot/settings/   — partial update
+    """
+
+    serializer_class = UserSettingsSerializer
+    permission_classes = [IsAuthenticated]
+    throttle_classes = [AutobotBurstThrottle, AutobotSustainedThrottle]
+
+    def get_object(self):
+        # Auto-create on first access. The OneToOneField on the model
+        # guarantees there's at most one row per user — get_or_create
+        # is race-safe because a concurrent INSERT would fail the
+        # one_to_one constraint and our second SELECT would see the
+        # winning row.
+        settings_obj, _ = UserSettings.objects.get_or_create(
+            user=self.request.user,
+        )
+        return settings_obj
+
+    def get_serializer_context(self):
+        # Threaded through so validate_default_llm_config can see
+        # request.user for the cross-user FK check.
+        ctx = super().get_serializer_context()
+        ctx['request'] = self.request
+        return ctx
+
+    def retrieve(self, request, *args, **kwargs):
+        response = super().retrieve(request, *args, **kwargs)
+        return api_response(
+            success=True,
+            message='Settings retrieved successfully.',
+            data=response.data,
+            status_code=status.HTTP_200_OK,
+        )
+
+    def update(self, request, *args, **kwargs):
+        # Force partial=True so PATCH is the canonical update path.
+        # A bare PUT with a missing field shouldn't blank it.
+        kwargs['partial'] = True
+        response = super().update(request, *args, **kwargs)
+        return api_response(
+            success=True,
+            message='Settings updated successfully.',
+            data=response.data,
+            status_code=status.HTTP_200_OK,
         )

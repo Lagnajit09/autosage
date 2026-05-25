@@ -46,5 +46,10 @@ urlpatterns = [
         name='summary-list-create',
     ),
 
-    # ── UserSettings (T08) — added later ───────────────────────────────────
+    # ── UserSettings (T08) ─────────────────────────────────────────────────
+    path(
+        'settings/',
+        views.UserSettingsView.as_view(),
+        name='user-settings',
+    ),
 ]
