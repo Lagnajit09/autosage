@@ -34,5 +34,17 @@ urlpatterns = [
         name='thread-detail',
     ),
 
-    # ── Message / Summary / UserSettings (T07–T08) — added later ───────────
+    # ── Message + Summary (T07) ────────────────────────────────────────────
+    path(
+        'threads/<uuid:thread_id>/messages/',
+        views.MessageListCreateView.as_view(),
+        name='message-list-create',
+    ),
+    path(
+        'threads/<uuid:thread_id>/summaries/',
+        views.SummaryListCreateView.as_view(),
+        name='summary-list-create',
+    ),
+
+    # ── UserSettings (T08) — added later ───────────────────────────────────
 ]

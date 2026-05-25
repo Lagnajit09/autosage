@@ -1,15 +1,19 @@
 import logging
 
 from django.core.paginator import EmptyPage, Paginator
+from django.db import IntegrityError, transaction
 from django.db.models import Count
 from rest_framework import generics, status
+from rest_framework.exceptions import NotFound
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
 
-from autobot_api.models import LLMConfig, Thread
+from autobot_api.models import LLMConfig, Message, Summary, Thread
 from autobot_api.serializers import (
     LLMConfigRevealSerializer,
     LLMConfigSerializer,
+    MessageSerializer,
+    SummarySerializer,
     ThreadSerializer,
 )
 from server.rate_limiters import AutobotBurstThrottle, AutobotSustainedThrottle
@@ -305,4 +309,258 @@ class ThreadDetailView(generics.RetrieveUpdateDestroyAPIView):
             success=True,
             message='Thread deleted successfully.',
             status_code=status.HTTP_200_OK,
+        )
+
+
+# ── Message + Summary (T07) ──────────────────────────────────────────────────
+#
+# Both endpoints are scoped to a parent Thread via the URL — the per-user
+# auth check happens by loading the thread under `user=request.user` and
+# 404-ing on any miss. Cross-user enumeration of thread UUIDs is the only
+# auth surface, and the 404 response is identical whether the thread
+# doesn't exist or belongs to someone else.
+#
+# `thread` is never read from the request body — it's always taken from
+# the URL via the view's `_get_thread_or_404` helper. Mass-assignment of
+# the parent FK is impossible.
+
+
+# Pagination defaults — messages flow much higher volume than summaries.
+DEFAULT_MESSAGE_PAGE_SIZE = 50
+MAX_MESSAGE_PAGE_SIZE = 200
+DEFAULT_SUMMARY_PAGE_SIZE = 20
+MAX_SUMMARY_PAGE_SIZE = 100
+
+
+def _paginated_response(qs, page, page_size, list_key, serializer_cls, ctx=None):
+    """Shared pagination wrapper for Message/Summary lists.
+
+    Returns the same envelope shape used by ThreadListCreateView.list so
+    the client only deals with one pagination contract across the app.
+    """
+    paginator = Paginator(qs, page_size)
+    try:
+        page_obj = paginator.page(page)
+    except EmptyPage:
+        return api_response(
+            success=True,
+            message='Retrieved successfully.',
+            data={
+                list_key: [],
+                'total_count': paginator.count,
+                'total_pages': paginator.num_pages,
+                'current_page': page,
+                'page_size': page_size,
+            },
+            status_code=status.HTTP_200_OK,
+        )
+
+    serializer = serializer_cls(page_obj.object_list, many=True, context=ctx or {})
+    return api_response(
+        success=True,
+        message='Retrieved successfully.',
+        data={
+            list_key: serializer.data,
+            'total_count': paginator.count,
+            'total_pages': paginator.num_pages,
+            'current_page': page_obj.number,
+            'page_size': page_size,
+        },
+        status_code=status.HTTP_200_OK,
+    )
+
+
+class _ThreadScopedView(generics.GenericAPIView):
+    """Shared base for views nested under /threads/<thread_id>/.
+
+    Provides `_get_thread_or_404` so per-user thread scoping is enforced
+    in exactly one place. Subclasses use this to look up the parent
+    thread before any list / create operation.
+    """
+
+    permission_classes = [IsAuthenticated]
+    throttle_classes = [AutobotBurstThrottle, AutobotSustainedThrottle]
+
+    def _get_thread_or_404(self):
+        thread_id = self.kwargs.get('thread_id')
+        try:
+            return Thread.objects.get(id=thread_id, user=self.request.user)
+        except Thread.DoesNotExist:
+            # Same response shape whether the thread doesn't exist or
+            # belongs to another user — don't leak which.
+            raise NotFound('Thread not found.')
+
+
+class MessageListCreateView(_ThreadScopedView, generics.ListCreateAPIView):
+    """GET  /api/autobot/threads/<thread_id>/messages/   — paginated history
+    POST /api/autobot/threads/<thread_id>/messages/   — append a message
+
+    Query params on GET:
+      • ?page=N           (default 1)
+      • ?page_size=N      (default 50, clamped to [1, 200])
+
+    POST honors idempotency via the optional `client_id` field — repeat
+    POSTs with the same value in the same thread return the existing
+    message (200) instead of creating a duplicate (201). The partial
+    unique constraint on (thread, client_id) is the race-safe backstop.
+    """
+
+    serializer_class = MessageSerializer
+
+    def get_queryset(self):
+        # `thread__user` is the auth check that scopes by user.
+        return Message.objects.filter(
+            thread_id=self.kwargs.get('thread_id'),
+            thread__user=self.request.user,
+        )
+
+    def list(self, request, *args, **kwargs):
+        # Ensure the thread exists + belongs to the user before paginating.
+        self._get_thread_or_404()
+
+        try:
+            page = int(request.query_params.get('page', 1))
+            page_size = int(
+                request.query_params.get('page_size', DEFAULT_MESSAGE_PAGE_SIZE)
+            )
+        except ValueError:
+            return api_response(
+                success=False,
+                message='Invalid pagination parameters.',
+                status_code=status.HTTP_400_BAD_REQUEST,
+            )
+        page_size = min(max(page_size, 1), MAX_MESSAGE_PAGE_SIZE)
+
+        qs = self.get_queryset().order_by('created_at')
+        response = _paginated_response(
+            qs, page, page_size, 'messages', MessageSerializer,
+        )
+        # Custom success message for the typical case.
+        if response.data.get('data', {}).get('total_count', 0) >= 0:
+            response.data['message'] = 'Messages retrieved successfully.'
+        return response
+
+    def create(self, request, *args, **kwargs):
+        thread = self._get_thread_or_404()
+
+        # ── Idempotency replay check ──────────────────────────────────────
+        # If client_id is provided and a prior message in this thread
+        # already used it, return that prior message untouched (200, not
+        # 201). Same contract as the HTTP trigger idempotency-key flow.
+        client_id = ''
+        if isinstance(request.data, dict):
+            client_id = (request.data.get('client_id') or '').strip()
+
+        if client_id:
+            existing = Message.objects.filter(
+                thread=thread, client_id=client_id,
+            ).first()
+            if existing is not None:
+                return api_response(
+                    success=True,
+                    message='Duplicate request — returning prior message.',
+                    data=self.get_serializer(existing).data,
+                    status_code=status.HTTP_200_OK,
+                )
+
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        # Race-safe create: another concurrent POST with the same client_id
+        # could land between our SELECT above and INSERT below. The partial
+        # unique index will fire IntegrityError; we catch it and return the
+        # prior row (now visible).
+        try:
+            with transaction.atomic():
+                message = serializer.save(thread=thread)
+                # Sidebar ordering: update parent thread's last_message_at.
+                # update() bypasses save() so modified_at isn't touched —
+                # we don't want "edited 1m ago" to flicker on every chat.
+                Thread.objects.filter(pk=thread.pk).update(
+                    last_message_at=message.created_at,
+                )
+        except IntegrityError:
+            if client_id:
+                existing = Message.objects.filter(
+                    thread=thread, client_id=client_id,
+                ).first()
+                if existing is not None:
+                    logger.info(
+                        'Message create race resolved: thread=%s client_id=%s',
+                        thread.id, client_id,
+                    )
+                    return api_response(
+                        success=True,
+                        message='Duplicate request — returning prior message.',
+                        data=self.get_serializer(existing).data,
+                        status_code=status.HTTP_200_OK,
+                    )
+            raise
+
+        return api_response(
+            success=True,
+            message='Message created successfully.',
+            data=self.get_serializer(message).data,
+            status_code=status.HTTP_201_CREATED,
+        )
+
+
+class SummaryListCreateView(_ThreadScopedView, generics.ListCreateAPIView):
+    """GET  /api/autobot/threads/<thread_id>/summaries/   — list (most-recent first)
+    POST /api/autobot/threads/<thread_id>/summaries/   — record a new summary
+    """
+
+    serializer_class = SummarySerializer
+
+    def get_queryset(self):
+        return Summary.objects.filter(
+            thread_id=self.kwargs.get('thread_id'),
+            thread__user=self.request.user,
+        )
+
+    def get_serializer_context(self):
+        ctx = super().get_serializer_context()
+        ctx['request'] = self.request
+        # Used by SummarySerializer.validate_up_to_message to ensure the
+        # anchor lives in THIS thread, not just any of the user's threads.
+        ctx['thread_id'] = self.kwargs.get('thread_id')
+        return ctx
+
+    def list(self, request, *args, **kwargs):
+        self._get_thread_or_404()
+
+        try:
+            page = int(request.query_params.get('page', 1))
+            page_size = int(
+                request.query_params.get('page_size', DEFAULT_SUMMARY_PAGE_SIZE)
+            )
+        except ValueError:
+            return api_response(
+                success=False,
+                message='Invalid pagination parameters.',
+                status_code=status.HTTP_400_BAD_REQUEST,
+            )
+        page_size = min(max(page_size, 1), MAX_SUMMARY_PAGE_SIZE)
+
+        qs = self.get_queryset().order_by('-created_at')
+        response = _paginated_response(
+            qs, page, page_size, 'summaries', SummarySerializer,
+            ctx=self.get_serializer_context(),
+        )
+        if response.data.get('data', {}).get('total_count', 0) >= 0:
+            response.data['message'] = 'Summaries retrieved successfully.'
+        return response
+
+    def create(self, request, *args, **kwargs):
+        thread = self._get_thread_or_404()
+
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        summary = serializer.save(thread=thread)
+
+        return api_response(
+            success=True,
+            message='Summary created successfully.',
+            data=self.get_serializer(summary).data,
+            status_code=status.HTTP_201_CREATED,
         )
