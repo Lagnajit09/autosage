@@ -1,17 +1,13 @@
-# ── autobot/Dockerfile — minimal scaffold (T02) ───────────────────────────
+# ── autobot/Dockerfile ──────────────────────────────────────────────
 #
-# This is a "just enough to start hello world" scaffold. T09 will rewrite it
-# with proper layering (separate dependency install layer), pinned versions
-# from requirements.txt (which is currently UTF-16 LE BOM-encoded and needs
-# re-encoding as UTF-8 before pip can read it), a non-root user, and any
-# LLM-related system deps (e.g. ca-certificates for outbound TLS to LLM APIs).
-#
-# Until T09: this installs FastAPI + uvicorn directly so the build doesn't
-# depend on the existing autobot/requirements.txt encoding.
+# Slim Python 3.12 base, works on both linux/amd64 (dev) and linux/arm64
+# (prod OCI). Layered so changes to source code don't bust the dependency
+# install cache. Non-root user. Bare-paths app — nginx strips the
+# /api/ai/ prefix on the way in (see nginx/autosage-dev.conf), so the
+# FastAPI app sees just /health/, /threads/, etc.
 
 FROM python:3.12-slim
 
-# Quieter pip + no .pyc files cluttering the image.
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
@@ -19,12 +15,29 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-RUN pip install \
-    fastapi==0.115.0 \
-    "uvicorn[standard]==0.30.6"
+# ── Dependency layer (cached when only code changes) ───────────────────
+COPY requirements.txt .
+RUN pip install -r requirements.txt
 
-COPY main.py ./
+# ── Source layer ───────────────────────────────────────────────────────
+# Explicit file list (not `COPY . .`) so the bind-mounted venv/ dir in
+# the dev tree never sneaks into the image.
+COPY main.py settings.py ./
+
+# ── Non-root user ──────────────────────────────────────────────────────
+RUN useradd --create-home --shell /bin/bash --uid 1000 autobot \
+    && chown -R autobot:autobot /app
+USER autobot
 
 EXPOSE 8030
 
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8030"]
+# --workers 2 to leave headroom for SSE chat: each streaming
+# response holds a worker for 10–60s; one worker + concurrent users
+# deadlocks. --proxy-headers + --forwarded-allow-ips * so X-Forwarded-*
+# from nginx are honored (matters for request.url.scheme behind TLS).
+CMD ["uvicorn", "main:app", \
+     "--host", "0.0.0.0", \
+     "--port", "8030", \
+     "--workers", "2", \
+     "--proxy-headers", \
+     "--forwarded-allow-ips", "*"]
