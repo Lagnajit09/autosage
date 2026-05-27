@@ -22,7 +22,7 @@ RUN pip install -r requirements.txt
 # ── Source layer ───────────────────────────────────────────────────────
 # Explicit file list (not `COPY . .`) so the bind-mounted venv/ dir in
 # the dev tree never sneaks into the image.
-COPY main.py settings.py ./
+COPY main.py settings.py auth.py ./
 
 # ── Non-root user ──────────────────────────────────────────────────────
 RUN useradd --create-home --shell /bin/bash --uid 1000 autobot \

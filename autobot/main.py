@@ -5,8 +5,9 @@ import time
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 
+from auth import AuthContext, get_verifier, install_log_redaction, require_auth
 from settings import get_settings
 
 settings = get_settings()
@@ -15,6 +16,13 @@ logging.basicConfig(
     level=getattr(logging, settings.LOG_LEVEL.upper(), logging.INFO),
     format="%(asctime)s %(levelname)s %(name)s %(message)s",
 )
+# Install the Bearer-token redactor immediately so even import-time logs
+# from httpx / urllib3 / pyjwt are scrubbed if they hit DEBUG.
+install_log_redaction()
+# httpx logs every request at INFO by default — noisy and could echo
+# the Authorization header on errors. Cap at WARNING.
+logging.getLogger("httpx").setLevel(logging.WARNING)
+
 logger = logging.getLogger(__name__)
 
 # Service start time, used by /health/ for uptime reporting.
@@ -24,6 +32,9 @@ SERVICE_STARTED_AT_WALL = datetime.now(timezone.utc)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Idempotent — module-level call already installed it, but if
+    # uvicorn's reload re-imports we re-attach to any new handlers.
+    install_log_redaction()
     logger.info(
         "Autobot %s starting (default_provider=%s, default_model=%s, "
         "django=%s, redis=%s)",
@@ -34,6 +45,8 @@ async def lifespan(app: FastAPI):
         settings.REDIS_URL,
     )
     yield
+    # Close the verifier's httpx client cleanly on shutdown.
+    await get_verifier().aclose()
     logger.info("Autobot shutting down")
 
 
@@ -48,7 +61,7 @@ app = FastAPI(
 
 @app.get("/health/")
 async def health():
-    """Public liveness probe.
+    """Public liveness probe — NO auth, intentionally.
 
     Reachable directly on the docker bridge at `http://autobot:8030/health/`
     and externally via nginx at `http://localhost:8080/api/ai/health/`
@@ -64,3 +77,15 @@ async def health():
         "started_at": SERVICE_STARTED_AT_WALL.isoformat(),
         "timestamp": datetime.now(timezone.utc).isoformat(),
     }
+
+
+@app.get("/whoami/")
+async def whoami(auth: AuthContext = Depends(require_auth)):
+    """Authenticated canary — confirms the Clerk JWT flow end-to-end.
+
+    Returns ONLY the user_sub (the Clerk sub claim). Doesn't echo back
+    the token, claims, or any header — minimizing accidental disclosure.
+    Every subsequent protected route (T11+) attaches the same
+    `Depends(require_auth)` to inherit this behavior.
+    """
+    return {"user_sub": auth.user_sub}
