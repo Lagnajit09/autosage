@@ -8,6 +8,9 @@ from datetime import datetime, timezone
 from fastapi import Depends, FastAPI
 
 from auth import AuthContext, get_verifier, install_log_redaction, require_auth
+from conversation.cache import close_cache
+from conversation.persistence import close_django_client
+from routers import proxy as proxy_router
 from settings import get_settings
 
 settings = get_settings()
@@ -45,8 +48,12 @@ async def lifespan(app: FastAPI):
         settings.REDIS_URL,
     )
     yield
-    # Close the verifier's httpx client cleanly on shutdown.
+    # Close all long-lived resources cleanly on shutdown. Each helper is
+    # idempotent — safe to call even if the resource was never created
+    # during this process's lifetime (no requests received).
     await get_verifier().aclose()
+    await close_django_client()
+    await close_cache()
     logger.info("Autobot shutting down")
 
 
@@ -57,6 +64,11 @@ app = FastAPI(
     root_path="/api/ai",
     lifespan=lifespan,
 )
+
+# ── Proxy routes (T11) ────────────────────────────────────────────────
+# /threads/, /threads/<id>/, /settings/ — thin forwards to Django's
+# /api/autobot/* internal API. No prefix — paths are mounted as-written.
+app.include_router(proxy_router.router)
 
 
 @app.get("/health/")
@@ -85,7 +97,7 @@ async def whoami(auth: AuthContext = Depends(require_auth)):
 
     Returns ONLY the user_sub (the Clerk sub claim). Doesn't echo back
     the token, claims, or any header — minimizing accidental disclosure.
-    Every subsequent protected route (T11+) attaches the same
+    Every subsequent protected route attaches the same
     `Depends(require_auth)` to inherit this behavior.
     """
     return {"user_sub": auth.user_sub}

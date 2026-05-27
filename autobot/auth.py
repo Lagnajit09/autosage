@@ -1,9 +1,9 @@
-"""Autobot auth (T10): Clerk JWKS verification + log redaction.
+"""Autobot auth: Clerk JWKS verification + log redaction.
 
 Architecture
 ────────────
 • Autobot does NOT create User rows. It verifies the Clerk JWT, extracts
-  `sub`, and (T11+) forwards the *original* JWT to Django when calling
+  `sub`, and forwards the *original* JWT to Django when calling
   internal APIs. Django's existing ClerkAuthMiddleware re-verifies and
   is the one place that runs `User.objects.update_or_create(username=sub)`.
   This keeps user-row provisioning in exactly one service.
@@ -28,7 +28,7 @@ Security choices that match Django's middleware (intentional parity)
 ────────────────────────────────────────────────────────────────────
 • Algorithm allow-list: RS256 only. No "none", no HS256-via-spoofed-kid.
 • `verify_aud=False`: Clerk's `aud` isn't reliably set; Django middleware
-  skips it too. If we tighten this here, also tighten it there.
+  skips it too.
 • 60s clock-skew leeway: identical to Django's setting.
 • Generic 401 on every verification failure: don't leak whether the
   token was malformed / expired / signed by an unknown key.
