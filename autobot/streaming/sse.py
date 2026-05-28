@@ -15,13 +15,18 @@ client.
 Event vocabulary used by the chat stream (T13+):
 
   • ``token``           — incremental text delta from the LLM.
+  • ``tool_call_start`` — the LLM has decided to invoke a tool. T14.
+                          Payload: ``{id, name, arguments}`` (arguments
+                          as a JSON-encoded string, ready for the
+                          frontend to JSON.parse or display verbatim).
+  • ``tool_result``     — the tool finished. T14.
+                          Payload: ``{id, name, result}`` where `result`
+                          is either the tool's data dict OR
+                          ``{"error": "..."}`` on failure.
   • ``done``            — final assistant message persisted by Django.
   • ``error``           — any failure after the stream has started
                           (Django down, LLM down, etc.); the HTTP
                           status is already 200 by the time we know.
-
-T14 will add ``tool_call_start`` and ``tool_result`` here when the
-tool-dispatch loop lands.
 
 Frontend contract: every event payload is a single compact JSON object.
 Clients never need to handle bare strings or multi-line `data:` blocks.
@@ -62,3 +67,27 @@ def sse_error(message: str, *, code: str | None = None) -> str:
     in the chat UI. The optional `code` lets the client distinguish
     transport vs provider vs storage failures."""
     return sse_event("error", {"message": message, "code": code})
+
+
+def sse_tool_call_start(call_id: str, name: str, arguments: str) -> str:
+    """Emitted just before dispatching a tool. `arguments` is the raw
+    JSON string the LLM produced (we don't re-parse it here — the
+    frontend either renders it verbatim as a "Working: ..." badge or
+    calls `JSON.parse` to display structured fields)."""
+    return sse_event("tool_call_start", {
+        "id": call_id,
+        "name": name,
+        "arguments": arguments,
+    })
+
+
+def sse_tool_result(call_id: str, name: str, result: Any) -> str:
+    """Emitted right after the tool finishes. `result` is the dict the
+    handler returned — either the tool's data OR ``{"error": "..."}``.
+    The chat router persists the same dict to Django as the content of
+    a ``role: "tool"`` message so the LLM sees it on the next round."""
+    return sse_event("tool_result", {
+        "id": call_id,
+        "name": name,
+        "result": result,
+    })

@@ -10,9 +10,15 @@ from fastapi import Depends, FastAPI
 from auth import AuthContext, get_verifier, install_log_redaction, require_auth
 from conversation.cache import close_cache
 from conversation.persistence import close_django_client
+from llm.tools import list_tool_names
 from routers import chat as chat_router
 from routers import proxy as proxy_router
 from settings import get_settings
+# Import for side effect — each tool module registers its tools into the
+# global registry on import. Without this line the LLM gets an empty
+# `tools=` payload and never calls anything. Must run before lifespan
+# logs the available tools.
+import tools as _tools  # noqa: F401
 
 settings = get_settings()
 
@@ -41,12 +47,13 @@ async def lifespan(app: FastAPI):
     install_log_redaction()
     logger.info(
         "Autobot %s starting (default_provider=%s, default_model=%s, "
-        "django=%s, redis=%s)",
+        "django=%s, redis=%s, tools=%s)",
         settings.version,
         settings.DEFAULT_PROVIDER,
         settings.DEFAULT_MODEL,
         settings.DJANGO_INTERNAL_URL,
         settings.REDIS_URL,
+        list_tool_names() or "(none registered)",
     )
     yield
     # Close all long-lived resources cleanly on shutdown. Each helper is

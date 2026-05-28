@@ -27,6 +27,7 @@ COPY conversation/ ./conversation/
 COPY llm/ ./llm/
 COPY routers/ ./routers/
 COPY streaming/ ./streaming/
+COPY tools/ ./tools/
 
 # ── Non-root user ──────────────────────────────────────────────────────
 RUN useradd --create-home --shell /bin/bash --uid 1000 autobot \

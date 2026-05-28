@@ -45,7 +45,15 @@ from auth import AuthContext, require_auth
 from conversation.persistence import DjangoUnavailable, get_django_client
 from llm.client import LLMError, acomplete, astream_complete, resolve_admin
 from llm.prompts import get_system_prompt
-from streaming.sse import sse_done, sse_error, sse_token
+from llm.tools import dispatch_tool, get_tool_schemas
+from settings import get_settings
+from streaming.sse import (
+    sse_done,
+    sse_error,
+    sse_token,
+    sse_tool_call_start,
+    sse_tool_result,
+)
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -436,82 +444,201 @@ async def post_message_stream(
             )
             return
 
-        # 2c. Stream the LLM call. Accumulate deltas so we can persist
-        #     the full assistant message after the stream finishes.
+        # 2c. Tool-call loop. Each iteration streams one LLM call; if
+        #     the model emits tool_calls, dispatch them, append the
+        #     results to the running conversation, and loop. Exit when
+        #     the model returns a normal text reply or we hit the cap.
         llm_messages = _build_llm_messages(thread, history_list, content)
-        accumulated = ""
-        final_payload: dict[str, Any] | None = None
-        try:
-            async for kind, payload in astream_complete(llm_messages, resolution):
-                if kind == "token":
-                    accumulated += payload
-                    yield sse_token(payload)
-                elif kind == "done":
-                    final_payload = payload
-        except LLMError as e:
-            logger.error(
-                "LLM stream failed (provider=%s, model=%s): %s",
-                resolution.provider, resolution.model_name, e,
-            )
-            yield sse_error(
-                "The LLM provider is temporarily unavailable.",
-                code="llm_unavailable",
-            )
-            return
+        tool_schemas = get_tool_schemas()
+        max_rounds = get_settings().AUTOBOT_MAX_TOOL_ROUNDS
 
-        # Defensive: if the generator didn't emit `done` (shouldn't
-        # happen, but providers can misbehave), synthesize the payload
-        # from what we accumulated so persistence still records the turn.
-        if final_payload is None:
-            final_payload = {
-                "content": accumulated,
-                "provider": resolution.provider,
-                "model_name": resolution.model_name,
-                "prompt_tokens": 0,
-                "completion_tokens": 0,
-                "total_tokens": 0,
+        for round_num in range(1, max_rounds + 1):
+            accumulated = ""
+            final_payload: dict[str, Any] | None = None
+
+            try:
+                async for kind, payload in astream_complete(
+                    llm_messages, resolution, tools=tool_schemas,
+                ):
+                    if kind == "token":
+                        accumulated += payload
+                        yield sse_token(payload)
+                    elif kind == "done":
+                        final_payload = payload
+            except LLMError as e:
+                logger.error(
+                    "LLM stream failed (round=%d, provider=%s, model=%s): %s",
+                    round_num, resolution.provider, resolution.model_name, e,
+                )
+                yield sse_error(
+                    "The LLM provider is temporarily unavailable.",
+                    code="llm_unavailable",
+                )
+                return
+
+            # Defensive backstop — generator should always yield "done".
+            if final_payload is None:
+                final_payload = {
+                    "content": accumulated,
+                    "tool_calls": [],
+                    "provider": resolution.provider,
+                    "model_name": resolution.model_name,
+                    "prompt_tokens": 0,
+                    "completion_tokens": 0,
+                    "total_tokens": 0,
+                }
+            tool_calls = final_payload.get("tool_calls") or []
+
+            # ── Branch A: no tool calls → this is the final answer ──
+            if not tool_calls:
+                assistant_payload: dict[str, Any] = {
+                    "role": "assistant",
+                    "content": final_payload["content"],
+                    "content_type": "text/markdown",
+                    "provider": final_payload["provider"],
+                    "model_name": final_payload["model_name"],
+                    "prompt_tokens": final_payload["prompt_tokens"],
+                    "completion_tokens": final_payload["completion_tokens"],
+                    "total_tokens": final_payload["total_tokens"],
+                }
+                try:
+                    ps, persisted_env = await client.request(
+                        method="POST",
+                        path=f"/api/autobot/threads/{thread_id}/messages/",
+                        jwt=auth.raw_jwt,
+                        json_body=assistant_payload,
+                    )
+                except DjangoUnavailable as e:
+                    logger.error(
+                        "Storage unreachable persisting final assistant: %s", e,
+                    )
+                    yield sse_error(
+                        "Storage service temporarily unavailable.",
+                        code="storage_unavailable",
+                    )
+                    return
+                if ps not in (200, 201):
+                    yield sse_error(
+                        "Failed to persist assistant message.",
+                        code=f"assistant_persist_status_{ps}",
+                    )
+                    return
+                yield sse_done((persisted_env or {}).get("data") or {})
+                return
+
+            # ── Branch B: model wants to call tools ─────────────────
+            # Persist this round's assistant turn (content + tool_calls)
+            # so future chat turns see the same history the LLM saw.
+            assistant_payload = {
+                "role": "assistant",
+                "content": final_payload["content"],
+                "content_type": "text/markdown",
+                "provider": final_payload["provider"],
+                "model_name": final_payload["model_name"],
+                "prompt_tokens": final_payload["prompt_tokens"],
+                "completion_tokens": final_payload["completion_tokens"],
+                "total_tokens": final_payload["total_tokens"],
+                "tool_calls": tool_calls,
             }
+            try:
+                ps, _ = await client.request(
+                    method="POST",
+                    path=f"/api/autobot/threads/{thread_id}/messages/",
+                    jwt=auth.raw_jwt,
+                    json_body=assistant_payload,
+                )
+            except DjangoUnavailable as e:
+                logger.error(
+                    "Storage unreachable persisting intermediate assistant: %s",
+                    e,
+                )
+                yield sse_error(
+                    "Storage service temporarily unavailable.",
+                    code="storage_unavailable",
+                )
+                return
+            if ps not in (200, 201):
+                yield sse_error(
+                    "Failed to persist assistant tool-call message.",
+                    code=f"assistant_persist_status_{ps}",
+                )
+                return
 
-        # 2d. Persist the assistant reply. The `final_payload["content"]`
-        #     is authoritative (the provider's view of what was sent);
-        #     the running `accumulated` is only there as a safety net.
-        assistant_payload: dict[str, Any] = {
-            "role": "assistant",
-            "content": final_payload["content"],
-            "content_type": "text/markdown",
-            "provider": final_payload["provider"],
-            "model_name": final_payload["model_name"],
-            "prompt_tokens": final_payload["prompt_tokens"],
-            "completion_tokens": final_payload["completion_tokens"],
-            "total_tokens": final_payload["total_tokens"],
-        }
-        try:
-            ps, persisted_env = await client.request(
-                method="POST",
-                path=f"/api/autobot/threads/{thread_id}/messages/",
-                jwt=auth.raw_jwt,
-                json_body=assistant_payload,
-            )
-        except DjangoUnavailable as e:
-            logger.error(
-                "Storage unreachable during streaming assistant persist: %s", e,
-            )
-            yield sse_error(
-                "Storage service temporarily unavailable.",
-                code="storage_unavailable",
-            )
-            return
+            # Extend the running conversation with the assistant's
+            # tool-call turn so the LLM sees it next round.
+            llm_messages.append({
+                "role": "assistant",
+                "content": final_payload["content"] or "",
+                "tool_calls": tool_calls,
+            })
 
-        if ps not in (200, 201):
-            yield sse_error(
-                "Failed to persist assistant message.",
-                code=f"assistant_persist_status_{ps}",
-            )
-            return
+            # Dispatch each tool serially. Parallel dispatch is possible
+            # but order matters for deterministic LLM behavior, and the
+            # round trip to Django dominates wall-clock anyway.
+            for tc in tool_calls:
+                tc_id = tc.get("id") or ""
+                fn_name = (tc.get("function") or {}).get("name") or ""
+                fn_args = (tc.get("function") or {}).get("arguments") or ""
 
-        # Final frame: the persisted message envelope's `data` dict so
-        # the client has the row id, exact stored content, and tokens.
-        yield sse_done((persisted_env or {}).get("data") or {})
+                yield sse_tool_call_start(tc_id, fn_name, fn_args)
+                result = await dispatch_tool(fn_name, fn_args, auth.raw_jwt)
+                yield sse_tool_result(tc_id, fn_name, result)
+
+                # Serialize the result as the tool message's content.
+                # The LLM sees a JSON string; `default=str` handles
+                # stray datetime/UUID values from Django envelopes.
+                result_content = _json.dumps(result, default=str)
+                tool_msg_payload = {
+                    "role": "tool",
+                    "content": result_content,
+                    "content_type": "text/plain",
+                    "tool_call_id": tc_id,
+                }
+                try:
+                    ts2, _ = await client.request(
+                        method="POST",
+                        path=f"/api/autobot/threads/{thread_id}/messages/",
+                        jwt=auth.raw_jwt,
+                        json_body=tool_msg_payload,
+                    )
+                except DjangoUnavailable as e:
+                    logger.error(
+                        "Storage unreachable persisting tool message: %s", e,
+                    )
+                    yield sse_error(
+                        "Storage service temporarily unavailable.",
+                        code="storage_unavailable",
+                    )
+                    return
+                if ts2 not in (200, 201):
+                    yield sse_error(
+                        "Failed to persist tool-result message.",
+                        code=f"tool_persist_status_{ts2}",
+                    )
+                    return
+
+                # Feed the tool result back into the LLM's context.
+                llm_messages.append({
+                    "role": "tool",
+                    "tool_call_id": tc_id,
+                    "content": result_content,
+                })
+            # Loop again — the LLM will react to the tool results in
+            # the next iteration.
+
+        # Hit max rounds without a final text reply. The user's chat is
+        # in a consistent state (every assistant + tool turn is
+        # persisted), but the model didn't converge. Surface as an
+        # error frame so the client can offer a retry.
+        logger.warning(
+            "Tool-call loop hit max rounds (%d) without a final reply",
+            max_rounds,
+        )
+        yield sse_error(
+            f"The assistant ran {max_rounds} tool rounds without "
+            "settling on a final answer. Try rephrasing or asking again.",
+            code="max_tool_rounds",
+        )
 
     return StreamingResponse(
         event_stream(),

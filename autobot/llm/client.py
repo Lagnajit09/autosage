@@ -179,42 +179,69 @@ async def astream_complete(
     resolution: LLMResolution,
     *,
     temperature: float = 0.7,
+    tools: list[dict[str, Any]] | None = None,
 ) -> AsyncIterator[tuple[str, Any]]:
-    """Stream the LLM's reply chunk-by-chunk.
+    """Stream the LLM's reply chunk-by-chunk, with optional tool support.
 
     Yields ``(kind, payload)`` tuples:
 
       • ``("token", str)`` — a text delta as it arrives. Concatenating
         all deltas in order produces the full assistant reply.
-      • ``("done", dict)`` — emitted exactly once at the end with the
-        same shape as `acomplete()`'s return value:
-          ``{content, provider, model_name, prompt_tokens, completion_tokens, total_tokens}``
-        The caller persists this dict; the running accumulation of
-        `content` lets the caller render to the browser even if the
-        provider doesn't echo it back on the final chunk.
+      • ``("done", dict)`` — emitted exactly once at the end:
+          ``{
+              "content":           str,    # concatenated content
+              "tool_calls":        list,   # may be empty
+              "provider":          str,
+              "model_name":        str,
+              "prompt_tokens":     int,
+              "completion_tokens": int,
+              "total_tokens":      int,
+          }``
+        `tool_calls` is the assembled list of function calls the model
+        wants invoked, normalized to OpenAI's tool-call shape:
+          ``[{"id": "call_...", "type": "function",
+              "function": {"name": "...", "arguments": "<json-string>"}}]``
+        Empty list means the model returned a normal text reply and the
+        chat loop should exit.
 
-    `stream_options={"include_usage": True}` asks the provider to attach
-    usage on the LAST chunk. Gemini, Groq (OpenAI-compat), and OpenAI
-    all support this; providers that ignore the flag will give us
-    `prompt_tokens=0` etc., which the caller still persists harmlessly.
+    Provider quirks:
+      • Some providers stream tool-call arguments piece-by-piece across
+        chunks. We accumulate by `index` (the field every chunk carries)
+        and concatenate strings. The final dict is what OpenAI's
+        non-streaming `acompletion()` would have returned in one shot.
+      • `stream_options={"include_usage": True}` asks for usage on the
+        last chunk. Providers that ignore the flag give us 0s — the
+        caller still persists harmlessly.
 
     Raises:
       LLMError on any provider-side or transport failure. If the stream
-      breaks mid-flight, this propagates — the caller should `yield`
-      an `event: error` SSE frame to the browser.
+      breaks mid-flight, the caller should `yield` an `event: error`
+      SSE frame.
     """
     full_content: list[str] = []
     usage_obj: Any = None
+    # tool-call accumulator, keyed by the provider's `index` field
+    # because `id` may arrive on a later chunk than the args delta.
+    tool_calls_by_index: dict[int, dict[str, Any]] = {}
+
+    completion_kwargs: dict[str, Any] = {
+        "model": resolution.model,
+        "messages": messages,
+        "api_key": resolution.api_key,
+        "temperature": temperature,
+        "stream": True,
+        "stream_options": {"include_usage": True},
+    }
+    if tools:
+        completion_kwargs["tools"] = tools
+        # `auto` lets the model choose between text reply and tool call
+        # turn-by-turn. Forcing "required" would make even simple
+        # questions trigger a tool. Default is provider-dependent, so
+        # set it explicitly for parity.
+        completion_kwargs["tool_choice"] = "auto"
 
     try:
-        stream = await litellm.acompletion(
-            model=resolution.model,
-            messages=messages,
-            api_key=resolution.api_key,
-            temperature=temperature,
-            stream=True,
-            stream_options={"include_usage": True},
-        )
+        stream = await litellm.acompletion(**completion_kwargs)
     except Exception as e:
         logger.exception(
             "LLM stream open failed: provider=%s model=%s err_type=%s",
@@ -224,16 +251,46 @@ async def astream_complete(
 
     try:
         async for chunk in stream:
-            # Per-chunk content delta. The final usage chunk usually
-            # has no `choices`, so guard with try/except.
+            # Per-chunk delta. Usage-only chunks usually have no
+            # `choices`; guard with try/except so they don't blow up.
             try:
                 delta = chunk.choices[0].delta
-                piece = getattr(delta, "content", None)
             except (AttributeError, IndexError, TypeError):
-                piece = None
-            if piece:
-                full_content.append(piece)
-                yield ("token", piece)
+                delta = None
+
+            if delta is not None:
+                piece = getattr(delta, "content", None)
+                if piece:
+                    full_content.append(piece)
+                    yield ("token", piece)
+
+                # Streamed tool-call fragments. Each fragment looks like:
+                #   { index: 0, id: "call_abc", type: "function",
+                #     function: { name: "create_script", arguments: "{\"" } }
+                # Subsequent fragments at the same `index` carry more
+                # `arguments` text to append.
+                delta_tool_calls = getattr(delta, "tool_calls", None) or []
+                for tc in delta_tool_calls:
+                    idx = getattr(tc, "index", None)
+                    if idx is None:
+                        # Provider didn't supply an index — fall back
+                        # to len() so we still accumulate something.
+                        idx = len(tool_calls_by_index)
+                    entry = tool_calls_by_index.setdefault(idx, {
+                        "id": None,
+                        "type": "function",
+                        "function": {"name": "", "arguments": ""},
+                    })
+                    if getattr(tc, "id", None):
+                        entry["id"] = tc.id
+                    fn = getattr(tc, "function", None)
+                    if fn is not None:
+                        name_piece = getattr(fn, "name", None) or ""
+                        args_piece = getattr(fn, "arguments", None) or ""
+                        if name_piece:
+                            entry["function"]["name"] += name_piece
+                        if args_piece:
+                            entry["function"]["arguments"] += args_piece
 
             # Usage rides on the last chunk when include_usage=True.
             chunk_usage = getattr(chunk, "usage", None)
@@ -246,10 +303,20 @@ async def astream_complete(
         )
         raise LLMError(str(e)) from e
 
+    # Order tool calls by their original index — keeps the OpenAI
+    # tool-call array order stable for downstream consumers (and the
+    # frontend, when it renders the inline "Working: ..." badges).
+    tool_calls_list = [
+        tool_calls_by_index[i]
+        for i in sorted(tool_calls_by_index.keys())
+        if tool_calls_by_index[i]["function"]["name"]  # drop empties
+    ]
+
     yield (
         "done",
         {
             "content": "".join(full_content),
+            "tool_calls": tool_calls_list,
             "provider": resolution.provider,
             "model_name": resolution.model_name,
             "prompt_tokens": int(getattr(usage_obj, "prompt_tokens", 0) or 0),
