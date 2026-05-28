@@ -56,8 +56,12 @@ class AutobotSettings(BaseSettings):
     DEFAULT_MODEL: str = "gemini/gemini-1.5-flash"
 
     # ── Behavior tuning (T13+) ──────────────────────────────────────────
-    # Hard cap on tool-call rounds per user turn. Bounds runaway loops.
-    AUTOBOT_MAX_TOOL_ROUNDS: int = 6
+    # Hard cap on tool-call rounds per user turn. Bounds runaway loops
+    # without choking realistic multi-step workflow scenarios — e.g.
+    # "create a workflow with 3 scripts" can take 5–6 rounds even when
+    # the LLM batches independent calls, and 8–10 if it goes serial.
+    # 10 gives generous slack while still bailing on genuine misbehavior.
+    AUTOBOT_MAX_TOOL_ROUNDS: int = 10
     # Redis TTL for hot conversation context (seconds). Refreshed on access.
     AUTOBOT_CTX_TTL_SECONDS: int = 7200
     # Summarization trigger as a fraction of the model's context window.

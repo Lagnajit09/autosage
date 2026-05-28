@@ -136,6 +136,20 @@ def _build_llm_messages(
     the history slice (we list AFTER persisting); the dedup guard at the
     end skips re-appending it.
 
+    Tool-call history reconstruction
+    ────────────────────────────────
+    When the previous turn used tools, the persisted Django messages
+    look like:
+      • assistant — may have empty `content` but carries a non-empty
+                    `tool_calls` array describing which tools to invoke.
+      • tool      — `tool_call_id` references the matching entry in the
+                    preceding assistant's `tool_calls`. `content` is the
+                    JSON-encoded tool result.
+    We MUST forward `tool_calls` and `tool_call_id` here. Without them,
+    LiteLLM's Gemini transformer (and OpenAI's tool-protocol validator)
+    sees an orphan `role: "tool"` and aborts with
+    "Missing corresponding tool call for tool response message".
+
     System-prompt composition: `get_system_prompt` in `llm/prompts.py`
     owns the base Autosage grounding and APPENDS the per-thread
     `system_prompt_override` under a `## User customizations` heading.
@@ -150,18 +164,62 @@ def _build_llm_messages(
     out: list[dict[str, Any]] = [
         {"role": "system", "content": system_prompt},
     ]
+    # Tracks tool_call ids announced by assistant messages but not yet
+    # consumed by a tool-result message. Used to drop orphan `role:
+    # "tool"` entries (defensive — should not happen with correct
+    # persistence, but a stray orphan would crash the LLM call).
+    pending_tool_call_ids: set[str] = set()
+
     for m in history:
         role = m.get("role")
-        content = m.get("content")
-        if role in _LLM_ROLES and isinstance(content, str) and content:
-            out.append({"role": role, "content": content})
+        if role not in _LLM_ROLES:
+            continue
+        content = m.get("content") or ""
+
+        if role == "assistant":
+            raw_tool_calls = m.get("tool_calls")
+            tool_calls = (
+                raw_tool_calls if isinstance(raw_tool_calls, list) else []
+            )
+            # Drop empty assistant turns (no text, no tool_calls).
+            if not content and not tool_calls:
+                continue
+            entry: dict[str, Any] = {"role": "assistant", "content": content}
+            if tool_calls:
+                entry["tool_calls"] = tool_calls
+                for tc in tool_calls:
+                    if isinstance(tc, dict) and tc.get("id"):
+                        pending_tool_call_ids.add(tc["id"])
+            out.append(entry)
+
+        elif role == "tool":
+            tool_call_id = m.get("tool_call_id") or ""
+            if not tool_call_id or tool_call_id not in pending_tool_call_ids:
+                # Orphan tool message — no preceding assistant tool_call
+                # to bind it to. Silently skip; including it would 400
+                # the next LLM call.
+                logger.warning(
+                    "Skipping orphan tool message (tool_call_id=%r)",
+                    tool_call_id,
+                )
+                continue
+            pending_tool_call_ids.discard(tool_call_id)
+            out.append({
+                "role": "tool",
+                "tool_call_id": tool_call_id,
+                "content": content,
+            })
+
+        else:  # user / system
+            if content:
+                out.append({"role": role, "content": content})
 
     # If history already ends with the new user turn (because we listed
     # AFTER persisting the user message), don't duplicate it.
     if not (
         out
-        and out[-1]["role"] == "user"
-        and out[-1]["content"] == new_user_content
+        and out[-1].get("role") == "user"
+        and out[-1].get("content") == new_user_content
     ):
         out.append({"role": "user", "content": new_user_content})
     return out
