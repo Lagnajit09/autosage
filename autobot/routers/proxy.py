@@ -1,4 +1,4 @@
-"""Proxy router (T11): forwards /threads, /settings to Django.
+"""Proxy router: forwards /threads, /settings to Django.
 
 Every endpoint here is a thin pass-through:
   1. Require auth (`Depends(require_auth)`) — returns 401 on missing/invalid JWT.
@@ -8,7 +8,7 @@ Every endpoint here is a thin pass-through:
 
 Why proxy at all instead of letting the frontend hit Django directly?
 ─────────────────────────────────────────────────────────────────────
-The chat endpoint (T12+) needs to load the thread state, call the LLM,
+The chat endpoint needs to load the thread state, call the LLM,
 persist new messages, update cache, and stream tokens back — all in a
 single autobot request. Having a clean persistence layer inside autobot
 turns that loop into one coherent async function rather than an awkward

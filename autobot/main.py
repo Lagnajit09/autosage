@@ -10,6 +10,7 @@ from fastapi import Depends, FastAPI
 from auth import AuthContext, get_verifier, install_log_redaction, require_auth
 from conversation.cache import close_cache
 from conversation.persistence import close_django_client
+from routers import chat as chat_router
 from routers import proxy as proxy_router
 from settings import get_settings
 
@@ -69,6 +70,12 @@ app = FastAPI(
 # /threads/, /threads/<id>/, /settings/ — thin forwards to Django's
 # /api/autobot/* internal API. No prefix — paths are mounted as-written.
 app.include_router(proxy_router.router)
+
+# ── Chat route (T12) ──────────────────────────────────────────────────
+# POST /threads/<id>/messages/ — non-streaming LLM turn. T13 will add
+# the SSE streaming variant; this endpoint stays as the internal /
+# fallback path.
+app.include_router(chat_router.router)
 
 
 @app.get("/health/")

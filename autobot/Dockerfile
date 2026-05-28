@@ -24,6 +24,7 @@ RUN pip install -r requirements.txt
 # the dev tree never sneaks into the image.
 COPY main.py settings.py auth.py ./
 COPY conversation/ ./conversation/
+COPY llm/ ./llm/
 COPY routers/ ./routers/
 
 # ── Non-root user ──────────────────────────────────────────────────────
