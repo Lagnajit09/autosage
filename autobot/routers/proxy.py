@@ -159,6 +159,30 @@ async def delete_thread(
     )
 
 
+# ── Messages (T13: read-only proxy) ──────────────────────────────────
+# Writes to /messages/ happen via the chat endpoints (routers/chat.py)
+# because each write is interleaved with an LLM call. This GET-only
+# proxy exists so the frontend can load existing history on thread-open
+# before subscribing to the live stream.
+
+
+@router.get("/threads/{thread_id}/messages/")
+async def list_messages(
+    thread_id: str,
+    request: Request,
+    auth: AuthContext = Depends(require_auth),
+):
+    """List messages in a thread (paginated).
+
+    Forwards query params (`page`, `page_size`) to Django, which scopes
+    by user via `thread__user=request.user` and 404s on cross-user IDs.
+    """
+    return await _proxy(
+        "GET", f"/api/autobot/threads/{thread_id}/messages/", auth,
+        params=dict(request.query_params),
+    )
+
+
 # ── Settings ─────────────────────────────────────────────────────────
 
 

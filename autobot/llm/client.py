@@ -17,6 +17,7 @@ No streaming, no tools yet. T13 adds streaming; T14 adds tool dispatch.
 from __future__ import annotations
 
 import logging
+from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from typing import Any
 
@@ -171,3 +172,90 @@ async def acomplete(
         "completion_tokens": int(getattr(usage, "completion_tokens", 0) or 0),
         "total_tokens": int(getattr(usage, "total_tokens", 0) or 0),
     }
+
+
+async def astream_complete(
+    messages: list[dict[str, Any]],
+    resolution: LLMResolution,
+    *,
+    temperature: float = 0.7,
+) -> AsyncIterator[tuple[str, Any]]:
+    """Stream the LLM's reply chunk-by-chunk.
+
+    Yields ``(kind, payload)`` tuples:
+
+      • ``("token", str)`` — a text delta as it arrives. Concatenating
+        all deltas in order produces the full assistant reply.
+      • ``("done", dict)`` — emitted exactly once at the end with the
+        same shape as `acomplete()`'s return value:
+          ``{content, provider, model_name, prompt_tokens, completion_tokens, total_tokens}``
+        The caller persists this dict; the running accumulation of
+        `content` lets the caller render to the browser even if the
+        provider doesn't echo it back on the final chunk.
+
+    `stream_options={"include_usage": True}` asks the provider to attach
+    usage on the LAST chunk. Gemini, Groq (OpenAI-compat), and OpenAI
+    all support this; providers that ignore the flag will give us
+    `prompt_tokens=0` etc., which the caller still persists harmlessly.
+
+    Raises:
+      LLMError on any provider-side or transport failure. If the stream
+      breaks mid-flight, this propagates — the caller should `yield`
+      an `event: error` SSE frame to the browser.
+    """
+    full_content: list[str] = []
+    usage_obj: Any = None
+
+    try:
+        stream = await litellm.acompletion(
+            model=resolution.model,
+            messages=messages,
+            api_key=resolution.api_key,
+            temperature=temperature,
+            stream=True,
+            stream_options={"include_usage": True},
+        )
+    except Exception as e:
+        logger.exception(
+            "LLM stream open failed: provider=%s model=%s err_type=%s",
+            resolution.provider, resolution.model_name, type(e).__name__,
+        )
+        raise LLMError(str(e)) from e
+
+    try:
+        async for chunk in stream:
+            # Per-chunk content delta. The final usage chunk usually
+            # has no `choices`, so guard with try/except.
+            try:
+                delta = chunk.choices[0].delta
+                piece = getattr(delta, "content", None)
+            except (AttributeError, IndexError, TypeError):
+                piece = None
+            if piece:
+                full_content.append(piece)
+                yield ("token", piece)
+
+            # Usage rides on the last chunk when include_usage=True.
+            chunk_usage = getattr(chunk, "usage", None)
+            if chunk_usage is not None:
+                usage_obj = chunk_usage
+    except Exception as e:
+        logger.exception(
+            "LLM stream broken mid-flight: provider=%s model=%s err_type=%s",
+            resolution.provider, resolution.model_name, type(e).__name__,
+        )
+        raise LLMError(str(e)) from e
+
+    yield (
+        "done",
+        {
+            "content": "".join(full_content),
+            "provider": resolution.provider,
+            "model_name": resolution.model_name,
+            "prompt_tokens": int(getattr(usage_obj, "prompt_tokens", 0) or 0),
+            "completion_tokens": int(
+                getattr(usage_obj, "completion_tokens", 0) or 0,
+            ),
+            "total_tokens": int(getattr(usage_obj, "total_tokens", 0) or 0),
+        },
+    )

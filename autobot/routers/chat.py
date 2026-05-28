@@ -39,11 +39,13 @@ import logging
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 
 from auth import AuthContext, require_auth
 from conversation.persistence import DjangoUnavailable, get_django_client
-from llm.client import LLMError, acomplete, resolve_admin
+from llm.client import LLMError, acomplete, astream_complete, resolve_admin
+from llm.prompts import get_system_prompt
+from streaming.sse import sse_done, sse_error, sse_token
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -59,13 +61,9 @@ _HISTORY_PAGE_SIZE = 20
 # the model layer, so this is belt-and-suspenders).
 _LLM_ROLES = {"user", "assistant", "system", "tool"}
 
-# Default system prompt. Moves to llm/prompts.py in T14 alongside tool
-# guidance. Per-thread override on Thread.system_prompt_override wins.
-_DEFAULT_SYSTEM_PROMPT = (
-    "You are Autobot, the AI assistant inside the Autosage automation "
-    "platform. Be concise, accurate, and helpful. When you don't know "
-    "something, say so plainly rather than guessing."
-)
+# Base system prompt lives in `llm/prompts.py` (single source of truth
+# for Autobot's persona + Autosage domain grounding). The per-thread
+# override composition is handled by `get_system_prompt(user_customizations=...)`.
 
 
 def _envelope(
@@ -130,16 +128,16 @@ def _build_llm_messages(
     the history slice (we list AFTER persisting); the dedup guard at the
     end skips re-appending it.
 
-    System-prompt composition: the per-thread `system_prompt_override`
-    is APPENDED to the base prompt under a `## User customizations`
-    heading. It never replaces the base — losing the Autosage grounding
+    System-prompt composition: `get_system_prompt` in `llm/prompts.py`
+    owns the base Autosage grounding and APPENDS the per-thread
+    `system_prompt_override` under a `## User customizations` heading.
+    The override never replaces the base — losing the Autosage grounding
     would let the LLM hallucinate workflow shapes, script templates, or
     trigger semantics.
     """
-    system_prompt = _DEFAULT_SYSTEM_PROMPT
-    override = (thread.get("system_prompt_override") or "").strip()
-    if override:
-        system_prompt = f"{system_prompt}\n\n## User customizations\n{override}"
+    system_prompt = get_system_prompt(
+        user_customizations=thread.get("system_prompt_override") or "",
+    )
 
     out: list[dict[str, Any]] = [
         {"role": "system", "content": system_prompt},
@@ -315,3 +313,214 @@ async def post_message(
 
     # Pass Django's envelope + status through verbatim.
     return JSONResponse(content=assistant_env, status_code=s)
+
+
+# ── Streaming endpoint (T13) ──────────────────────────────────────────
+
+
+@router.post("/threads/{thread_id}/messages/stream/")
+async def post_message_stream(
+    thread_id: str,
+    request: Request,
+    auth: AuthContext = Depends(require_auth),
+):
+    """Streaming chat turn via Server-Sent Events.
+
+    Request body: ``{"content": str, "content_type"?: str, "client_id"?: str}``
+    Response: ``text/event-stream`` with the following event sequence:
+
+      • Zero or more ``event: token`` frames with ``{"content": "<delta>"}``.
+      • Exactly one terminal frame, either:
+            ``event: done``   with the persisted assistant message dict
+            ``event: error``  with ``{"message": "...", "code": "..."}``
+
+    The flow mirrors the non-streaming endpoint, with one important
+    difference: the user-message POST happens BEFORE we start streaming,
+    so any 4xx (404 unknown thread, 401 expired JWT, 422 validation)
+    surfaces as a normal HTTP error code with a JSON body. Once we
+    return the StreamingResponse, the HTTP status is committed to 200
+    and runtime failures can only be reported as ``event: error``
+    frames — which is how SSE clients are expected to handle them.
+
+    Auth note: the upfront `POST /messages/` is the per-user check.
+    Django's `_get_thread_or_404` rejects cross-user thread IDs with a
+    plain 404; we surface that verbatim before any streaming begins.
+    """
+    body = await _read_message_body(request)
+    content: str = body["content"]
+    content_type: str = body.get("content_type") or "text/plain"
+    client_id: str | None = body.get("client_id")
+
+    client = get_django_client()
+
+    # 1. Persist the user message. Also the auth check (see docstring).
+    #    Done OUTSIDE the streaming generator so we can return a normal
+    #    HTTP error code on failure.
+    user_payload: dict[str, Any] = {
+        "role": "user",
+        "content": content,
+        "content_type": content_type,
+    }
+    if client_id:
+        user_payload["client_id"] = client_id
+    try:
+        s, user_env = await client.request(
+            method="POST",
+            path=f"/api/autobot/threads/{thread_id}/messages/",
+            jwt=auth.raw_jwt,
+            json_body=user_payload,
+        )
+    except DjangoUnavailable as e:
+        logger.error(
+            "Storage unreachable during streaming user-message persist: %s", e,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Storage service temporarily unavailable.",
+        ) from e
+    if s not in (200, 201):
+        return JSONResponse(content=user_env, status_code=s)
+
+    # 2. Switch to streaming. From here on, any failure surfaces as an
+    #    `event: error` frame on the already-open 200 response.
+    async def event_stream():
+        # 2a. Fetch thread + history in parallel (same optimization as
+        #     the non-streaming path).
+        try:
+            (ts, te), (hs, he) = await asyncio.gather(
+                client.request(
+                    method="GET",
+                    path=f"/api/autobot/threads/{thread_id}/",
+                    jwt=auth.raw_jwt,
+                ),
+                client.request(
+                    method="GET",
+                    path=f"/api/autobot/threads/{thread_id}/messages/",
+                    jwt=auth.raw_jwt,
+                    params={"page": "1", "page_size": str(_HISTORY_PAGE_SIZE)},
+                ),
+            )
+        except DjangoUnavailable as e:
+            logger.error(
+                "Storage unreachable during streaming thread+history: %s", e,
+            )
+            yield sse_error(
+                "Storage service temporarily unavailable.",
+                code="storage_unavailable",
+            )
+            return
+        if ts != 200:
+            yield sse_error(
+                "Failed to load thread.", code=f"thread_status_{ts}",
+            )
+            return
+        if hs != 200:
+            yield sse_error(
+                "Failed to load message history.", code=f"history_status_{hs}",
+            )
+            return
+        thread = (te or {}).get("data") or {}
+        history_data = (he or {}).get("data") or {}
+        history_list = (
+            history_data.get("messages", [])
+            if isinstance(history_data, dict) else []
+        )
+
+        # 2b. Resolve provider.
+        try:
+            resolution = resolve_admin()
+        except LLMError as e:
+            logger.error("LLM resolution failed during stream: %s", e)
+            yield sse_error(
+                "LLM provider is not configured.", code="llm_unconfigured",
+            )
+            return
+
+        # 2c. Stream the LLM call. Accumulate deltas so we can persist
+        #     the full assistant message after the stream finishes.
+        llm_messages = _build_llm_messages(thread, history_list, content)
+        accumulated = ""
+        final_payload: dict[str, Any] | None = None
+        try:
+            async for kind, payload in astream_complete(llm_messages, resolution):
+                if kind == "token":
+                    accumulated += payload
+                    yield sse_token(payload)
+                elif kind == "done":
+                    final_payload = payload
+        except LLMError as e:
+            logger.error(
+                "LLM stream failed (provider=%s, model=%s): %s",
+                resolution.provider, resolution.model_name, e,
+            )
+            yield sse_error(
+                "The LLM provider is temporarily unavailable.",
+                code="llm_unavailable",
+            )
+            return
+
+        # Defensive: if the generator didn't emit `done` (shouldn't
+        # happen, but providers can misbehave), synthesize the payload
+        # from what we accumulated so persistence still records the turn.
+        if final_payload is None:
+            final_payload = {
+                "content": accumulated,
+                "provider": resolution.provider,
+                "model_name": resolution.model_name,
+                "prompt_tokens": 0,
+                "completion_tokens": 0,
+                "total_tokens": 0,
+            }
+
+        # 2d. Persist the assistant reply. The `final_payload["content"]`
+        #     is authoritative (the provider's view of what was sent);
+        #     the running `accumulated` is only there as a safety net.
+        assistant_payload: dict[str, Any] = {
+            "role": "assistant",
+            "content": final_payload["content"],
+            "content_type": "text/markdown",
+            "provider": final_payload["provider"],
+            "model_name": final_payload["model_name"],
+            "prompt_tokens": final_payload["prompt_tokens"],
+            "completion_tokens": final_payload["completion_tokens"],
+            "total_tokens": final_payload["total_tokens"],
+        }
+        try:
+            ps, persisted_env = await client.request(
+                method="POST",
+                path=f"/api/autobot/threads/{thread_id}/messages/",
+                jwt=auth.raw_jwt,
+                json_body=assistant_payload,
+            )
+        except DjangoUnavailable as e:
+            logger.error(
+                "Storage unreachable during streaming assistant persist: %s", e,
+            )
+            yield sse_error(
+                "Storage service temporarily unavailable.",
+                code="storage_unavailable",
+            )
+            return
+
+        if ps not in (200, 201):
+            yield sse_error(
+                "Failed to persist assistant message.",
+                code=f"assistant_persist_status_{ps}",
+            )
+            return
+
+        # Final frame: the persisted message envelope's `data` dict so
+        # the client has the row id, exact stored content, and tokens.
+        yield sse_done((persisted_env or {}).get("data") or {})
+
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={
+            # `no-cache` keeps intermediaries from caching incomplete
+            # streams; `X-Accel-Buffering: no` belt-and-suspenders the
+            # nginx `proxy_buffering off` directive already set on /api/ai/.
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+        },
+    )
