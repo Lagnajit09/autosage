@@ -3,18 +3,28 @@
 Flow for a single user turn (no tools, no streaming yet — T13/T14 add those):
 
   1. Verify Clerk JWT (Depends(require_auth)) — 401s before any DB I/O.
-  2. Load the thread from Django (`GET /api/autobot/threads/<id>/`).
-     This is also the per-user auth check: Django scopes by request.user
-     and returns 404 for any thread the caller doesn't own. We pass that
-     status through verbatim.
-  3. Load recent message history from Django for LLM context.
-  4. Persist the new user message via Django (`POST .../messages/`).
+  2. Persist the new user message via Django (`POST .../messages/`).
+     This is ALSO the per-user authorization check: Django's
+     MessageListCreateView calls `_get_thread_or_404` before saving, so
+     any thread the caller doesn't own returns 404 with no data leak
+     and no DB write. Saving first also guarantees the user's typed
+     input survives an LLM failure (they can retry without re-typing).
      `client_id`, if supplied, makes the POST idempotent (T07 contract).
-  5. Resolve the admin LLM provider/model/key and call `litellm.acompletion`.
-  6. Persist the assistant reply via Django with token-usage metadata.
-  7. Return the persisted assistant message in Django's envelope shape.
+  3. Fetch thread metadata + recent history in PARALLEL via
+     `asyncio.gather`. Thread is needed for `system_prompt_override`
+     (and T17 will read `llm_config` here too). History is the LLM's
+     short-term memory. Parallel cuts ~25% off wall-clock latency.
+  4. Resolve the admin LLM provider/model/key and call `litellm.acompletion`.
+  5. Persist the assistant reply via Django with token-usage metadata.
+  6. Return the persisted assistant message in Django's envelope shape.
 
-History-window note: T12 fetches the first page of size 50 from Django.
+System prompt composition: the per-thread `system_prompt_override`
+APPENDS to the base prompt rather than replacing it. This is so power
+users can layer custom rules ("answer in Spanish", "no code blocks")
+without losing Autosage's domain context (workflows, scripts, triggers,
+vault — to be expanded in T14's `llm/prompts.py`).
+
+History-window note: T12 fetches the first page of size 20 from Django.
 Threads longer than that will not see all prior context yet — T13 adds
 the Redis hot-context cache and T16 adds proper token-budgeted windowing
 + summarization. The non-streaming endpoint here is the simplest possible
@@ -23,6 +33,7 @@ correct version; the SSE endpoint (T13) will become the primary path.
 
 from __future__ import annotations
 
+import asyncio
 import json as _json
 import logging
 from typing import Any
@@ -38,8 +49,10 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 # Max recent messages pulled from Django for LLM context. T13/T16 will
-# replace this with a Redis-backed sliding window + summarizer.
-_HISTORY_PAGE_SIZE = 50
+# replace this with a Redis-backed sliding window + summarizer. 20 turns
+# × ~150 tokens average ≈ 3k tokens — plenty of memory for the LLM
+# without bloating prompt cost on every turn.
+_HISTORY_PAGE_SIZE = 20
 
 # Roles LiteLLM understands. Anything else in the persisted history is
 # skipped before the LLM call (defensive — Message.role is enum-bound at
@@ -113,15 +126,21 @@ def _build_llm_messages(
 
     Order: [system, ...history (chronological), new user]. History from
     Django comes back ASC by created_at (T07 view orders that way), so no
-    reversal is needed. The newly-persisted user message MAY appear in the
-    history slice too if our list-then-create ordering left a race window
-    open — guard against duplication by appending `new_user_content` only
-    if it isn't already the most recent entry.
+    reversal is needed. The newly-persisted user message will appear in
+    the history slice (we list AFTER persisting); the dedup guard at the
+    end skips re-appending it.
+
+    System-prompt composition: the per-thread `system_prompt_override`
+    is APPENDED to the base prompt under a `## User customizations`
+    heading. It never replaces the base — losing the Autosage grounding
+    would let the LLM hallucinate workflow shapes, script templates, or
+    trigger semantics.
     """
-    system_prompt = (
-        thread.get("system_prompt_override")
-        or _DEFAULT_SYSTEM_PROMPT
-    )
+    system_prompt = _DEFAULT_SYSTEM_PROMPT
+    override = (thread.get("system_prompt_override") or "").strip()
+    if override:
+        system_prompt = f"{system_prompt}\n\n## User customizations\n{override}"
+
     out: list[dict[str, Any]] = [
         {"role": "system", "content": system_prompt},
     ]
@@ -163,26 +182,14 @@ async def post_message(
 
     client = get_django_client()
 
-    # 1. Load thread (this is the per-user auth check; Django 404s if not owned).
-    try:
-        s, thread_env = await client.request(
-            method="GET",
-            path=f"/api/autobot/threads/{thread_id}/",
-            jwt=auth.raw_jwt,
-        )
-    except DjangoUnavailable as e:
-        logger.error("Storage unreachable during thread fetch: %s", e)
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Storage service temporarily unavailable.",
-        ) from e
-    if s != 200:
-        return JSONResponse(content=thread_env, status_code=s)
-    thread = (thread_env or {}).get("data") or {}
-
-    # 2. Persist the user message BEFORE the LLM call. If the LLM fails,
-    #    the user's turn is still recorded — they can retry without losing
-    #    what they typed. Idempotent on `client_id` (T07 contract).
+    # 1. Persist the user message first. This single call does double
+    #    duty: it's both the data write AND the per-user authorization
+    #    check. Django's MessageListCreateView.create runs
+    #    `_get_thread_or_404(user=request.user)` before any save, so
+    #    posting to a thread the caller doesn't own returns 404 here
+    #    with no leak and no DB write. Persisting first also means the
+    #    user's typed input survives an LLM failure — they can retry
+    #    without re-typing. Idempotent on `client_id` (T07 contract).
     user_payload: dict[str, Any] = {
         "role": "user",
         "content": content,
@@ -191,7 +198,7 @@ async def post_message(
     if client_id:
         user_payload["client_id"] = client_id
     try:
-        s, _user_env = await client.request(
+        s, user_env = await client.request(
             method="POST",
             path=f"/api/autobot/threads/{thread_id}/messages/",
             jwt=auth.raw_jwt,
@@ -204,31 +211,50 @@ async def post_message(
             detail="Storage service temporarily unavailable.",
         ) from e
     if s not in (200, 201):
-        return JSONResponse(content=_user_env, status_code=s)
+        # 401, 403, 404, validation — return Django's envelope verbatim.
+        return JSONResponse(content=user_env, status_code=s)
 
-    # 3. Load history AFTER user-persist so the LLM sees its own turn last.
+    # 2. Fetch thread metadata + recent history in PARALLEL. We need:
+    #     • thread.system_prompt_override → composes the system prompt
+    #     • thread.llm_config (T17)        → BYO provider override
+    #     • history                        → LLM short-term memory
+    #    Parallelizing cuts wall-clock latency: max(thread, history)
+    #    instead of sum(thread, history). At this point auth has
+    #    already passed (step 1), so neither fetch should 404 — but we
+    #    still surface any non-200 in case of a between-call deletion.
     try:
-        s, hist_env = await client.request(
-            method="GET",
-            path=f"/api/autobot/threads/{thread_id}/messages/",
-            jwt=auth.raw_jwt,
-            params={"page": "1", "page_size": str(_HISTORY_PAGE_SIZE)},
+        (thread_status, thread_env), (hist_status, hist_env) = await asyncio.gather(
+            client.request(
+                method="GET",
+                path=f"/api/autobot/threads/{thread_id}/",
+                jwt=auth.raw_jwt,
+            ),
+            client.request(
+                method="GET",
+                path=f"/api/autobot/threads/{thread_id}/messages/",
+                jwt=auth.raw_jwt,
+                params={"page": "1", "page_size": str(_HISTORY_PAGE_SIZE)},
+            ),
         )
     except DjangoUnavailable as e:
-        logger.error("Storage unreachable during history fetch: %s", e)
+        logger.error("Storage unreachable during thread+history fetch: %s", e)
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Storage service temporarily unavailable.",
         ) from e
-    if s != 200:
-        return JSONResponse(content=hist_env, status_code=s)
+    if thread_status != 200:
+        return JSONResponse(content=thread_env, status_code=thread_status)
+    if hist_status != 200:
+        return JSONResponse(content=hist_env, status_code=hist_status)
+
+    thread = (thread_env or {}).get("data") or {}
     history_data = (hist_env or {}).get("data") or {}
     history_list = (
         history_data.get("messages", [])
         if isinstance(history_data, dict) else []
     )
 
-    # 4. Resolve provider/model/key. T17 will branch on
+    # 3. Resolve provider/model/key. T17 will branch on
     #    Thread.llm_config / UserSettings.default_llm_config here.
     try:
         resolution = resolve_admin()
@@ -240,7 +266,7 @@ async def post_message(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
         )
 
-    # 5. Call the LLM.
+    # 4. Call the LLM.
     llm_messages = _build_llm_messages(thread, history_list, content)
     try:
         result = await acomplete(llm_messages, resolution)
@@ -257,7 +283,7 @@ async def post_message(
             status_code=status.HTTP_502_BAD_GATEWAY,
         )
 
-    # 6. Persist the assistant reply with token usage.
+    # 5. Persist the assistant reply with token usage.
     #    LLMs emit markdown by default; we store as text/markdown so the
     #    frontend renders code fences, lists, and inline formatting.
     assistant_payload: dict[str, Any] = {
