@@ -6,6 +6,8 @@ from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 
 from fastapi import Depends, FastAPI
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
 
 from auth import AuthContext, get_verifier, install_log_redaction, require_auth
 from conversation.cache import close_cache
@@ -14,6 +16,7 @@ from llm.tools import list_tool_names
 from routers import chat as chat_router
 from routers import proxy as proxy_router
 from settings import get_settings
+from throttling import limiter
 # Import for side effect — each tool module registers its tools into the
 # global registry on import. Without this line the LLM gets an empty
 # `tools=` payload and never calls anything. Must run before lifespan
@@ -72,6 +75,14 @@ app = FastAPI(
     root_path="/api/ai",
     lifespan=lifespan,
 )
+
+# ── Per-user rate limiting (T18) ─────────────────────────────────────
+# slowapi reads `app.state.limiter` on every decorated endpoint, so
+# the singleton MUST be attached before any router include. The
+# 429-handler turns `RateLimitExceeded` into a standardized response;
+# without it slowapi falls back to a plain Starlette 500.
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 # ── Proxy routes (T11) ────────────────────────────────────────────────
 # /threads/, /threads/<id>/, /settings/ — thin forwards to Django's

@@ -42,6 +42,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import JSONResponse, StreamingResponse
 
 from auth import AuthContext, require_auth
+from conversation.cache import get_cache
 from conversation.persistence import DjangoUnavailable, get_django_client
 from conversation.summarizer import (
     count_message_tokens,
@@ -64,10 +65,13 @@ from settings import get_settings
 from streaming.sse import (
     sse_done,
     sse_error,
+    sse_stream_start,
     sse_token,
     sse_tool_call_start,
     sse_tool_result,
 )
+from streaming.stream_registry import get_stream_registry
+from throttling import limiter
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -86,6 +90,27 @@ _LLM_ROLES = {"user", "assistant", "system", "tool"}
 # Base system prompt lives in `llm/prompts.py` (single source of truth
 # for Autobot's persona + Autosage domain grounding). The per-thread
 # override composition is handled by `get_system_prompt(user_customizations=...)`.
+
+
+# Tools that mutate Django state. After a successful invocation we
+# invalidate the thread's hot-context cache (`autobot:thread:<id>:ctx`)
+# so the next chat turn re-hydrates from Postgres and sees the new
+# row. The ctx cache itself isn't populated yet (T11 set up the helpers
+# but no producer wires them); this hook is the prep so we can flip
+# ctx caching on without auditing every tool.
+_WRITE_TOOL_NAMES = {
+    "create_script",
+    "update_script",
+    "create_workflow",
+    "update_workflow",
+}
+
+
+# Per-user rate limit on the streaming chat endpoint (T18). 30/minute
+# is generous for interactive use and conservative against runaway
+# clients. Plain `acompletion` (non-streaming) endpoint is rarely used
+# and gets the same limit for parity.
+_CHAT_RATE_LIMIT = "30/minute"
 
 
 def _envelope(
@@ -462,6 +487,7 @@ async def post_message(
 
 
 @router.post("/threads/{thread_id}/messages/stream/")
+@limiter.limit(_CHAT_RATE_LIMIT)
 async def post_message_stream(
     thread_id: str,
     request: Request,
@@ -472,7 +498,11 @@ async def post_message_stream(
     Request body: ``{"content": str, "content_type"?: str, "client_id"?: str}``
     Response: ``text/event-stream`` with the following event sequence:
 
+      • Exactly one ``event: stream_start`` frame with the `stream_id`
+        the client uses for mid-stream token refresh (T18).
       • Zero or more ``event: token`` frames with ``{"content": "<delta>"}``.
+      • Optional interleaved ``event: tool_call_start`` / ``event:
+        tool_result`` frames during tool-using turns (T14).
       • Exactly one terminal frame, either:
             ``event: done``   with the persisted assistant message dict
             ``event: error``  with ``{"message": "...", "code": "..."}``
@@ -488,6 +518,11 @@ async def post_message_stream(
     Auth note: the upfront `POST /messages/` is the per-user check.
     Django's `_get_thread_or_404` rejects cross-user thread IDs with a
     plain 404; we surface that verbatim before any streaming begins.
+
+    Token refresh (T18): every Django call inside the streaming
+    generator reads `auth_handle.raw_jwt`, NOT `auth.raw_jwt`. The
+    handle is mutable — the `/token-refresh/` endpoint swaps in a
+    fresh `AuthContext` mid-stream when the original expires.
     """
     body = await _read_message_body(request)
     content: str = body["content"]
@@ -526,8 +561,20 @@ async def post_message_stream(
 
     # 2. Switch to streaming. From here on, any failure surfaces as an
     #    `event: error` frame on the already-open 200 response.
+    #    Register the stream BEFORE entering the generator so we have
+    #    a stream_id ready for the first frame. The handle is mutable —
+    #    `/token-refresh/` rotates its inner AuthContext in-place; all
+    #    subsequent Django reads use `auth_handle.raw_jwt` to pick up
+    #    the new token.
+    registry = get_stream_registry()
+    stream_id, auth_handle = await registry.register(auth)
+
     async def event_stream():
-        # 2a. Fetch thread + history + settings in parallel.
+        # 2a. First frame ALWAYS — gives the client the stream_id it
+        #     needs to call /token-refresh/ if the JWT expires.
+        yield sse_stream_start(stream_id, thread_id)
+
+        # 2b. Fetch thread + history + settings in parallel.
         #     - history uses `ordering=-created_at` so page 1 returns
         #       the most RECENT N messages — we reverse them locally to
         #       chronological so `_build_llm_messages` sees turn order.
@@ -540,12 +587,12 @@ async def post_message_stream(
                 client.request(
                     method="GET",
                     path=f"/api/autobot/threads/{thread_id}/",
-                    jwt=auth.raw_jwt,
+                    jwt=auth_handle.raw_jwt,
                 ),
                 client.request(
                     method="GET",
                     path=f"/api/autobot/threads/{thread_id}/messages/",
-                    jwt=auth.raw_jwt,
+                    jwt=auth_handle.raw_jwt,
                     params={
                         "page": "1",
                         "page_size": str(_HISTORY_PAGE_SIZE),
@@ -555,7 +602,7 @@ async def post_message_stream(
                 client.request(
                     method="GET",
                     path="/api/autobot/settings/",
-                    jwt=auth.raw_jwt,
+                    jwt=auth_handle.raw_jwt,
                 ),
             )
         except DjangoUnavailable as e:
@@ -596,7 +643,7 @@ async def post_message_stream(
         #     break chat).
         try:
             resolution = await resolve_for_thread(
-                jwt=auth.raw_jwt,
+                jwt=auth_handle.raw_jwt,
                 thread=thread,
                 user_settings=user_settings,
             )
@@ -617,7 +664,7 @@ async def post_message_stream(
         #        LLM call, persist a Django Summary row + Redis cache,
         #        and replace the old portion with the new summary.
         settings = get_settings()
-        existing_summary = await load_latest_summary(thread_id, auth.raw_jwt)
+        existing_summary = await load_latest_summary(thread_id, auth_handle.raw_jwt)
         existing_summary_text = (
             (existing_summary or {}).get("summary_text") or ""
         )
@@ -687,7 +734,7 @@ async def post_message_stream(
                         [{"role": "system", "content": new_summary_text}],
                     )
                     await persist_summary(
-                        thread_id, auth.raw_jwt,
+                        thread_id, auth_handle.raw_jwt,
                         summary_text=new_summary_text,
                         up_to_message_id=up_to_msg_id,
                         summary_tokens=summary_tokens,
@@ -765,7 +812,7 @@ async def post_message_stream(
                     ps, persisted_env = await client.request(
                         method="POST",
                         path=f"/api/autobot/threads/{thread_id}/messages/",
-                        jwt=auth.raw_jwt,
+                        jwt=auth_handle.raw_jwt,
                         json_body=assistant_payload,
                     )
                 except DjangoUnavailable as e:
@@ -804,7 +851,7 @@ async def post_message_stream(
                 ps, _ = await client.request(
                     method="POST",
                     path=f"/api/autobot/threads/{thread_id}/messages/",
-                    jwt=auth.raw_jwt,
+                    jwt=auth_handle.raw_jwt,
                     json_body=assistant_payload,
                 )
             except DjangoUnavailable as e:
@@ -841,8 +888,29 @@ async def post_message_stream(
                 fn_args = (tc.get("function") or {}).get("arguments") or ""
 
                 yield sse_tool_call_start(tc_id, fn_name, fn_args)
-                result = await dispatch_tool(fn_name, fn_args, auth.raw_jwt)
+                result = await dispatch_tool(fn_name, fn_args, auth_handle.raw_jwt)
                 yield sse_tool_result(tc_id, fn_name, result)
+
+                # T18: invalidate the thread's hot-context cache on
+                # successful write-tool calls. The cache itself isn't
+                # populated yet (no producer wires `:ctx`), so this is
+                # effectively a no-op now — but having the hook in
+                # place means we can flip ctx caching on later without
+                # auditing every tool dispatch site.
+                if (
+                    fn_name in _WRITE_TOOL_NAMES
+                    and isinstance(result, dict)
+                    and "error" not in result
+                ):
+                    try:
+                        await get_cache().invalidate_thread_ctx(thread_id)
+                    except Exception as e:
+                        # Cache failures are observability, not control —
+                        # never let them break the chat turn.
+                        logger.warning(
+                            "Cache invalidate failed for thread %s: %s",
+                            thread_id, e,
+                        )
 
                 # Serialize the result as the tool message's content.
                 # The LLM sees a JSON string; `default=str` handles
@@ -858,7 +926,7 @@ async def post_message_stream(
                     ts2, _ = await client.request(
                         method="POST",
                         path=f"/api/autobot/threads/{thread_id}/messages/",
-                        jwt=auth.raw_jwt,
+                        jwt=auth_handle.raw_jwt,
                         json_body=tool_msg_payload,
                     )
                 except DjangoUnavailable as e:
@@ -900,8 +968,20 @@ async def post_message_stream(
             code="max_tool_rounds",
         )
 
+    async def _stream_with_cleanup():
+        """Wraps `event_stream()` so the in-flight stream is unregistered
+        on EVERY exit path — normal completion, exception, or client
+        disconnect (FastAPI closes the generator in all three cases).
+        Without this, the registry would slowly leak handles whenever a
+        stream ended abnormally."""
+        try:
+            async for frame in event_stream():
+                yield frame
+        finally:
+            await registry.unregister(stream_id)
+
     return StreamingResponse(
-        event_stream(),
+        _stream_with_cleanup(),
         media_type="text/event-stream",
         headers={
             # `no-cache` keeps intermediaries from caching incomplete
@@ -910,4 +990,88 @@ async def post_message_stream(
             "Cache-Control": "no-cache",
             "X-Accel-Buffering": "no",
         },
+    )
+
+
+# ── Token refresh endpoint (T18) ──────────────────────────────────────
+
+
+@router.post("/threads/{thread_id}/token-refresh/")
+@limiter.limit("60/minute")
+async def refresh_stream_token(
+    thread_id: str,
+    request: Request,
+    auth: AuthContext = Depends(require_auth),
+):
+    """Swap a refreshed Clerk JWT into an in-flight chat stream (T18).
+
+    Request body: ``{"stream_id": "<uuid>"}``
+    Response: ``{"success": true, "message": "Token refreshed."}``
+
+    The Bearer header carries the NEW token; `require_auth` verifies it
+    via the JWKS path (same as every other endpoint), so by the time
+    we have an `AuthContext` here the new token is known good.
+
+    `thread_id` in the URL is informational — the registry is keyed by
+    `stream_id` alone, so a stream_id mints regardless of which thread
+    it belongs to. We keep `thread_id` in the path for symmetry with
+    the streaming endpoint and to make audit logs grep-friendly.
+
+    Error cases:
+      • 400 — `stream_id` missing from the body.
+      • 401 — Bearer missing or invalid (handled by `require_auth`).
+      • 403 — the new token belongs to a different `sub` than the
+              one that owns the stream. Blocks an attacker who guessed
+              a stream_id from hijacking somebody else's chat.
+      • 404 — no active stream with this `stream_id` (already
+              finished, or never started).
+    """
+    try:
+        body = _json.loads(await request.body() or b"{}")
+    except _json.JSONDecodeError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid JSON body: {e.msg}",
+        ) from e
+    if not isinstance(body, dict):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="JSON body must be an object.",
+        )
+    stream_id = body.get("stream_id")
+    if not isinstance(stream_id, str) or not stream_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="`stream_id` is required and must be a non-empty string.",
+        )
+
+    registry = get_stream_registry()
+    handle = await registry.get(stream_id)
+    if handle is None:
+        # Use a generic 404 — don't leak whether the stream_id existed.
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No active stream with that id.",
+        )
+
+    try:
+        handle.refresh(auth)
+    except PermissionError as e:
+        logger.warning(
+            "Token refresh rejected: thread_id=%s stream_id=%s caller_sub=%s",
+            thread_id, stream_id, auth.user_sub,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=str(e),
+        ) from e
+
+    logger.info(
+        "Token refreshed: thread_id=%s stream_id=%s sub=%s",
+        thread_id, stream_id, auth.user_sub,
+    )
+    return _envelope(
+        success=True,
+        message="Token refreshed.",
+        data={"stream_id": stream_id, "thread_id": thread_id},
     )

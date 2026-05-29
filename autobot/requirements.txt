@@ -33,3 +33,9 @@ litellm==1.55.4
 
 # Token counting for summarization threshold (T16)
 tiktoken==0.8.0
+
+# Per-user rate limiting for the chat endpoint (T18). Pure-Python,
+# starlette-native, supports in-memory or Redis storage. We use the
+# default in-memory backend — fine for a single-replica autobot
+# container; switch to Redis storage if/when we scale horizontally.
+slowapi==0.1.9

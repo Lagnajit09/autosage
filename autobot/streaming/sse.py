@@ -14,6 +14,11 @@ client.
 
 Event vocabulary used by the chat stream (T13+):
 
+  • ``stream_start``    — first frame of every stream. Carries the
+                          `stream_id` the client passes to the
+                          `/token-refresh/` endpoint to swap a fresh
+                          JWT into the in-flight handle (T18).
+                          Payload: ``{stream_id, thread_id}``.
   • ``token``           — incremental text delta from the LLM.
   • ``tool_call_start`` — the LLM has decided to invoke a tool. T14.
                           Payload: ``{id, name, arguments}`` (arguments
@@ -46,6 +51,20 @@ def sse_event(name: str, data: Any) -> str:
     """
     payload = json.dumps(data, default=str, separators=(",", ":"))
     return f"event: {name}\ndata: {payload}\n\n"
+
+
+def sse_stream_start(stream_id: str, thread_id: str) -> str:
+    """First event of every chat stream (T18).
+
+    Carries the `stream_id` the client uses when calling
+    `POST /threads/<id>/token-refresh/` to swap a refreshed JWT into
+    the in-flight stream's auth handle. Also echoes `thread_id` so
+    clients with multiple parallel streams can dispatch by context.
+    """
+    return sse_event("stream_start", {
+        "stream_id": stream_id,
+        "thread_id": thread_id,
+    })
 
 
 def sse_token(content: str) -> str:
