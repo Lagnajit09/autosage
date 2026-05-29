@@ -43,6 +43,15 @@ from fastapi.responses import JSONResponse, StreamingResponse
 
 from auth import AuthContext, require_auth
 from conversation.persistence import DjangoUnavailable, get_django_client
+from conversation.summarizer import (
+    count_message_tokens,
+    count_tokens,
+    get_model_context_window,
+    load_latest_summary,
+    persist_summary,
+    precompact_tool_results,
+    summarize_to_text,
+)
 from llm.client import LLMError, acomplete, astream_complete, resolve_admin
 from llm.prompts import get_system_prompt
 from llm.tools import dispatch_tool, get_tool_schemas
@@ -127,14 +136,16 @@ def _build_llm_messages(
     thread: dict[str, Any],
     history: list[dict[str, Any]],
     new_user_content: str,
+    *,
+    summary_text: str = "",
 ) -> list[dict[str, Any]]:
     """Assemble the messages list passed to litellm.
 
-    Order: [system, ...history (chronological), new user]. History from
-    Django comes back ASC by created_at (T07 view orders that way), so no
-    reversal is needed. The newly-persisted user message will appear in
-    the history slice (we list AFTER persisting); the dedup guard at the
-    end skips re-appending it.
+    Order: [system, ...history (chronological), new user]. History should
+    already be in ASC by created_at; the chat router reverses Django's
+    `?ordering=-created_at` response before passing it here. The newly-
+    persisted user message will appear in the history slice (we list
+    AFTER persisting); the dedup guard at the end skips re-appending it.
 
     Tool-call history reconstruction
     ────────────────────────────────
@@ -156,10 +167,23 @@ def _build_llm_messages(
     The override never replaces the base — losing the Autosage grounding
     would let the LLM hallucinate workflow shapes, script templates, or
     trigger semantics.
+
+    Summary block (T16): when `summary_text` is non-empty, it's appended
+    to the system prompt under an `## Earlier conversation summary`
+    heading. Combining both into one system message (rather than two
+    separate `role: system` entries) keeps the prompt clean and avoids
+    provider-specific weirdness around multi-system messages.
     """
     system_prompt = get_system_prompt(
         user_customizations=thread.get("system_prompt_override") or "",
     )
+    if summary_text:
+        system_prompt = (
+            f"{system_prompt}\n\n## Earlier conversation summary\n\n"
+            f"{summary_text}\n\n"
+            "Use the summary above as context for the messages that follow. "
+            "Reference any ids or names from the summary exactly as written."
+        )
 
     out: list[dict[str, Any]] = [
         {"role": "system", "content": system_prompt},
@@ -169,6 +193,41 @@ def _build_llm_messages(
     # "tool"` entries (defensive — should not happen with correct
     # persistence, but a stray orphan would crash the LLM call).
     pending_tool_call_ids: set[str] = set()
+
+    # ── Trim leading orphan messages ──────────────────────────────────
+    # The recent-N fetch (T16: `ordering=-created_at&page_size=20`) can
+    # land its cut MID-TURN. If the oldest message in our window is an
+    # assistant message (with or without tool_calls), or a tool message,
+    # we have an orphan prefix: there's no `user` turn for it to anchor
+    # against. Gemini enforces this strictly:
+    #   "function call turn comes immediately after a user turn or
+    #    after a function response turn"
+    # So we walk forward to the first `user` and drop everything before
+    # it. OpenAI is more lenient but we apply the same rule for parity.
+    first_user_idx: int | None = None
+    for i, m in enumerate(history):
+        if m.get("role") == "user":
+            first_user_idx = i
+            break
+    if first_user_idx is None:
+        # No user turn in the fetched window — likely a thread where
+        # the latest messages are all assistant/tool with the originating
+        # user paginated off. Drop history entirely and let the new user
+        # message be the only non-system content. The LLM has the
+        # summary (if any) for older context.
+        if history:
+            logger.warning(
+                "History window contained no user turn — dropping all %d "
+                "fetched messages and proceeding with new turn only",
+                len(history),
+            )
+        history = []
+    elif first_user_idx > 0:
+        logger.info(
+            "Trimming %d leading orphan messages (history started mid-turn)",
+            first_user_idx,
+        )
+        history = history[first_user_idx:]
 
     for m in history:
         role = m.get("role")
@@ -450,8 +509,10 @@ async def post_message_stream(
     # 2. Switch to streaming. From here on, any failure surfaces as an
     #    `event: error` frame on the already-open 200 response.
     async def event_stream():
-        # 2a. Fetch thread + history in parallel (same optimization as
-        #     the non-streaming path).
+        # 2a. Fetch thread + history in parallel. History uses
+        #     `ordering=-created_at` so page 1 returns the most RECENT
+        #     N messages — we reverse them locally to chronological so
+        #     `_build_llm_messages` sees them in turn order.
         try:
             (ts, te), (hs, he) = await asyncio.gather(
                 client.request(
@@ -463,7 +524,11 @@ async def post_message_stream(
                     method="GET",
                     path=f"/api/autobot/threads/{thread_id}/messages/",
                     jwt=auth.raw_jwt,
-                    params={"page": "1", "page_size": str(_HISTORY_PAGE_SIZE)},
+                    params={
+                        "page": "1",
+                        "page_size": str(_HISTORY_PAGE_SIZE),
+                        "ordering": "-created_at",
+                    },
                 ),
             )
         except DjangoUnavailable as e:
@@ -487,10 +552,12 @@ async def post_message_stream(
             return
         thread = (te or {}).get("data") or {}
         history_data = (he or {}).get("data") or {}
-        history_list = (
+        history_list_raw = (
             history_data.get("messages", [])
             if isinstance(history_data, dict) else []
         )
+        # Django returned DESC; reverse to chronological for the LLM.
+        history_list = list(reversed(history_list_raw))
 
         # 2b. Resolve provider.
         try:
@@ -502,13 +569,110 @@ async def post_message_stream(
             )
             return
 
+        # 2b'. Context-window management (T16).
+        #      - Load any existing summary for this thread; only include
+        #        messages newer than its `up_to_message` in raw history.
+        #      - Pre-compact tool results > 2 KB to one-line digests
+        #        in-memory (full content stays in Postgres).
+        #      - If the assembled context still exceeds 60 % of the
+        #        model window, summarize the OLD portion via a separate
+        #        LLM call, persist a Django Summary row + Redis cache,
+        #        and replace the old portion with the new summary.
+        settings = get_settings()
+        existing_summary = await load_latest_summary(thread_id, auth.raw_jwt)
+        existing_summary_text = (
+            (existing_summary or {}).get("summary_text") or ""
+        )
+        if existing_summary:
+            up_to_id = existing_summary.get("up_to_message")
+            if up_to_id:
+                # Drop any history entries already covered by the summary.
+                # `up_to_message` is an inclusive cutoff — keep only
+                # rows strictly newer than that.
+                kept: list[dict[str, Any]] = []
+                seen_cutoff = False
+                for m in history_list:
+                    if not seen_cutoff:
+                        if m.get("id") == up_to_id:
+                            seen_cutoff = True
+                        continue
+                    kept.append(m)
+                # If the cutoff isn't in the fetched window (long-since
+                # paginated off), assume EVERYTHING we fetched is newer
+                # than the summary — keep as-is.
+                if seen_cutoff:
+                    history_list = kept
+
+        # Tool-result compaction is cheap and almost always saves tokens.
+        history_list = precompact_tool_results(history_list)
+
+        # Build a tentative messages list to measure tokens.
+        tentative = _build_llm_messages(
+            thread, history_list, content,
+            summary_text=existing_summary_text,
+        )
+        context_window = get_model_context_window(resolution.model_name)
+        target_tokens = int(
+            context_window * settings.AUTOBOT_CONTEXT_TARGET_RATIO,
+        )
+        current_tokens = count_message_tokens(tentative)
+
+        # Trigger summarization if (a) we're over budget AND (b) we have
+        # enough history to leave KEEP_LAST_N verbatim and still have
+        # something OLDER to summarize.
+        keep_n = settings.AUTOBOT_KEEP_LAST_N
+        if current_tokens > target_tokens and len(history_list) > keep_n:
+            to_summarize = history_list[:-keep_n]
+            recent = history_list[-keep_n:]
+            up_to_msg_id = (to_summarize[-1] or {}).get("id")
+            try:
+                new_summary_text = await summarize_to_text(
+                    to_summarize, resolution,
+                    existing_summary=existing_summary_text,
+                )
+            except LLMError as e:
+                # Soft-fail — fall back to the pre-summarization context.
+                # The provider may still accept it (tiktoken estimates
+                # are approximate), and worst case the LLM call below
+                # 400s and we surface that.
+                logger.warning(
+                    "Summarization LLM call failed; proceeding without: %s",
+                    e,
+                )
+            else:
+                # Persist to Django + Redis. Persistence failures are
+                # non-fatal — we still use the new summary in-memory
+                # for THIS turn so the LLM call below has the right
+                # context budget; future turns just won't see it.
+                if up_to_msg_id:
+                    summary_tokens = count_message_tokens(
+                        [{"role": "system", "content": new_summary_text}],
+                    )
+                    await persist_summary(
+                        thread_id, auth.raw_jwt,
+                        summary_text=new_summary_text,
+                        up_to_message_id=up_to_msg_id,
+                        summary_tokens=summary_tokens,
+                    )
+                logger.info(
+                    "Summarized %d old messages for thread %s (~%d tokens "
+                    "→ ~%d-token summary)",
+                    len(to_summarize), thread_id,
+                    current_tokens, count_tokens(new_summary_text),
+                )
+                existing_summary_text = new_summary_text
+                history_list = recent
+
         # 2c. Tool-call loop. Each iteration streams one LLM call; if
         #     the model emits tool_calls, dispatch them, append the
         #     results to the running conversation, and loop. Exit when
         #     the model returns a normal text reply or we hit the cap.
-        llm_messages = _build_llm_messages(thread, history_list, content)
+        llm_messages = _build_llm_messages(
+            thread, history_list, content,
+            summary_text=existing_summary_text,
+        )
         tool_schemas = get_tool_schemas()
-        max_rounds = get_settings().AUTOBOT_MAX_TOOL_ROUNDS
+        max_rounds = settings.AUTOBOT_MAX_TOOL_ROUNDS
 
         for round_num in range(1, max_rounds + 1):
             accumulated = ""

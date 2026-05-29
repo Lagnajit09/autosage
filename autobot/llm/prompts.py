@@ -788,3 +788,31 @@ def get_system_prompt(*, user_customizations: str = "") -> str:
     if not extra:
         return base
     return f"{base}\n\n## User customizations\n{extra}"
+
+
+# ──────────────────────────────────────────────────────────────────────
+# Summarizer prompt (T16)
+# ──────────────────────────────────────────────────────────────────────
+# Used by `conversation/summarizer.py` for the separate non-streaming
+# LLM call that compresses old chat history into a paragraph. Kept here
+# so all LLM prompts live in one place — easier to audit and tune.
+#
+# Low temperature on the call (0.2) plus this prompt's emphasis on
+# preserving ids/names verbatim keeps summaries deterministic: we don't
+# want creative paraphrasing of UUIDs or counts.
+
+SUMMARIZER_SYSTEM_PROMPT = """\
+You are summarizing a conversation between a user and Autobot — an AI \
+assistant for the Autosage workflow automation platform. Produce a \
+concise, factual summary capturing:
+  • The user's overall goal in the conversation.
+  • Scripts and workflows that were created, read, or modified \
+(name AND id where known).
+  • Vault resources referenced (vault / server / credential ids).
+  • Decisions, preferences, or constraints the user expressed.
+  • Any open questions, pending follow-ups, or blockers.
+
+Constraints: 150–400 words. Plain prose, no markdown headers. \
+Reference ids and names EXACTLY as they appeared — do not paraphrase \
+or invent. Omit pleasantries, false starts, and acknowledgements.\
+"""
