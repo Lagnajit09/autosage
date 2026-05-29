@@ -1,0 +1,253 @@
+{
+    "nodes": [
+      {
+        "id": "trigger-1777523724924",
+        "data": {
+          "type": "http",
+          "label": "HTTP Check Service Status",
+          "description": "",
+          "httpTrigger": {
+            "createdAt": "2026-04-30T04:40:04.340514+00:00",
+            "rotatedAt": "2026-05-01T15:18:15.295315+00:00",
+            "triggerUrl": "http://localhost:8000/api/execution-engine/triggers/http/YTnl0ENmYFKvucfyGZahWrhDILEteoQR/",
+            "secretLast4": "Qayt",
+            "lastTriggeredAt": "2026-05-01T15:19:01.181036+00:00"
+          },
+          "httpConfigured": true
+        },
+        "type": "trigger",
+        "position": {
+          "x": -664.5875492326,
+          "y": 6.330979114940604
+        },
+        "measured": {
+          "width": 160,
+          "height": 160
+        }
+      },
+      {
+        "id": "action-1777524118657",
+        "data": {
+          "type": "script",
+          "label": "Check Service Status",
+          "jsonSchema": [
+            {
+              "name": "exists",
+              "type": "boolean"
+            },
+            {
+              "name": "status",
+              "type": "string"
+            },
+            {
+              "name": "service_name",
+              "type": "string"
+            }
+          ],
+          "parameters": [
+            {
+              "id": "param-1777524784994-0.44472414830037954",
+              "name": "service_name",
+              "type": "string",
+              "value": "",
+              "sourceType": "manual",
+              "description": ""
+            }
+          ],
+          "description": "",
+          "outputFormat": "json",
+          "vaultDetails": {
+            "vaultId": "c1cd8f5b-8f29-4fdb-a236-bbc501aa0ea6",
+            "serverId": "f5ad04fb-4185-4105-833d-f4d6c48b8995",
+            "credentialId": "3f9132f2-bb58-4b64-a7fc-c80f86249505"
+          },
+          "executionMode": "remote",
+          "selectedScript": {
+            "type": "Shell Script",
+            "scriptId": "39"
+          }
+        },
+        "type": "action",
+        "position": {
+          "x": -429.2597483931663,
+          "y": 35.07841307964699
+        },
+        "measured": {
+          "width": 231,
+          "height": 102
+        }
+      },
+      {
+        "id": "action-1777524163045",
+        "data": {
+          "to": [
+            "moharanalagnajit@gmail.com"
+          ],
+          "body": "Hi,\nThe service is active and running.",
+          "from": "projects.lmdev@gmail.com",
+          "type": "email",
+          "label": "Email Service Active",
+          "subject": "Service Status Report",
+          "parameters": [
+            {
+              "id": "param-1777524203330-0.857339242470078",
+              "name": "SERVICE_STATUS",
+              "type": "string",
+              "value": "{{action-1777524118657.output.input_as_text}}",
+              "sourceType": "output",
+              "description": ""
+            }
+          ],
+          "smtpConfig": {
+            "host": "smtp.gmail.com",
+            "port": 587,
+            "secure": false,
+            "vaultId": "c1cd8f5b-8f29-4fdb-a236-bbc501aa0ea6",
+            "credentialId": "5f07d74c-8d99-4e24-84c4-438849cac15f"
+          },
+          "description": ""
+        },
+        "type": "action",
+        "position": {
+          "x": 180.08814474083124,
+          "y": -57.01069867037248
+        },
+        "measured": {
+          "width": 226,
+          "height": 102
+        }
+      },
+      {
+        "id": "decision-1777524332872",
+        "data": {
+          "label": "Condition Check",
+          "trueLabel": [
+            "action-1777524163045"
+          ],
+          "conditions": [
+            {
+              "id": "cond-1777524507516-0.19791734551415952",
+              "field": "{{action-1777524118657.output.exists}}",
+              "value": "true",
+              "operator": "==",
+              "fieldSource": "output",
+              "valueSource": "manual"
+            },
+            {
+              "id": "cond-1777524526820-0.37115029935083843",
+              "field": "{{action-1777524118657.output.status}}",
+              "value": "active",
+              "operator": "==",
+              "fieldSource": "output",
+              "valueSource": "manual",
+              "logicalOperator": "&&"
+            }
+          ],
+          "falseLabel": [
+            "action-1777524354039"
+          ],
+          "description": ""
+        },
+        "type": "decision",
+        "position": {
+          "x": -94.17268679553686,
+          "y": -5.637470891803332
+        },
+        "measured": {
+          "width": 160,
+          "height": 160
+        }
+      },
+      {
+        "id": "action-1777524354039",
+        "data": {
+          "to": [
+            "moharanalagnajit@gmail.com"
+          ],
+          "body": "Hi,\nThe service is inactive or does not exist. Please check.",
+          "from": "projects.lmdev@gmail.com",
+          "type": "email",
+          "label": "Email Service Inactive",
+          "subject": "Service Status Report",
+          "parameters": [
+            {
+              "id": "param-1777524642708-0.21586374517762286",
+              "name": "service_status",
+              "type": "string",
+              "value": "{{action-1777524118657.output.input_as_text}}",
+              "sourceType": "output",
+              "description": ""
+            }
+          ],
+          "smtpConfig": {
+            "host": "smtp.gmail.com",
+            "port": 587,
+            "secure": false,
+            "vaultId": "c1cd8f5b-8f29-4fdb-a236-bbc501aa0ea6",
+            "credentialId": "5f07d74c-8d99-4e24-84c4-438849cac15f"
+          },
+          "description": ""
+        },
+        "type": "action",
+        "position": {
+          "x": 103.40107292352187,
+          "y": 177.4414537027489
+        },
+        "measured": {
+          "width": 238,
+          "height": 102
+        }
+      }
+    ],
+    "edges": [
+      {
+        "id": "xy-edge__trigger-1777523724924-action-1777524118657",
+        "type": "bezier",
+        "style": {
+          "stroke": "#9CA3AF",
+          "strokeWidth": 2
+        },
+        "source": "trigger-1777523724924",
+        "target": "action-1777524118657"
+      },
+      {
+        "id": "xy-edge__action-1777524118657-decision-1777524332872",
+        "type": "bezier",
+        "style": {
+          "stroke": "#9CA3AF",
+          "strokeWidth": 2
+        },
+        "source": "action-1777524118657",
+        "target": "decision-1777524332872"
+      },
+      {
+        "id": "decision-1777524332872-action-1777524163045-true",
+        "type": "bezier",
+        "label": "True",
+        "style": {
+          "stroke": "#10b981",
+          "strokeWidth": 2
+        },
+        "source": "decision-1777524332872",
+        "target": "action-1777524163045",
+        "sourceHandle": "true"
+      },
+      {
+        "id": "decision-1777524332872-action-1777524354039-false",
+        "type": "bezier",
+        "label": "False",
+        "style": {
+          "stroke": "#ef4444",
+          "strokeWidth": 2
+        },
+        "source": "decision-1777524332872",
+        "target": "action-1777524354039",
+        "sourceHandle": "false"
+      }
+    ],
+    "name": "WF-004-HTTP",
+    "id": "0521a76c-3ffc-4cac-bcf6-8879e740b3ad",
+    "timestamp": "2026-05-28T09:50:24.794Z",
+    "totalNodes": 5,
+    "totalEdges": 4
+  }

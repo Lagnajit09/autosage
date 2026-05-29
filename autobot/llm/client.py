@@ -39,11 +39,24 @@ class LLMError(Exception):
 
 @dataclass(frozen=True)
 class LLMResolution:
-    """Resolved call parameters — what to pass to `litellm.acompletion`."""
+    """Resolved call parameters — what to pass to `litellm.acompletion`.
+
+    `base_url` and `api_version` are optional — only populated when the
+    LLM came from an `LLMConfig` row (T17 BYO path), since admin keys
+    always use the provider's default endpoint and api version. They
+    cover three real cases:
+      • Azure OpenAI deployments (api_version required, base_url is
+        the resource endpoint).
+      • Self-hosted OpenAI-compatible inference (Ollama, vLLM, etc.)
+        — base_url points at the local server.
+      • Provider proxies (e.g. an internal AWS Bedrock gateway).
+    """
     model: str          # litellm-format, e.g. "gemini/gemini-1.5-flash"
     api_key: str
     provider: str       # short tag stored on Message.provider, e.g. "gemini"
     model_name: str     # bare model name stored on Message.model_name
+    base_url: str | None = None      # api_base override
+    api_version: str | None = None   # required for Azure
 
 
 # LiteLLM dispatches by the `provider/` prefix on the model string. We
@@ -109,6 +122,128 @@ def resolve_admin(
     )
 
 
+def resolve_from_llm_config(config: dict[str, Any]) -> LLMResolution:
+    """Build an LLMResolution from a decrypted LLMConfig dict (T17).
+
+    `config` is the response of `POST /api/autobot/llm-configs/<id>/reveal/`'s
+    `data` field — it carries the plaintext `api_key` alongside the
+    provider/model/base_url/api_version. The api_key never enters logs,
+    caches, or any persisted object — only this dataclass holds it for
+    the duration of the request.
+
+    Raises:
+      LLMError on a malformed config (missing provider / model / key).
+    """
+    provider = (config.get("provider") or "").lower().strip()
+    model = (config.get("model_name") or "").strip()
+    api_key = config.get("api_key") or ""
+    base_url = (config.get("base_url") or "").strip() or None
+    api_version = (config.get("api_version") or "").strip() or None
+
+    if not provider:
+        raise LLMError("LLMConfig has empty `provider`.")
+    if not model:
+        raise LLMError("LLMConfig has empty `model_name`.")
+    if not api_key:
+        raise LLMError(
+            "LLMConfig has empty `api_key` — the reveal endpoint may "
+            "have returned a masked serializer instead of the reveal one.",
+        )
+
+    if "/" in model:
+        litellm_model = model
+        bare_model = model.split("/", 1)[1]
+    else:
+        # LiteLLM dispatches by the `provider/` prefix on the model
+        # string. Adding it lets users store the model name as e.g.
+        # "gpt-4o-mini" without worrying about the provider prefix.
+        litellm_model = f"{provider}/{model}"
+        bare_model = model
+
+    return LLMResolution(
+        model=litellm_model,
+        api_key=api_key,
+        provider=provider,
+        model_name=bare_model,
+        base_url=base_url,
+        api_version=api_version,
+    )
+
+
+async def resolve_for_thread(
+    *,
+    jwt: str,
+    thread: dict[str, Any],
+    user_settings: dict[str, Any] | None,
+) -> LLMResolution:
+    """Pick the right LLM config for a chat turn (T17).
+
+    Priority (first hit wins):
+      1. `thread.llm_config`              — per-thread override
+      2. `user_settings.default_llm_config` — per-user default
+      3. Admin keys via `resolve_admin()` — shared free-tier fallback
+
+    For (1) and (2), this function makes ONE extra Django call to the
+    reveal endpoint to fetch the decrypted api_key. The plaintext lives
+    only in the returned `LLMResolution` and is GC'd when that goes out
+    of scope. Never logged. Never cached.
+
+    Failure handling: if the reveal call 4xx/5xx/network-fails, we log a
+    warning and fall back to admin keys. The user's chat still works —
+    they just don't get billed against their personal key for this turn.
+    A noisy failure would be worse (one stale FK shouldn't break chat).
+    """
+    # Imported here, not at module top, to avoid a circular import:
+    # llm.client → conversation.persistence → settings → llm.client.
+    from conversation.persistence import DjangoUnavailable, get_django_client
+
+    config_id = (
+        thread.get("llm_config")
+        or (user_settings or {}).get("default_llm_config")
+    )
+    if not config_id:
+        return resolve_admin()
+
+    django = get_django_client()
+    try:
+        status_code, body = await django.request(
+            method="POST",
+            path=f"/api/autobot/llm-configs/{config_id}/reveal/",
+            jwt=jwt,
+        )
+    except DjangoUnavailable as e:
+        logger.warning(
+            "LLMConfig reveal unreachable for id=%s (%s); using admin fallback",
+            config_id, e,
+        )
+        return resolve_admin()
+
+    if status_code != 200:
+        logger.warning(
+            "LLMConfig reveal returned HTTP %d for id=%s; using admin fallback",
+            status_code, config_id,
+        )
+        return resolve_admin()
+
+    config = (body or {}).get("data") or {}
+    try:
+        resolution = resolve_from_llm_config(config)
+    except LLMError as e:
+        logger.warning(
+            "LLMConfig %s is malformed (%s); using admin fallback",
+            config_id, e,
+        )
+        return resolve_admin()
+
+    # Operational visibility: log WHICH config was selected, but NEVER
+    # the api_key (the resolution dataclass has it; we just log the tag).
+    logger.info(
+        "Using user LLMConfig %s (provider=%s, model=%s)",
+        config_id, resolution.provider, resolution.model_name,
+    )
+    return resolution
+
+
 async def acomplete(
     messages: list[dict[str, Any]],
     resolution: LLMResolution,
@@ -132,14 +267,20 @@ async def acomplete(
       message is safe to surface in logs but should NOT be returned to
       the client verbatim (it may name the provider).
     """
+    completion_kwargs: dict[str, Any] = {
+        "model": resolution.model,
+        "messages": messages,
+        "api_key": resolution.api_key,
+        "temperature": temperature,
+        "stream": False,
+    }
+    if resolution.base_url:
+        completion_kwargs["api_base"] = resolution.base_url
+    if resolution.api_version:
+        completion_kwargs["api_version"] = resolution.api_version
+
     try:
-        response = await litellm.acompletion(
-            model=resolution.model,
-            messages=messages,
-            api_key=resolution.api_key,
-            temperature=temperature,
-            stream=False,
-        )
+        response = await litellm.acompletion(**completion_kwargs)
     except Exception as e:
         # Catch broad — litellm raises a zoo of provider-specific subclasses
         # (RateLimitError, AuthenticationError, APIConnectionError, …) and
@@ -232,6 +373,10 @@ async def astream_complete(
         "stream": True,
         "stream_options": {"include_usage": True},
     }
+    if resolution.base_url:
+        completion_kwargs["api_base"] = resolution.base_url
+    if resolution.api_version:
+        completion_kwargs["api_version"] = resolution.api_version
     if tools:
         completion_kwargs["tools"] = tools
         # `auto` lets the model choose between text reply and tool call

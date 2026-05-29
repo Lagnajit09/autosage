@@ -52,7 +52,12 @@ from conversation.summarizer import (
     precompact_tool_results,
     summarize_to_text,
 )
-from llm.client import LLMError, acomplete, astream_complete, resolve_admin
+from llm.client import (
+    LLMError,
+    acomplete,
+    astream_complete,
+    resolve_for_thread,
+)
 from llm.prompts import get_system_prompt
 from llm.tools import dispatch_tool, get_tool_schemas
 from settings import get_settings
@@ -346,7 +351,7 @@ async def post_message(
     #    already passed (step 1), so neither fetch should 404 — but we
     #    still surface any non-200 in case of a between-call deletion.
     try:
-        (thread_status, thread_env), (hist_status, hist_env) = await asyncio.gather(
+        (thread_status, thread_env), (hist_status, hist_env), (settings_status, settings_env) = await asyncio.gather(
             client.request(
                 method="GET",
                 path=f"/api/autobot/threads/{thread_id}/",
@@ -358,9 +363,14 @@ async def post_message(
                 jwt=auth.raw_jwt,
                 params={"page": "1", "page_size": str(_HISTORY_PAGE_SIZE)},
             ),
+            client.request(
+                method="GET",
+                path="/api/autobot/settings/",
+                jwt=auth.raw_jwt,
+            ),
         )
     except DjangoUnavailable as e:
-        logger.error("Storage unreachable during thread+history fetch: %s", e)
+        logger.error("Storage unreachable during thread+history+settings fetch: %s", e)
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Storage service temporarily unavailable.",
@@ -376,11 +386,19 @@ async def post_message(
         history_data.get("messages", [])
         if isinstance(history_data, dict) else []
     )
+    user_settings = (
+        (settings_env or {}).get("data") or {}
+        if settings_status == 200 else {}
+    )
 
-    # 3. Resolve provider/model/key. T17 will branch on
-    #    Thread.llm_config / UserSettings.default_llm_config here.
+    # 3. Resolve provider/model/key. T17: per-thread Thread.llm_config >
+    #    per-user UserSettings.default_llm_config > admin keys.
     try:
-        resolution = resolve_admin()
+        resolution = await resolve_for_thread(
+            jwt=auth.raw_jwt,
+            thread=thread,
+            user_settings=user_settings,
+        )
     except LLMError as e:
         logger.error("LLM resolution failed: %s", e)
         return _envelope(
@@ -509,12 +527,16 @@ async def post_message_stream(
     # 2. Switch to streaming. From here on, any failure surfaces as an
     #    `event: error` frame on the already-open 200 response.
     async def event_stream():
-        # 2a. Fetch thread + history in parallel. History uses
-        #     `ordering=-created_at` so page 1 returns the most RECENT
-        #     N messages — we reverse them locally to chronological so
-        #     `_build_llm_messages` sees them in turn order.
+        # 2a. Fetch thread + history + settings in parallel.
+        #     - history uses `ordering=-created_at` so page 1 returns
+        #       the most RECENT N messages — we reverse them locally to
+        #       chronological so `_build_llm_messages` sees turn order.
+        #     - settings carries `default_llm_config` for T17 BYO
+        #       resolution. The endpoint auto-creates the row on first
+        #       GET, so it always returns 200; we still defensively
+        #       treat a non-200 as "no settings, use admin".
         try:
-            (ts, te), (hs, he) = await asyncio.gather(
+            (ts, te), (hs, he), (us, ue) = await asyncio.gather(
                 client.request(
                     method="GET",
                     path=f"/api/autobot/threads/{thread_id}/",
@@ -530,10 +552,16 @@ async def post_message_stream(
                         "ordering": "-created_at",
                     },
                 ),
+                client.request(
+                    method="GET",
+                    path="/api/autobot/settings/",
+                    jwt=auth.raw_jwt,
+                ),
             )
         except DjangoUnavailable as e:
             logger.error(
-                "Storage unreachable during streaming thread+history: %s", e,
+                "Storage unreachable during streaming thread+history+settings: %s",
+                e,
             )
             yield sse_error(
                 "Storage service temporarily unavailable.",
@@ -558,10 +586,20 @@ async def post_message_stream(
         )
         # Django returned DESC; reverse to chronological for the LLM.
         history_list = list(reversed(history_list_raw))
+        user_settings = (ue or {}).get("data") or {} if us == 200 else {}
 
-        # 2b. Resolve provider.
+        # 2b. Resolve provider. T17: per-thread `Thread.llm_config` >
+        #     per-user `UserSettings.default_llm_config` > admin keys.
+        #     `resolve_for_thread` makes ONE Django reveal call if a
+        #     user config is selected; falls back to admin on any
+        #     failure (logged but non-fatal so a stale FK doesn't
+        #     break chat).
         try:
-            resolution = resolve_admin()
+            resolution = await resolve_for_thread(
+                jwt=auth.raw_jwt,
+                thread=thread,
+                user_settings=user_settings,
+            )
         except LLMError as e:
             logger.error("LLM resolution failed during stream: %s", e)
             yield sse_error(

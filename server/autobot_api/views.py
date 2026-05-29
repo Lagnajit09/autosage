@@ -432,7 +432,15 @@ class MessageListCreateView(_ThreadScopedView, generics.ListCreateAPIView):
             )
         page_size = min(max(page_size, 1), MAX_MESSAGE_PAGE_SIZE)
 
-        qs = self.get_queryset().order_by('created_at')
+        # `?ordering=` lets clients fetch the LATEST N messages
+        # (needed by autobot's chat loop to assemble recent context
+        # without first paginating to the last page). Whitelist the
+        # values so an arbitrary string can't be passed into order_by.
+        ordering = request.query_params.get('ordering') or 'created_at'
+        if ordering not in ('created_at', '-created_at'):
+            ordering = 'created_at'
+
+        qs = self.get_queryset().order_by(ordering)
         response = _paginated_response(
             qs, page, page_size, 'messages', MessageSerializer,
         )

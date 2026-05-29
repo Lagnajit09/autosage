@@ -1,0 +1,127 @@
+{
+    "nodes": [
+      {
+        "id": "trigger-1777614927057",
+        "data": {
+          "type": "schedule",
+          "label": "Scheduler",
+          "schedule": "16 16 * * 5",
+          "description": "",
+          "scheduleConfigured": true
+        },
+        "type": "trigger",
+        "position": {
+          "x": -616.1696210921633,
+          "y": -6.632032486006864
+        },
+        "measured": {
+          "width": 160,
+          "height": 160
+        }
+      },
+      {
+        "id": "action-1777614945076",
+        "data": {
+          "type": "script",
+          "label": "Check Service Status",
+          "parameters": [
+            {
+              "id": "param-1777616043729-0.5922539258234278",
+              "name": "service_name",
+              "type": "string",
+              "value": "nginx",
+              "sourceType": "manual",
+              "description": ""
+            }
+          ],
+          "description": "",
+          "vaultDetails": {
+            "vaultId": "c1cd8f5b-8f29-4fdb-a236-bbc501aa0ea6",
+            "serverId": "f5ad04fb-4185-4105-833d-f4d6c48b8995",
+            "credentialId": "3f9132f2-bb58-4b64-a7fc-c80f86249505"
+          },
+          "executionMode": "remote",
+          "selectedScript": {
+            "type": "Shell Script",
+            "scriptId": "39"
+          }
+        },
+        "type": "action",
+        "position": {
+          "x": -374.99352620395007,
+          "y": 25.3420710029608
+        },
+        "measured": {
+          "width": 231,
+          "height": 102
+        }
+      },
+      {
+        "id": "action-1777614958952",
+        "data": {
+          "to": [
+            "moharanalagnajit@gmail.com"
+          ],
+          "body": "Hi all,\nKindly review the status of the service.",
+          "from": "projects.lmdev@gmail.com",
+          "type": "email",
+          "label": "Email Service Status",
+          "subject": "CPU Usage Report",
+          "parameters": [
+            {
+              "id": "param-1777616114585-0.895438837737971",
+              "name": "service_status",
+              "type": "string",
+              "value": "{{action-1777614945076.output.input_as_text}}",
+              "sourceType": "output",
+              "description": ""
+            }
+          ],
+          "smtpConfig": {
+            "host": "smtp.gmail.com",
+            "port": 587,
+            "secure": false,
+            "vaultId": "c1cd8f5b-8f29-4fdb-a236-bbc501aa0ea6",
+            "credentialId": "5f07d74c-8d99-4e24-84c4-438849cac15f"
+          },
+          "description": ""
+        },
+        "type": "action",
+        "position": {
+          "x": -45.20348736059796,
+          "y": 19.860796119137746
+        },
+        "measured": {
+          "width": 226,
+          "height": 102
+        }
+      }
+    ],
+    "edges": [
+      {
+        "id": "xy-edge__trigger-1777614927057-action-1777614945076",
+        "type": "smoothstep",
+        "style": {
+          "stroke": "#9CA3AF",
+          "strokeWidth": 2
+        },
+        "source": "trigger-1777614927057",
+        "target": "action-1777614945076"
+      },
+      {
+        "id": "xy-edge__action-1777614945076-action-1777614958952",
+        "type": "smoothstep",
+        "style": {
+          "stroke": "#9CA3AF",
+          "strokeWidth": 2
+        },
+        "source": "action-1777614945076",
+        "target": "action-1777614958952"
+      }
+    ],
+    "name": "WF-006-CRON",
+    "id": "c66096af-d502-4b24-8fef-6e3fd888ff58",
+    "timestamp": "2026-05-28T09:51:15.213Z",
+    "totalNodes": 3,
+    "totalEdges": 2
+  }
