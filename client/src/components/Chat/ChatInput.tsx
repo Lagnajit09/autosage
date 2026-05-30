@@ -1,4 +1,4 @@
-import { Lightbulb, Paperclip, Plus, Send, X, Zap } from "lucide-react";
+import { Plus, Send, X, Zap } from "lucide-react";
 import React, { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -29,19 +29,28 @@ import {
 } from "@/components/ui/command";
 // import { categories, subCategories, quickActions } from "@/utils/categories";
 import { useLoading } from "@/contexts/loading/loading-context";
-// import SuggestedQuestions from "./SuggestedQuestions";
-// import { useSuggestedQuestions } from "@/contexts/SuggestedQuestionsContext";
 import { useParams } from "react-router-dom";
 import InputTypeGroup from "./InputTypeGroup";
 
 type Props = {
   handleSubmit: (e: React.FormEvent, value: string, category: string) => void;
-  onSendMessage?: (message: string, category?: string) => void;
+  // T20: parent gates input during an in-flight stream so users can't fire
+  // a second message before the first completes (would race two SSE streams
+  // against one thread and confuse the assistant's tool-call state).
+  disabled?: boolean;
+  placeholder?: string;
 };
 
-const ChatInput = ({ handleSubmit, onSendMessage }: Props) => {
+const ChatInput = ({
+  handleSubmit,
+  disabled = false,
+  placeholder = "Ask anything...",
+}: Props) => {
   const { id } = useParams();
   const { isLoading } = useLoading();
+  // Effective disabled = either the parent gating (streaming) or the
+  // global route-loading flag. Both should block input.
+  const isDisabled = disabled || isLoading;
   const [inputValue, setInputValue] = useState("");
   const [showAtMenu, setShowAtMenu] = useState(false);
   const [atMenuPosition, setAtMenuPosition] = useState<{
@@ -52,11 +61,6 @@ const ChatInput = ({ handleSubmit, onSendMessage }: Props) => {
   const [searchQuery, setSearchQuery] = useState("");
 
   const [selectedCategory, setSelectedCategory] = useState("ServiceNow");
-  // const {
-  //   suggestedQuestions,
-  //   showSuggestedQuestions,
-  //   setShowSuggestedQuestions,
-  // } = useSuggestedQuestions();
   const textareaRef = React.useRef<HTMLTextAreaElement | null>(null);
   const commandInputRef = React.useRef<HTMLInputElement | null>(null);
   const maxHeightPx = 160;
@@ -189,6 +193,10 @@ const ChatInput = ({ handleSubmit, onSendMessage }: Props) => {
         setShowAtMenu(false);
         setSearchQuery("");
       } else {
+        // Swallow Enter while disabled — never let a parent see a submit
+        // for a content state they can't act on. Also skip empties.
+        if (isDisabled) return;
+        if (!inputValue.trim()) return;
         handleSubmit(e, inputValue, selectedCategory);
         setInputValue("");
       }
@@ -234,14 +242,6 @@ const ChatInput = ({ handleSubmit, onSendMessage }: Props) => {
 
   return (
     <div className={`thin-scrollbar ${id ? "w-full" : "w-full mx-auto"}`}>
-      {/*<div className="w-[75%] mx-auto">
-        {showSuggestedQuestions && (
-          <SuggestedQuestions
-            onSendMessage={onSendMessage}
-            suggestedQuestions={suggestedQuestions}
-          />
-        )}
-      </div>*/}
       <div className="relative w-[100%] mx-auto">
         {/* @ Menu with Combobox */}
         {showAtMenu && (
@@ -290,16 +290,23 @@ const ChatInput = ({ handleSubmit, onSendMessage }: Props) => {
         )}
 
         <form
-          onSubmit={(e) => handleSubmit(e, inputValue, selectedCategory)}
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (isDisabled) return;
+            if (!inputValue.trim()) return;
+            handleSubmit(e, inputValue, selectedCategory);
+            setInputValue("");
+          }}
           className="flex px-2"
         >
           <div className="w-full flex flex-col justify-between bg-gray-100 dark:bg-[#272727] rounded-2xl border border-gray-300 dark:border-transparent px-2 py-2 shadow-md">
             <Textarea
-              placeholder="Ask anything..."
-              className="resize-none border-0 focus-visible:ring-0 focus-visible:ring-offset-0 px-2 py-2 bg-transparent my-auto shadow-none thin-scrollbar text-gray-900 dark:text-gray-100 placeholder:text-gray-500 dark:placeholder:text-gray-400"
+              placeholder={placeholder}
+              className="resize-none border-0 focus-visible:ring-0 focus-visible:ring-offset-0 px-2 py-2 bg-transparent my-auto shadow-none thin-scrollbar text-gray-900 dark:text-gray-100 placeholder:text-gray-500 dark:placeholder:text-gray-400 disabled:opacity-60"
               rows={2}
               ref={textareaRef}
               value={inputValue}
+              disabled={isDisabled}
               onInput={handleAutoResize}
               onChange={handleInputChange}
               onKeyDown={handleKeyDown}
@@ -320,48 +327,25 @@ const ChatInput = ({ handleSubmit, onSendMessage }: Props) => {
               </div>
 
               <div className="flex items-center justify-between">
-                {/* {suggestedQuestions && suggestedQuestions.length > 0 && id && ( */}
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <Button
-                      className="p-2 mr-2 rounded-full bg-transparent text-black dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-slate-700"
-                      onClick={() => {}}
-                    >
-                      <Lightbulb size={18} />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    <p>Suggested Questions</p>
-                  </TooltipContent>
-                </Tooltip>
-                {/* )} */}
-
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button className="p-2 mr-2 rounded-full bg-transparent text-black dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-slate-700">
-                      <Paperclip size={18} />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    <p>Attach File</p>
-                  </TooltipContent>
-                </Tooltip>
-
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      onClick={(e) =>
-                        handleSubmit(e, inputValue, selectedCategory)
-                      }
+                      onClick={(e) => {
+                        e.preventDefault();
+                        if (isDisabled) return;
+                        if (!inputValue.trim()) return;
+                        handleSubmit(e, inputValue, selectedCategory);
+                        setInputValue("");
+                      }}
                       type="submit"
-                      disabled={isLoading}
-                      className="p-2 rounded-full bg-transparent hover:bg-blue-100 dark:hover:bg-blue-900 text-blue-500 dark:text-blue-400"
+                      disabled={isDisabled || !inputValue.trim()}
+                      className="p-2 rounded-full bg-transparent hover:bg-blue-100 dark:hover:bg-blue-900 text-blue-500 dark:text-blue-400 disabled:opacity-40 disabled:hover:bg-transparent"
                     >
                       <Send size={18} />
                     </Button>
                   </TooltipTrigger>
                   <TooltipContent>
-                    <p>Send Message</p>
+                    <p>{isDisabled ? "Waiting for response..." : "Send Message"}</p>
                   </TooltipContent>
                 </Tooltip>
               </div>
