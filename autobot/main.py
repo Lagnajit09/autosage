@@ -6,6 +6,7 @@ from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 
 from fastapi import Depends, FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 
@@ -74,6 +75,33 @@ app = FastAPI(
     description="Autosage's LLM assistant — chat, script + workflow generation.",
     root_path="/api/ai",
     lifespan=lifespan,
+)
+
+# ── CORS ─────────────────────────────────────────────────────────────
+# Cross-origin SPAs (Vite at :5173, the production frontend, etc.) hit
+# autobot via `/api/ai/*`. Without CORS headers, browsers block every
+# non-simple request (Authorization: Bearer, JSON bodies, PATCH/DELETE)
+# on the preflight even though nginx forwarded it fine.
+#
+# Mirrors Django's `django-cors-headers` policy: allow the configured
+# origins, allow credentials so the Clerk Bearer header flows through.
+# Origins are env-driven via `CORS_ALLOWED_ORIGINS` in `.env.autobot` —
+# no in-code defaults so a misconfigured deploy fails loud, not silently.
+_cors_origins = settings.cors_origins_list
+if not _cors_origins:
+    logger.warning(
+        "CORS_ALLOWED_ORIGINS is empty — every cross-origin browser "
+        "request to /api/ai/* will be blocked. Set the env var in "
+        "autobot.env (see autobot.env.example for dev values).",
+    )
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=_cors_origins,
+    allow_credentials=True,
+    # Explicit methods (vs. ["*"]) because `allow_credentials=True`
+    # forbids wildcard methods/headers per the CORS spec.
+    allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type", "Accept"],
 )
 
 # ── Per-user rate limiting (T18) ─────────────────────────────────────

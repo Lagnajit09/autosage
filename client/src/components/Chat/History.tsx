@@ -1,4 +1,33 @@
-import React from "react";
+/**
+ * Chat history sidebar (T21).
+ *
+ * Lists the caller's threads (paginated) and lets them switch / rename /
+ * delete. Active thread comes from the URL via `useParams`. The "New
+ * Chat" button just navigates to `/ai/autobot` — the actual thread
+ * creation happens inside Interface on first message send.
+ *
+ * Refresh trigger: Interface dispatches a window-level
+ * `autobot-threads-changed` event after creating or deleting a thread.
+ * History listens for it and re-fetches. Avoids lifting state into
+ * AutobotChat which would be a bigger refactor than the feature warrants.
+ *
+ * Rename UX: clicking "Rename" swaps the row's button for an inline
+ * input. Enter commits via patchThread; Escape cancels.
+ */
+
+import React, { useCallback, useEffect, useState } from "react";
+import { useNavigate, useParams } from "react-router-dom";
+import { useAuth } from "@clerk/clerk-react";
+import { toast } from "sonner";
+import {
+  Loader2,
+  MoreHorizontal,
+  PlusCircle,
+  Pencil,
+  Trash2,
+  Check,
+  X,
+} from "lucide-react";
 import {
   Sidebar,
   SidebarContent,
@@ -9,8 +38,6 @@ import {
   SidebarHeader,
   SidebarInput,
   SidebarMenu,
-  SidebarMenuAction,
-  SidebarMenuBadge,
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarRail,
@@ -24,80 +51,180 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import {
-  MoreHorizontal,
-  Plus,
-  PlusCircle,
-  Share,
-  Pencil,
-  Trash2,
-} from "lucide-react";
-import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Button } from "../ui/button";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { Input } from "@/components/ui/input";
 
-type ChatItem = {
-  id: string;
-  title: string;
-  lastMessage?: string;
-  unreadCount?: number;
-};
+import {
+  deleteThread,
+  listThreads,
+  patchThread,
+  type AutobotThread,
+} from "@/lib/api/autobot";
+
+/** Dispatched by Interface (and consumed by History) when the thread
+ * list needs to be re-fetched. Exported as a const so producers and
+ * consumers agree on the exact string. */
+export const THREADS_CHANGED_EVENT = "autobot-threads-changed";
 
 type HistoryProps = {
-  items?: ChatItem[];
-  activeId?: string;
-  onSelect?: (id: string) => void;
-  onDelete?: (id: string) => void;
   className?: string;
 };
 
-const defaultItems: ChatItem[] = [
-  { id: "1", title: "New Automation Ideas", lastMessage: "Let's draft a plan" },
-  {
-    id: "2",
-    title: "Weekly Report Agent",
-    lastMessage: "Generated summary",
-  },
-  { id: "3", title: "Email Parser", lastMessage: "Deployed to prod" },
-];
-
-const History: React.FC<HistoryProps> = ({
-  items = defaultItems,
-  activeId,
-  onSelect,
-  onDelete,
-  className,
-}) => {
+const History: React.FC<HistoryProps> = ({ className }) => {
   const { state } = useSidebar();
-  const [searchQuery, setSearchQuery] = React.useState("");
+  const navigate = useNavigate();
+  const { id: activeId } = useParams<{ id: string }>();
+  const { getToken } = useAuth();
 
+  const [threads, setThreads] = useState<AutobotThread[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  // Rename in-progress state — id of the row being edited, plus the
+  // draft title. Null = no inline edit open.
+  const [renamingId, setRenamingId] = useState<string | null>(null);
+  const [renameDraft, setRenameDraft] = useState("");
+  const [renaming, setRenaming] = useState(false);
+  // Delete confirmation — keyed by the id awaiting confirm.
+  const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
+
+  const fetchThreads = useCallback(async () => {
+    setLoading(true);
+    try {
+      const token = await getToken();
+      if (!token) throw new Error("Not signed in.");
+      // Page size 50 covers the typical sidebar without pagination —
+      // a future scroll-to-load-more pass can use the total_pages field.
+      const page = await listThreads(token, 1, 50, "active");
+      setThreads(page.threads);
+    } catch (err) {
+      const msg =
+        err instanceof Error ? err.message : "Failed to load threads.";
+      toast.error(msg);
+    } finally {
+      setLoading(false);
+    }
+  }, [getToken]);
+
+  // Initial load + listen for cross-component refresh signals.
+  useEffect(() => {
+    void fetchThreads();
+    const handler = () => {
+      void fetchThreads();
+    };
+    window.addEventListener(THREADS_CHANGED_EVENT, handler);
+    return () => window.removeEventListener(THREADS_CHANGED_EVENT, handler);
+  }, [fetchThreads]);
+
+  // ── Filtering ────────────────────────────────────────────────────
   const normalizedQuery = searchQuery.trim().toLowerCase();
-  const filteredItems = React.useMemo(
+  const filteredThreads = React.useMemo(
     () =>
       normalizedQuery
-        ? items.filter((item) => {
-            const title = item.title.toLowerCase();
-            const last = (item.lastMessage || "").toLowerCase();
-            return (
-              title.includes(normalizedQuery) || last.includes(normalizedQuery)
-            );
-          })
-        : items,
-    [items, normalizedQuery],
+        ? threads.filter((t) =>
+            (t.title || "Untitled").toLowerCase().includes(normalizedQuery),
+          )
+        : threads,
+    [threads, normalizedQuery],
   );
+
+  // ── New chat ─────────────────────────────────────────────────────
+  const handleNewChat = () => {
+    setRenamingId(null);
+    navigate("/ai/autobot");
+  };
+
+  // ── Rename ───────────────────────────────────────────────────────
+  const startRename = (thread: AutobotThread) => {
+    setRenamingId(thread.id);
+    setRenameDraft(thread.title || "");
+  };
+
+  const cancelRename = () => {
+    setRenamingId(null);
+    setRenameDraft("");
+  };
+
+  const commitRename = async (id: string) => {
+    const newTitle = renameDraft.trim();
+    if (!newTitle) {
+      // Treat blank as cancel — server rejects blank titles anyway.
+      cancelRename();
+      return;
+    }
+    // No-op if the title didn't actually change.
+    const existing = threads.find((t) => t.id === id);
+    if (existing && existing.title === newTitle) {
+      cancelRename();
+      return;
+    }
+    setRenaming(true);
+    try {
+      const token = await getToken();
+      if (!token) throw new Error("Not signed in.");
+      const updated = await patchThread(token, id, { title: newTitle });
+      setThreads((prev) => prev.map((t) => (t.id === id ? updated : t)));
+      cancelRename();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Rename failed.";
+      toast.error(msg);
+    } finally {
+      setRenaming(false);
+    }
+  };
+
+  // ── Delete ───────────────────────────────────────────────────────
+  const confirmDelete = async () => {
+    if (!deleteTargetId) return;
+    setDeleting(true);
+    try {
+      const token = await getToken();
+      if (!token) throw new Error("Not signed in.");
+      await deleteThread(token, deleteTargetId);
+      // Optimistic local removal. If the deleted thread was the active
+      // one, route back to welcome so the user isn't stuck on a 404'd
+      // detail view.
+      setThreads((prev) => prev.filter((t) => t.id !== deleteTargetId));
+      if (activeId === deleteTargetId) {
+        navigate("/ai/autobot");
+      }
+      toast.success("Thread deleted.");
+      setDeleteTargetId(null);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Delete failed.";
+      toast.error(msg);
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  // ── Render ───────────────────────────────────────────────────────
+  const collapsed = state === "collapsed";
+
   return (
     <Sidebar
-      className={`${className} hidden lg:flex ${
-        state === "collapsed"
+      className={`${className ?? ""} hidden lg:flex ${
+        collapsed
           ? "h-fit border-none [&_[data-sidebar=sidebar]]:bg-transparent dark:[&_[data-sidebar=sidebar]]:bg-transparent"
           : "h-full border-gray-300 dark:border-gray-800 [&_[data-sidebar=sidebar]]:bg-light-tertiary dark:[&_[data-sidebar=sidebar]]:bg-gray-950/20"
       } lg:ml-16 `}
       collapsible="icon"
     >
-      {state === "collapsed" ? (
+      {collapsed ? (
         <div className="flex flex-col items-center justify-center mt-4 gap-2">
           <Tooltip>
             <TooltipTrigger asChild>
@@ -111,9 +238,12 @@ const History: React.FC<HistoryProps> = ({
           </Tooltip>
           <Tooltip>
             <TooltipTrigger asChild>
-              <span className="p-1 rounded-md hover:bg-gray-100 dark:hover:bg-gray-200 dark:hover:text-gray-700 cursor-pointer">
+              <button
+                onClick={handleNewChat}
+                className="p-1 rounded-md hover:bg-gray-100 dark:hover:bg-gray-200 dark:hover:text-gray-700 cursor-pointer"
+              >
                 <PlusCircle className="w-4 h-5" />
-              </span>
+              </button>
             </TooltipTrigger>
             <TooltipContent side="right" align="center">
               New Chat
@@ -147,9 +277,12 @@ const History: React.FC<HistoryProps> = ({
 
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <span className="p-1 rounded-md hover:bg-gray-100 dark:hover:bg-gray-200 dark:hover:text-gray-700 cursor-pointer">
+                  <button
+                    onClick={handleNewChat}
+                    className="p-1 rounded-md hover:bg-gray-100 dark:hover:bg-gray-200 dark:hover:text-gray-700 cursor-pointer"
+                  >
                     <PlusCircle className="w-4 h-5" />
-                  </span>
+                  </button>
                 </TooltipTrigger>
                 <TooltipContent side="right" align="center">
                   New Chat
@@ -168,64 +301,113 @@ const History: React.FC<HistoryProps> = ({
             <SidebarGroup>
               <SidebarGroupLabel>Chat History</SidebarGroupLabel>
               <SidebarGroupContent>
-                <SidebarMenu>
-                  {filteredItems.map((item) => (
-                    <SidebarMenuItem key={item.id} className="relative">
-                      <div className="flex items-center w-full group/item  hover:bg-purple-200/30 dark:hover:bg-purple-800/30 rounded-lg">
-                        <SidebarMenuButton
-                          onClick={() => onSelect?.(item.id)}
-                          isActive={item.id === activeId}
-                          tooltip={item.title}
-                          className="text-gray-900 dark:text-gray-200 font-medium flex-1 hover:bg-transparent"
-                        >
-                          <span>{item.title}</span>
-                        </SidebarMenuButton>
-
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
+                {loading && threads.length === 0 ? (
+                  <div className="flex items-center justify-center py-6">
+                    <Loader2 className="h-5 w-5 animate-spin text-gray-500" />
+                  </div>
+                ) : filteredThreads.length === 0 ? (
+                  <p className="px-2 py-4 text-xs text-gray-500 dark:text-gray-400">
+                    {normalizedQuery
+                      ? "No matching chats."
+                      : "No chats yet. Start one by typing a message."}
+                  </p>
+                ) : (
+                  <SidebarMenu>
+                    {filteredThreads.map((thread) => (
+                      <SidebarMenuItem key={thread.id} className="relative">
+                        {renamingId === thread.id ? (
+                          <div className="flex items-center gap-1 w-full px-2 py-1">
+                            <Input
+                              autoFocus
+                              value={renameDraft}
+                              onChange={(e) => setRenameDraft(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter") {
+                                  e.preventDefault();
+                                  void commitRename(thread.id);
+                                } else if (e.key === "Escape") {
+                                  e.preventDefault();
+                                  cancelRename();
+                                }
+                              }}
+                              maxLength={255}
+                              disabled={renaming}
+                              className="h-7 text-sm dark:bg-gray-800 dark:border-gray-700 dark:text-gray-200"
+                            />
                             <button
                               type="button"
-                              className="inline-flex h-7 w-7 items-center justify-center rounded p-0.5 ml-1 text-gray-700 dark:text-gray-300 opacity-0 pointer-events-none group-hover/item:opacity-100 group-hover/item:pointer-events-auto data-[state=open]:opacity-100 data-[state=open]:pointer-events-auto hover:bg-transparent cursor-pointer"
-                              aria-label="Open chat actions"
+                              onClick={() => void commitRename(thread.id)}
+                              disabled={renaming}
+                              className="p-1 text-green-600 dark:text-green-400 hover:bg-green-100 dark:hover:bg-green-900/30 rounded disabled:opacity-50"
                             >
-                              <MoreHorizontal className="h-4 w-4" />
+                              {renaming ? (
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                              ) : (
+                                <Check className="h-4 w-4" />
+                              )}
                             </button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent
-                            align="end"
-                            side="bottom"
-                            sideOffset={2}
-                            className="w-44 dark:bg-[#262626] border-none shadow-lg"
-                          >
-                            <DropdownMenuItem className="text-gray-800 dark:text-gray-200 dark:hover:bg-[#383838] cursor-pointer">
-                              <Share />
-                              <span>Share</span>
-                            </DropdownMenuItem>
-                            <DropdownMenuItem className="text-gray-800 dark:text-gray-200 dark:hover:bg-[#383838] cursor-pointer">
-                              <Pencil />
-                              <span>Rename</span>
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              onClick={() => onDelete?.(item.id)}
-                              className="text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/40 focus:bg-red-100 dark:focus:bg-red-900/40 cursor-pointer"
+                            <button
+                              type="button"
+                              onClick={cancelRename}
+                              disabled={renaming}
+                              className="p-1 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 rounded disabled:opacity-50"
                             >
-                              <Trash2 />
-                              <span>Delete</span>
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </div>
-                      {onDelete ? (
-                        <SidebarMenuAction
-                          aria-label="Delete chat"
-                          onClick={() => onDelete(item.id)}
-                        >
-                          ×
-                        </SidebarMenuAction>
-                      ) : null}
-                    </SidebarMenuItem>
-                  ))}
-                </SidebarMenu>
+                              <X className="h-4 w-4" />
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="flex items-center w-full group/item hover:bg-purple-200/30 dark:hover:bg-purple-800/30 rounded-lg">
+                            <SidebarMenuButton
+                              onClick={() =>
+                                navigate(`/ai/autobot/${thread.id}`)
+                              }
+                              isActive={thread.id === activeId}
+                              tooltip={thread.title || "Untitled"}
+                              className="text-gray-900 dark:text-gray-200 font-medium flex-1 hover:bg-transparent"
+                            >
+                              <span className="truncate">
+                                {thread.title || "Untitled"}
+                              </span>
+                            </SidebarMenuButton>
+
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <button
+                                  type="button"
+                                  className="inline-flex h-7 w-7 items-center justify-center rounded p-0.5 ml-1 text-gray-700 dark:text-gray-300 opacity-0 pointer-events-none group-hover/item:opacity-100 group-hover/item:pointer-events-auto data-[state=open]:opacity-100 data-[state=open]:pointer-events-auto hover:bg-transparent cursor-pointer"
+                                  aria-label="Open chat actions"
+                                >
+                                  <MoreHorizontal className="h-4 w-4" />
+                                </button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent
+                                align="end"
+                                side="bottom"
+                                sideOffset={2}
+                                className="w-44 dark:bg-[#262626] border-none shadow-lg"
+                              >
+                                <DropdownMenuItem
+                                  onClick={() => startRename(thread)}
+                                  className="text-gray-800 dark:text-gray-200 dark:hover:bg-[#383838] cursor-pointer"
+                                >
+                                  <Pencil className="mr-2 h-4 w-4" />
+                                  <span>Rename</span>
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                  onClick={() => setDeleteTargetId(thread.id)}
+                                  className="text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/40 focus:bg-red-100 dark:focus:bg-red-900/40 cursor-pointer"
+                                >
+                                  <Trash2 className="mr-2 h-4 w-4" />
+                                  <span>Delete</span>
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          </div>
+                        )}
+                      </SidebarMenuItem>
+                    ))}
+                  </SidebarMenu>
+                )}
               </SidebarGroupContent>
             </SidebarGroup>
           </SidebarContent>
@@ -241,6 +423,49 @@ const History: React.FC<HistoryProps> = ({
           <SidebarRail />
         </>
       )}
+
+      {/* Delete confirmation */}
+      <AlertDialog
+        open={deleteTargetId !== null}
+        onOpenChange={(o) => !o && setDeleteTargetId(null)}
+      >
+        <AlertDialogContent className="dark:bg-[#171717] dark:border-gray-800">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="dark:text-gray-200">
+              Delete this chat?
+            </AlertDialogTitle>
+            <AlertDialogDescription className="dark:text-gray-400">
+              This will permanently remove the conversation and its messages.
+              Cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel
+              disabled={deleting}
+              className="dark:bg-transparent dark:text-gray-300 dark:hover:bg-gray-800 dark:border-gray-700"
+            >
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => {
+                e.preventDefault();
+                void confirmDelete();
+              }}
+              disabled={deleting}
+              className="bg-red-600 hover:bg-red-700 text-white"
+            >
+              {deleting ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Deleting…
+                </>
+              ) : (
+                "Delete"
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Sidebar>
   );
 };

@@ -36,6 +36,8 @@ import { toast } from "sonner";
 import ChatInput from "./ChatInput";
 import { CodeBlock } from "./CodeBlock";
 import CustomizeModal from "./CustomizeModal";
+import { THREADS_CHANGED_EVENT } from "./History";
+import ModelPicker from "./ModelPicker";
 import ShareModal from "./ShareModal";
 import ToolCallBadge, { type ToolCallStatus } from "./ToolCallBadge";
 import { Vault } from "../vault/Vault";
@@ -52,11 +54,15 @@ import { DatabaseZap, Menu, Settings2, ShareIcon } from "lucide-react";
 
 import {
   createThread,
+  getSettings,
   getThread,
+  listLLMConfigs,
   listMessages,
+  patchThread,
   type AutobotMessage,
   type AutobotThread,
   type AutobotToolCall,
+  type LLMConfig,
 } from "@/lib/api/autobot";
 import {
   streamMessage,
@@ -136,6 +142,21 @@ const Interface = () => {
   const [isStreaming, setIsStreaming] = useState(false);
   const [streamError, setStreamError] = useState<string | null>(null);
 
+  // ── BYO LLM state ──────────────────────────────────────────────────
+  // `configs` is the full user-owned LLMConfig list. `userDefaultId` is
+  // the user's global default (UserSettings.default_llm_config) used to
+  // annotate the picker's "Default" option. `selectedConfigId` is the
+  // ACTIVE per-thread choice — null = "use default fall-through."
+  //
+  // For an existing thread, `selectedConfigId` mirrors thread.llm_config
+  // and is updated optimistically when the picker fires; the PATCH
+  // happens in the background. On welcome-screen, the value is held
+  // locally and passed to `createThread({ llm_config })` on first send.
+  const [configs, setConfigs] = useState<LLMConfig[]>([]);
+  const [userDefaultId, setUserDefaultId] = useState<string | null>(null);
+  const [selectedConfigId, setSelectedConfigId] = useState<string | null>(null);
+  const [modelSwitching, setModelSwitching] = useState(false);
+
   const [shareModalOpen, setShareModalOpen] = useState(false);
   const [customizeModalOpen, setCustomizeModalOpen] = useState(false);
   const [vaultModalOpen, setVaultModalOpen] = useState(false);
@@ -145,15 +166,46 @@ const Interface = () => {
   // instance so navigating away or unmounting cancels cleanly.
   const abortRef = useRef<AbortController | null>(null);
 
+  // ── Load LLM configs + user settings once on mount ────────────────
+  // These don't depend on threadId — the user's keys and global default
+  // are stable across threads. CustomizeModal can refresh via the
+  // `onConfigsChanged` callback when the user adds/edits/deletes.
+  const refreshConfigs = useCallback(async () => {
+    try {
+      const token = await getToken();
+      if (!token) return;
+      const [configList, settings] = await Promise.all([
+        listLLMConfigs(token),
+        getSettings(token),
+      ]);
+      setConfigs(configList);
+      setUserDefaultId(settings.default_llm_config);
+    } catch (err) {
+      // Non-fatal — picker just shows "Default (admin keys)" with an
+      // empty list. Surface to console for debugging but don't toast
+      // (this fires on every mount and would spam errors if Django is
+      // temporarily down).
+      console.warn("Failed to load LLM configs:", err);
+    }
+  }, [getToken]);
+
+  useEffect(() => {
+    void refreshConfigs();
+  }, [refreshConfigs]);
+
   // ── History load on thread change ──────────────────────────────────
   useEffect(() => {
     if (!threadId) {
-      // Welcome state — clear any prior thread's data.
+      // Welcome state — clear any prior thread's data. The picker
+      // selection ALSO resets so the user starts with "Default" on
+      // every new chat (avoids surprise inheritance from the last
+      // visited thread).
       setThread(null);
       setMessages([]);
       setPendingUser(null);
       setPendingAssistant(null);
       setStreamError(null);
+      setSelectedConfigId(null);
       return;
     }
 
@@ -171,6 +223,9 @@ const Interface = () => {
         ]);
         if (cancelled) return;
         setThread(threadData);
+        // Picker mirrors the thread's stored override. `null` = no
+        // thread-level override (falls through to user default / admin).
+        setSelectedConfigId(threadData.llm_config);
         // Django returns ASC by default — keep as-is for chronological
         // render. We trust the backend's `?ordering=created_at` default.
         setMessages(historyPage.messages);
@@ -352,16 +407,26 @@ const Interface = () => {
           // ── New-thread bootstrap ─────────────────────────────────
           // Derive a title from the first 60 chars of the message. The
           // user can rename later via the history sidebar.
+          //
+          // The picker selection (`selectedConfigId`) is passed through
+          // as the thread's `llm_config` override. Backend treats null
+          // as "no thread-level override; resolve via UserSettings then
+          // admin keys."
           const token = await getToken();
           if (!token) throw new Error("Not signed in.");
           const title =
             trimmed.length > 60 ? `${trimmed.slice(0, 60)}…` : trimmed;
-          const created = await createThread(token, { title });
+          const created = await createThread(token, {
+            title,
+            llm_config: selectedConfigId,
+          });
           activeThreadId = created.id;
           setThread(created);
           // `replace: true` so the empty-state URL doesn't end up in
           // history. Otherwise back-button → blank screen → forward.
           navigate(`/ai/autobot/${activeThreadId}`, { replace: true });
+          // Refresh the sidebar so the new thread appears immediately.
+          window.dispatchEvent(new CustomEvent(THREADS_CHANGED_EVENT));
         }
 
         await runStream(activeThreadId, trimmed, clientId);
@@ -376,7 +441,7 @@ const Interface = () => {
         abortRef.current = null;
       }
     },
-    [threadId, isStreaming, navigate, getToken, runStream],
+    [threadId, isStreaming, navigate, getToken, runStream, selectedConfigId],
   );
 
   // Adapter for ChatInput's (e, value, category) signature. The category
@@ -386,6 +451,45 @@ const Interface = () => {
       void handleSend(value);
     },
     [handleSend],
+  );
+
+  // ── Model picker change ────────────────────────────────────────────
+  // Two paths:
+  //   • Existing thread → optimistically update local state, fire a
+  //     background PATCH. Roll back on failure (toast + restore).
+  //   • Welcome screen  → just stash the choice; createThread on the
+  //     next send will persist it.
+  const handleModelChange = useCallback(
+    async (newId: string | null) => {
+      const previous = selectedConfigId;
+      if (previous === newId) return;
+      // Optimistic local update so the picker label flips immediately.
+      setSelectedConfigId(newId);
+
+      if (!threadId) return; // welcome-screen path — nothing to persist yet.
+
+      setModelSwitching(true);
+      try {
+        const token = await getToken();
+        if (!token) throw new Error("Not signed in.");
+        const updated = await patchThread(token, threadId, {
+          llm_config: newId,
+        });
+        setThread(updated);
+        // Re-sync from server truth in case the backend rejected the FK
+        // (e.g. config was deleted between picker mount and PATCH).
+        setSelectedConfigId(updated.llm_config);
+      } catch (err) {
+        // Roll back the optimistic flip and surface the error.
+        setSelectedConfigId(previous);
+        const msg =
+          err instanceof Error ? err.message : "Failed to switch model.";
+        toast.error(msg);
+      } finally {
+        setModelSwitching(false);
+      }
+    },
+    [threadId, selectedConfigId, getToken],
   );
 
   // ── Render helpers ─────────────────────────────────────────────────
@@ -534,6 +638,7 @@ const Interface = () => {
       <CustomizeModal
         open={customizeModalOpen}
         onOpenChange={setCustomizeModalOpen}
+        onConfigsChanged={() => void refreshConfigs()}
       />
       <Vault isOpen={vaultModalOpen} setIsOpen={setVaultModalOpen} />
 
@@ -549,7 +654,16 @@ const Interface = () => {
               </p>
             )}
           </div>
-          <div className="w-full max-w-2xl">
+          <div className="w-full max-w-2xl flex flex-col gap-2">
+            <div className="flex justify-end px-2">
+              <ModelPicker
+                selectedConfigId={selectedConfigId}
+                configs={configs}
+                userDefaultId={userDefaultId}
+                disabled={isStreaming || modelSwitching}
+                onChange={(id) => void handleModelChange(id)}
+              />
+            </div>
             <ChatInput
               handleSubmit={onChatInputSubmit}
               disabled={isStreaming}
@@ -618,7 +732,16 @@ const Interface = () => {
 
           {/* Fixed Input Area */}
           <div className="w-full shrink-0 z-20 pb-4 pt-2 px-4 bg-transparent">
-            <div className="max-w-[75%] mx-auto w-full">
+            <div className="max-w-[75%] mx-auto w-full flex flex-col gap-2">
+              <div className="flex justify-end px-2">
+                <ModelPicker
+                  selectedConfigId={selectedConfigId}
+                  configs={configs}
+                  userDefaultId={userDefaultId}
+                  disabled={isStreaming || modelSwitching}
+                  onChange={(id) => void handleModelChange(id)}
+                />
+              </div>
               <ChatInput
                 handleSubmit={onChatInputSubmit}
                 disabled={isStreaming}

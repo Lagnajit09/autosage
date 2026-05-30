@@ -88,8 +88,41 @@ class AutobotSettings(BaseSettings):
     # Verbatim messages retained when older history is summarized.
     AUTOBOT_KEEP_LAST_N: int = 8
 
+    # ── CORS ────────────────────────────────────────────────────────────
+    # Comma-separated origins permitted to call autobot from the browser.
+    # Read from the env (pydantic-settings auto-binds each field to its
+    # uppercase env var). Default is empty — no implicit cross-origin
+    # access. Set in `.env.autobot` per environment:
+    #   dev:  CORS_ALLOWED_ORIGINS=http://localhost:5173,http://localhost:8080
+    #   prod: CORS_ALLOWED_ORIGINS=https://<your-prod-host>
+    # See `autobot.env.example` for the canonical dev value.
+    #
+    # Why empty default (not localhost): hardcoding dev URLs as a fallback
+    # means a misconfigured prod deploy ships with `localhost:5173` in the
+    # allowed list — not exploitable, but a footgun and a hidden surprise.
+    # An empty default makes "I forgot to configure this" loud and obvious.
+    #
+    # Why this exists at all: without it the browser blocks `/api/ai/*`
+    # cross-origin requests because FastAPI doesn't emit
+    # `Access-Control-Allow-Origin` by default. Django got it for free
+    # via django-cors-headers — autobot needs its own.
+    CORS_ALLOWED_ORIGINS: str = ""
+
     # ── Logging ─────────────────────────────────────────────────────────
     LOG_LEVEL: str = "INFO"
+
+    @property
+    def cors_origins_list(self) -> list[str]:
+        """Split the comma-separated env string into a clean list.
+
+        Drops blanks (so `"a, ,b"` → `["a", "b"]`) and trims whitespace
+        around each entry. FastAPI's `CORSMiddleware` wants a list.
+        """
+        return [
+            o.strip()
+            for o in self.CORS_ALLOWED_ORIGINS.split(",")
+            if o.strip()
+        ]
 
 
 @lru_cache
