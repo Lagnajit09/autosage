@@ -30,7 +30,7 @@ import {
 // import { categories, subCategories, quickActions } from "@/utils/categories";
 import { useLoading } from "@/contexts/loading/loading-context";
 import { useParams } from "react-router-dom";
-import InputTypeGroup from "./InputTypeGroup";
+import InputTypeGroup, { type ChatMode } from "./InputTypeGroup";
 
 type Props = {
   handleSubmit: (e: React.FormEvent, value: string, category: string) => void;
@@ -39,12 +39,27 @@ type Props = {
   // against one thread and confuse the assistant's tool-call state).
   disabled?: boolean;
   placeholder?: string;
+  // T+ : mode selector is now controlled from the parent (Interface)
+  // so the active mode can be forwarded to the chat-send call. Defaults
+  // to "research" if the parent doesn't care to track it.
+  mode?: ChatMode;
+  onModeChange?: (mode: ChatMode) => void;
+};
+
+// Per-mode placeholder text so users see what each mode is for at a
+// glance. Keeps the input affordance self-explanatory without a tutorial.
+const MODE_PLACEHOLDERS: Record<ChatMode, string> = {
+  research: "Ask about your scripts, workflows, or vault…",
+  generation: "Describe a script or workflow to create…",
+  execution: "Workflow execution from chat is coming soon.",
 };
 
 const ChatInput = ({
   handleSubmit,
   disabled = false,
-  placeholder = "Ask anything...",
+  placeholder,
+  mode = "research",
+  onModeChange,
 }: Props) => {
   const { id } = useParams();
   const { isLoading } = useLoading();
@@ -301,7 +316,7 @@ const ChatInput = ({
         >
           <div className="w-full flex flex-col justify-between bg-gray-100 dark:bg-[#272727] rounded-2xl border border-gray-300 dark:border-transparent px-2 py-2 shadow-md">
             <Textarea
-              placeholder={placeholder}
+              placeholder={placeholder ?? MODE_PLACEHOLDERS[mode]}
               className="resize-none border-0 focus-visible:ring-0 focus-visible:ring-offset-0 px-2 py-2 bg-transparent my-auto shadow-none thin-scrollbar text-gray-900 dark:text-gray-100 placeholder:text-gray-500 dark:placeholder:text-gray-400 disabled:opacity-60"
               rows={2}
               ref={textareaRef}
@@ -323,7 +338,11 @@ const ChatInput = ({
 
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <InputTypeGroup />
+                <InputTypeGroup
+                  value={mode}
+                  onChange={(m) => onModeChange?.(m)}
+                  disabled={isDisabled}
+                />
               </div>
 
               <div className="flex items-center justify-between">

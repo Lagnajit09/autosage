@@ -70,7 +70,7 @@ export const ModelPicker = ({
     ? formatConfigLabel(selected)
     : userDefault
       ? `Default (${formatConfigLabel(userDefault)})`
-      : "Default (admin keys)";
+      : "Default LLM Models";
 
   return (
     <DropdownMenu>
@@ -87,11 +87,14 @@ export const ModelPicker = ({
       </DropdownMenuTrigger>
       <DropdownMenuContent
         align="end"
-        className="w-[260px] dark:bg-[#262626] border-gray-200 dark:border-gray-700"
+        className="w-[280px] dark:bg-[#262626] border-gray-200 dark:border-gray-700"
       >
         <DropdownMenuLabel className="text-xs font-medium text-gray-500 dark:text-gray-400">
-          Model
+          Model for this chat
         </DropdownMenuLabel>
+        <div className="px-2 pb-2 text-[10px] leading-snug text-gray-500 dark:text-gray-400">
+          Per-chat choice. To change your global default, open Customize.
+        </div>
         <DropdownMenuItem
           onClick={() => onChange(null)}
           className={`cursor-pointer text-sm ${
@@ -105,7 +108,7 @@ export const ModelPicker = ({
             <span className="text-[11px] text-gray-500 dark:text-gray-400">
               {userDefault
                 ? `Uses ${formatConfigLabel(userDefault)}`
-                : "Uses free admin keys"}
+                : "Uses the system's free LLM models"}
             </span>
           </div>
         </DropdownMenuItem>

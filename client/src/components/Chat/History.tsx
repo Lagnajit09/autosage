@@ -98,9 +98,28 @@ const History: React.FC<HistoryProps> = ({ className }) => {
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameDraft, setRenameDraft] = useState("");
   const [renaming, setRenaming] = useState(false);
-  // Delete confirmation — keyed by the id awaiting confirm.
+  // Delete confirmation — split into two states (target id + open
+  // boolean) so the dropdown has a tick to tear down before the dialog
+  // mounts. Without the split, both portals stack their overlays and
+  // freeze the page until reload. Same pattern used by the Workflows
+  // page's `handleDeleteClick` (cf. pages/Workflows.tsx).
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
+
+  // Two-step open: stash the id now, defer the modal open by a tick.
+  // Radix DropdownMenu fully closes its portal between these two ticks,
+  // so the alert dialog's overlay no longer stacks on top of a stale
+  // dropdown overlay.
+  const openDeleteModal = (threadId: string) => {
+    setDeleteTargetId(threadId);
+    setTimeout(() => setDeleteModalOpen(true), 0);
+  };
+
+  const closeDeleteModal = () => {
+    setDeleteModalOpen(false);
+    setDeleteTargetId(null);
+  };
 
   const fetchThreads = useCallback(async () => {
     setLoading(true);
@@ -203,7 +222,7 @@ const History: React.FC<HistoryProps> = ({ className }) => {
         navigate("/ai/autobot");
       }
       toast.success("Thread deleted.");
-      setDeleteTargetId(null);
+      closeDeleteModal();
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Delete failed.";
       toast.error(msg);
@@ -313,7 +332,13 @@ const History: React.FC<HistoryProps> = ({ className }) => {
                   </p>
                 ) : (
                   <SidebarMenu>
-                    {filteredThreads.map((thread) => (
+                    {filteredThreads.map((thread) => {
+                      // Computed once per row; used by both the wrapper
+                      // (background tint) and the menu button (text
+                      // color + left bar). Keep the lookup local so the
+                      // map function stays a pure render expression.
+                      const isActive = thread.id === activeId;
+                      return (
                       <SidebarMenuItem key={thread.id} className="relative">
                         {renamingId === thread.id ? (
                           <div className="flex items-center gap-1 w-full px-2 py-1">
@@ -356,14 +381,35 @@ const History: React.FC<HistoryProps> = ({ className }) => {
                             </button>
                           </div>
                         ) : (
-                          <div className="flex items-center w-full group/item hover:bg-purple-200/30 dark:hover:bg-purple-800/30 rounded-lg">
+                          <div
+                            className={`relative flex items-center w-full group/item rounded-lg transition-colors ${
+                              isActive
+                                ? "bg-purple-100 dark:bg-purple-900/40"
+                                : "hover:bg-purple-200/30 dark:hover:bg-purple-800/30"
+                            }`}
+                          >
+                            {/* Left-edge accent bar on the active row —
+                              * makes the highlight instantly readable
+                              * even when the sidebar is scrolled past
+                              * the title. Tucked inside the rounded
+                              * wrapper so it inherits the radius. */}
+                            {isActive && (
+                              <span
+                                aria-hidden
+                                className="absolute left-0 top-1.5 bottom-1.5 w-1 rounded-r bg-purple-500 dark:bg-purple-400"
+                              />
+                            )}
                             <SidebarMenuButton
                               onClick={() =>
                                 navigate(`/ai/autobot/${thread.id}`)
                               }
-                              isActive={thread.id === activeId}
+                              isActive={isActive}
                               tooltip={thread.title || "Untitled"}
-                              className="text-gray-900 dark:text-gray-200 font-medium flex-1 hover:bg-transparent"
+                              className={`font-medium flex-1 hover:bg-transparent ${
+                                isActive
+                                  ? "text-purple-800 dark:text-purple-200 pl-3"
+                                  : "text-gray-900 dark:text-gray-200"
+                              }`}
                             >
                               <span className="truncate">
                                 {thread.title || "Untitled"}
@@ -394,7 +440,7 @@ const History: React.FC<HistoryProps> = ({ className }) => {
                                   <span>Rename</span>
                                 </DropdownMenuItem>
                                 <DropdownMenuItem
-                                  onClick={() => setDeleteTargetId(thread.id)}
+                                  onClick={() => openDeleteModal(thread.id)}
                                   className="text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/40 focus:bg-red-100 dark:focus:bg-red-900/40 cursor-pointer"
                                 >
                                   <Trash2 className="mr-2 h-4 w-4" />
@@ -405,7 +451,8 @@ const History: React.FC<HistoryProps> = ({ className }) => {
                           </div>
                         )}
                       </SidebarMenuItem>
-                    ))}
+                      );
+                    })}
                   </SidebarMenu>
                 )}
               </SidebarGroupContent>
@@ -426,8 +473,8 @@ const History: React.FC<HistoryProps> = ({ className }) => {
 
       {/* Delete confirmation */}
       <AlertDialog
-        open={deleteTargetId !== null}
-        onOpenChange={(o) => !o && setDeleteTargetId(null)}
+        open={deleteModalOpen}
+        onOpenChange={(o) => !o && closeDeleteModal()}
       >
         <AlertDialogContent className="dark:bg-[#171717] dark:border-gray-800">
           <AlertDialogHeader>

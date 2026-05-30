@@ -406,7 +406,7 @@ const CustomizeModal = ({
                   </SelectTrigger>
                   <SelectContent className="dark:bg-gray-800 dark:border-gray-700 dark:text-gray-200">
                     <SelectItem value="__none__">
-                      Use admin defaults (free)
+                      Default LLM Models (free)
                     </SelectItem>
                     {configs.map((c) => (
                       <SelectItem key={c.id} value={c.id}>
@@ -433,6 +433,26 @@ const CustomizeModal = ({
 
             {/* ── LLM Keys ──────────────────────────────────────── */}
             <TabsContent value="llm-keys" className="pt-4">
+              {/* Concise BYO explainer — only shown on the list view so
+               * it doesn't crowd the add/edit form. Three sentences:
+               * what a personal key is, what "Default" does, and how
+               * per-thread overrides interact. The Model picker on the
+               * chat input is where per-thread choice happens. */}
+              {editingId === null && (
+                <div className="mb-4 rounded-md border border-blue-200 bg-blue-50/60 p-3 text-xs leading-relaxed text-blue-900 dark:border-blue-900/50 dark:bg-blue-950/30 dark:text-blue-200">
+                  <p className="font-semibold mb-1">
+                    How personal LLM keys work
+                  </p>
+                  <p>
+                    Add your own provider keys (Gemini, Groq, OpenAI,
+                    Anthropic, etc.) and Autobot will use them instead of
+                    the system's free models. The one marked <em>Default</em>{" "}
+                    above is used for every new chat. You can override the
+                    model on a per-chat basis with the picker above the
+                    message input.
+                  </p>
+                </div>
+              )}
               {editingId === null ? (
                 <ConfigList
                   configs={configs}

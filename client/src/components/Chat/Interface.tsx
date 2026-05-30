@@ -37,9 +37,11 @@ import ChatInput from "./ChatInput";
 import { CodeBlock } from "./CodeBlock";
 import CustomizeModal from "./CustomizeModal";
 import { THREADS_CHANGED_EVENT } from "./History";
+import { type ChatMode } from "./InputTypeGroup";
 import ModelPicker from "./ModelPicker";
 import ShareModal from "./ShareModal";
 import ToolCallBadge, { type ToolCallStatus } from "./ToolCallBadge";
+import { AutobotIcon } from "../AutobotIcon";
 import { Vault } from "../vault/Vault";
 import { NavItems } from "../LeftNav";
 import { SidebarTrigger } from "../ui/sidebar";
@@ -122,13 +124,15 @@ const Interface = () => {
   // on every re-render. `useMemo` with [] is the canonical "compute once"
   // pattern for derived values that don't depend on inputs.
   const welcomeText = useMemo(
-    () =>
-      welcomeMessages[Math.floor(Math.random() * welcomeMessages.length)],
+    () => welcomeMessages[Math.floor(Math.random() * welcomeMessages.length)],
     [],
   );
 
-  const userInitial = (user?.firstName?.[0] || user?.username?.[0] || "U")
-    .toUpperCase();
+  const userInitial = (
+    user?.firstName?.[0] ||
+    user?.username?.[0] ||
+    "U"
+  ).toUpperCase();
 
   // ── State ──────────────────────────────────────────────────────────
   const [thread, setThread] = useState<AutobotThread | null>(null);
@@ -156,6 +160,14 @@ const Interface = () => {
   const [userDefaultId, setUserDefaultId] = useState<string | null>(null);
   const [selectedConfigId, setSelectedConfigId] = useState<string | null>(null);
   const [modelSwitching, setModelSwitching] = useState(false);
+
+  // ── Mode state (Research / Generation / Execution) ─────────────────
+  // Default to "research" — read-only is the safest assumption for a
+  // fresh thread. Mode is held in client state (no server persistence)
+  // because it's a per-turn UI hint that prepends an instruction to the
+  // user message before sending. Persisting would mean PATCH-ing the
+  // thread on every change, which is overkill.
+  const [mode, setMode] = useState<ChatMode>("research");
 
   const [shareModalOpen, setShareModalOpen] = useState(false);
   const [customizeModalOpen, setCustomizeModalOpen] = useState(false);
@@ -274,6 +286,7 @@ const Interface = () => {
       targetThreadId: string,
       content: string,
       clientId: string,
+      activeMode: ChatMode,
     ): Promise<void> => {
       const controller = new AbortController();
       abortRef.current = controller;
@@ -291,7 +304,12 @@ const Interface = () => {
       await streamMessage(
         token,
         targetThreadId,
-        { content, client_id: clientId, content_type: "text/plain" },
+        {
+          content,
+          client_id: clientId,
+          content_type: "text/plain",
+          mode: activeMode,
+        },
         (event: AutobotStreamEvent) => {
           switch (event.type) {
             case "stream_start": {
@@ -358,13 +376,29 @@ const Interface = () => {
               break;
             }
             case "done": {
-              // Authoritative finalization. The `event.message` is the
-              // persisted assistant Message — drop the draft, append the
-              // canonical row to history. We also clear `pendingUser`
-              // here because the next history reload will surface the
-              // persisted user row (and the live UI keeps the bubble
-              // until then by including it in render below).
-              setMessages((prev) => [...prev, event.message]);
+              // Authoritative finalization. Build an optimistic user
+              // message from the local input (server has already
+              // persisted the canonical version with the same content,
+              // different id — a future refresh will swap it in
+              // transparently). Without this, clearing `pendingUser`
+              // below would erase the user's bubble from the visible
+              // thread and they'd think their message vanished.
+              const optimisticUser: AutobotMessage = {
+                id: `optimistic-user-${clientId}`,
+                role: "user",
+                content,
+                content_type: "text/plain",
+                provider: "",
+                model_name: "",
+                prompt_tokens: null,
+                completion_tokens: null,
+                total_tokens: null,
+                tool_calls: [],
+                tool_call_id: "",
+                client_id: clientId,
+                created_at: new Date().toISOString(),
+              };
+              setMessages((prev) => [...prev, optimisticUser, event.message]);
               setPendingAssistant(null);
               setPendingUser(null);
               break;
@@ -415,7 +449,7 @@ const Interface = () => {
           const token = await getToken();
           if (!token) throw new Error("Not signed in.");
           const title =
-            trimmed.length > 60 ? `${trimmed.slice(0, 60)}…` : trimmed;
+            trimmed.length > 30 ? `${trimmed.slice(0, 30)}…` : trimmed;
           const created = await createThread(token, {
             title,
             llm_config: selectedConfigId,
@@ -429,7 +463,7 @@ const Interface = () => {
           window.dispatchEvent(new CustomEvent(THREADS_CHANGED_EVENT));
         }
 
-        await runStream(activeThreadId, trimmed, clientId);
+        await runStream(activeThreadId, trimmed, clientId, mode);
       } catch (err) {
         const msg = err instanceof Error ? err.message : "Failed to send.";
         setStreamError(msg);
@@ -441,7 +475,15 @@ const Interface = () => {
         abortRef.current = null;
       }
     },
-    [threadId, isStreaming, navigate, getToken, runStream, selectedConfigId],
+    [
+      threadId,
+      isStreaming,
+      navigate,
+      getToken,
+      runStream,
+      selectedConfigId,
+      mode,
+    ],
   );
 
   // Adapter for ChatInput's (e, value, category) signature. The category
@@ -514,6 +556,15 @@ const Interface = () => {
               language={language}
             />
           );
+        },
+        // ReactMarkdown wraps fenced code in `<pre><code>...</code></pre>`
+        // by default. The prose plugin then styles the <pre> with its own
+        // background + padding, which surrounds our CodeBlock in a second
+        // visible "frame" (the user-reported outer gray box). Render the
+        // pre as a transparent passthrough so only our CodeBlock surface
+        // is visible.
+        pre(props: React.ComponentPropsWithoutRef<"pre">) {
+          return <>{props.children}</>;
         },
         strong(props: React.ComponentPropsWithoutRef<"strong">) {
           return (
@@ -589,49 +640,64 @@ const Interface = () => {
         <SidebarTrigger className="lg:hidden" />
       </div>
 
-      {/* Top Controls (Desktop) */}
-      <div className="hidden lg:flex items-center gap-0 absolute top-4 right-4 z-20">
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              onClick={() => setVaultModalOpen(true)}
-              className="flex items-center gap-2 cursor-pointer bg-transparent hover:bg-gray-100 dark:hover:bg-gray-800 py-2 px-3 rounded-full transition-colors"
-            >
-              <DatabaseZap className="w-4 h-4 text-gray-800 dark:text-gray-200" />
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>
-            <p>Vault</p>
-          </TooltipContent>
-        </Tooltip>
+      {/* Desktop top navbar — true glass effect.
+       *
+       * `absolute` (not flex-flow) so it OVERLAYS the scrolling
+       * messages area. As messages scroll inside their container they
+       * pass behind the navbar and `backdrop-blur-md` catches them —
+       * the actual frosted-glass look. The messages + welcome state
+       * compensate with `pt-16` so the first row clears the navbar. */}
+      <div className="hidden lg:flex items-center justify-between absolute top-0 left-0 right-0 px-6 py-3 z-30 backdrop-blur-md bg-white/40 dark:bg-gray-900/40 border-b border-gray-200/30 dark:border-gray-800/30 shadow-sm">
+        <div className="flex items-center gap-2">
+          <AutobotIcon size={24} />
+          <span className="font-semibold text-gray-900 dark:text-gray-100 tracking-tight text-lg">
+            Autobot
+          </span>
+        </div>
 
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              onClick={() => setCustomizeModalOpen(true)}
-              className="flex items-center gap-2 cursor-pointer bg-transparent hover:bg-gray-100 dark:hover:bg-gray-800 py-2 px-3 rounded-full transition-colors"
-            >
-              <Settings2 className="w-4 h-4 text-gray-800 dark:text-gray-200" />
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>
-            <p>Customize</p>
-          </TooltipContent>
-        </Tooltip>
+        <div className="flex items-center gap-1">
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                onClick={() => setVaultModalOpen(true)}
+                className="flex items-center gap-2 cursor-pointer bg-transparent hover:bg-gray-100/70 dark:hover:bg-gray-800/70 py-2 px-3 rounded-full transition-colors"
+              >
+                <DatabaseZap className="w-4 h-4 text-gray-800 dark:text-gray-200" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>
+              <p>Vault</p>
+            </TooltipContent>
+          </Tooltip>
 
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              onClick={() => setShareModalOpen(true)}
-              className="flex items-center gap-2 cursor-pointer bg-transparent hover:bg-gray-100 dark:hover:bg-gray-800 py-2 px-3 rounded-full transition-colors"
-            >
-              <ShareIcon className="w-4 h-4 text-gray-800 dark:text-gray-200" />
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>
-            <p>Share</p>
-          </TooltipContent>
-        </Tooltip>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                onClick={() => setCustomizeModalOpen(true)}
+                className="flex items-center gap-2 cursor-pointer bg-transparent hover:bg-gray-100/70 dark:hover:bg-gray-800/70 py-2 px-3 rounded-full transition-colors"
+              >
+                <Settings2 className="w-4 h-4 text-gray-800 dark:text-gray-200" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>
+              <p>Customize</p>
+            </TooltipContent>
+          </Tooltip>
+
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                onClick={() => setShareModalOpen(true)}
+                className="flex items-center gap-2 cursor-pointer bg-transparent hover:bg-gray-100/70 dark:hover:bg-gray-800/70 py-2 px-3 rounded-full transition-colors"
+              >
+                <ShareIcon className="w-4 h-4 text-gray-800 dark:text-gray-200" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>
+              <p>Share</p>
+            </TooltipContent>
+          </Tooltip>
+        </div>
       </div>
 
       <ShareModal open={shareModalOpen} onOpenChange={setShareModalOpen} />
@@ -643,7 +709,10 @@ const Interface = () => {
       <Vault isOpen={vaultModalOpen} setIsOpen={setVaultModalOpen} />
 
       {!hasAnyContent ? (
-        <div className="flex-1 flex flex-col items-center justify-center p-4">
+        // Welcome state padded `lg:pt-16` to clear the absolute-positioned
+        // navbar (only present on lg+). Mobile uses the in-flow header
+        // above, so no extra padding needed there.
+        <div className="flex-1 flex flex-col items-center justify-center p-4 lg:pt-16">
           <div className="text-center mb-8 max-w-lg mx-auto">
             <p className="text-2xl font-medium text-gray-600 dark:text-gray-400">
               {welcomeText}
@@ -667,6 +736,8 @@ const Interface = () => {
             <ChatInput
               handleSubmit={onChatInputSubmit}
               disabled={isStreaming}
+              mode={mode}
+              onModeChange={setMode}
             />
           </div>
         </div>
@@ -677,7 +748,14 @@ const Interface = () => {
             ref={messagesContainerRef}
             className="flex-1 w-full overflow-y-auto scroll-smooth"
           >
-            <div className="max-w-[70%] mx-auto w-full flex flex-col gap-6 px-4 py-6 pb-4">
+            {/* Responsive: tight on mobile so bubbles use the full
+             * width, capped on larger screens so very long lines stay
+             * comfortably readable. `lg:pt-20` clears the absolute
+             * glass navbar overhead so the first message isn't tucked
+             * underneath it on page load — once the user scrolls,
+             * subsequent messages pass behind the navbar (which is
+             * exactly what produces the frosted-glass effect). */}
+            <div className="w-full max-w-3xl xl:max-w-[70%] mx-auto flex flex-col gap-6 px-4 py-6 pb-4 lg:pt-20">
               {historyLoading && visibleMessages.length === 0 && (
                 <p className="text-center text-sm text-gray-500 dark:text-gray-400">
                   Loading conversation…
@@ -706,12 +784,14 @@ const Interface = () => {
                 <AssistantBubble
                   toolCalls={pendingAssistant.toolCalls}
                   // While streaming, render plain text — markdown parse
-                  // on every token is wasteful and visually jumpy.
+                  // on every token is wasteful and visually jumpy. Theme-
+                  // aware text color so dark-mode users can actually
+                  // read the incremental tokens.
                   body={
                     pendingAssistant.content ? (
-                      <p className="whitespace-pre-wrap leading-relaxed">
+                      <p className="whitespace-pre-wrap leading-relaxed text-sm text-gray-900 dark:text-gray-200">
                         {pendingAssistant.content}
-                        <span className="ml-0.5 inline-block h-4 w-1 animate-pulse bg-gray-500 align-middle" />
+                        <span className="ml-0.5 inline-block h-4 w-1 animate-pulse bg-gray-700 dark:bg-gray-300 align-middle" />
                       </p>
                     ) : (
                       <p className="text-sm text-gray-500 dark:text-gray-400 italic">
@@ -732,7 +812,7 @@ const Interface = () => {
 
           {/* Fixed Input Area */}
           <div className="w-full shrink-0 z-20 pb-4 pt-2 px-4 bg-transparent">
-            <div className="max-w-[75%] mx-auto w-full flex flex-col gap-2">
+            <div className="w-full max-w-3xl xl:max-w-[75%] mx-auto flex flex-col gap-2">
               <div className="flex justify-end px-2">
                 <ModelPicker
                   selectedConfigId={selectedConfigId}
@@ -780,7 +860,7 @@ const MessageRow = ({
       toolCalls={historicalBadges(message.tool_calls)}
       body={
         message.content ? (
-          <div className="w-full text-gray-900 dark:text-gray-200 rounded-lg prose prose-sm prose-invert prose-pre:border prose-pre:border-gray-700/50 max-w-none">
+          <div className="w-full text-gray-900 dark:text-gray-200 rounded-lg prose prose-sm prose-invert prose-pre:bg-transparent prose-pre:p-0 prose-pre:m-0 prose-pre:border-0 max-w-none">
             {renderMarkdown(message.content)}
           </div>
         ) : null
@@ -813,12 +893,16 @@ interface UserBubbleProps {
 
 const UserBubble = ({ content, userInitial }: UserBubbleProps) => (
   <div className="w-full">
-    <div className="w-full flex items-start gap-3 justify-start">
+    {/* Right-aligned: bubble first, avatar after — convention for
+     * "this is what YOU said." The tail-sharp corner lives on the
+     * top-right (rounded-tr-sm) so the bubble visually "points" at
+     * the avatar that sits to its right. */}
+    <div className="w-full flex items-start gap-3 justify-end">
+      <div className="bg-purple-100 dark:bg-purple-900/30 text-gray-900 dark:text-gray-100 px-5 py-3.5 rounded-2xl rounded-tr-sm max-w-[85%] text-sm leading-relaxed shadow-sm font-medium whitespace-pre-wrap break-words">
+        {content}
+      </div>
       <div className="p-2 w-10 h-10 bg-purple-300/50 dark:bg-purple-500/30 text-gray-950 dark:text-gray-50 rounded-full flex items-center justify-center font-semibold shrink-0">
         {userInitial}
-      </div>
-      <div className="bg-gray-300 dark:bg-gray-950/50 text-gray-900 dark:text-gray-200 px-5 py-3.5 rounded-2xl rounded-tr-sm max-w-[85%] text-sm leading-relaxed shadow-sm font-medium whitespace-pre-wrap">
-        {content}
       </div>
     </div>
   </div>

@@ -109,6 +109,11 @@ export interface StreamMessageBody {
   /** Client-supplied idempotency key. Reuse the same value on retry so
    * a dropped stream doesn't double-persist the user message. */
   client_id?: string;
+  /** Chat mode — biases the LLM's system prompt toward read-only
+   * ("research") or write-capable ("generation") behavior. Backend
+   * appends a mode-specific instruction to the system prompt at turn
+   * time. Omit (or "research") for safe default. */
+  mode?: "research" | "generation" | "execution";
 }
 
 export interface StreamMessageOptions {

@@ -169,6 +169,7 @@ def _build_llm_messages(
     new_user_content: str,
     *,
     summary_text: str = "",
+    mode: str = "",
 ) -> list[dict[str, Any]]:
     """Assemble the messages list passed to litellm.
 
@@ -207,6 +208,7 @@ def _build_llm_messages(
     """
     system_prompt = get_system_prompt(
         user_customizations=thread.get("system_prompt_override") or "",
+        mode=mode,
     )
     if summary_text:
         system_prompt = (
@@ -333,6 +335,9 @@ async def post_message(
     # text/plain; LLM output is always treated as text/markdown below.
     content_type: str = body.get("content_type") or "text/plain"
     client_id: str | None = body.get("client_id")
+    # Optional Research/Generation/Execution mode hint from the UI. Used
+    # only to bias the system prompt — unknown values are ignored.
+    mode: str = body.get("mode") or ""
 
     client = get_django_client()
 
@@ -445,7 +450,9 @@ async def post_message(
     resolution = resolutions[0]
 
     # 4. Call the LLM.
-    llm_messages = _build_llm_messages(thread, history_list, content)
+    llm_messages = _build_llm_messages(
+        thread, history_list, content, mode=mode,
+    )
     try:
         result = await acomplete(llm_messages, resolution)
     except LLMError as e:
@@ -540,6 +547,11 @@ async def post_message_stream(
     content: str = body["content"]
     content_type: str = body.get("content_type") or "text/plain"
     client_id: str | None = body.get("client_id")
+    # Optional Research/Generation/Execution mode hint from the UI.
+    # Closure-captured by the streaming generator below and passed to
+    # `_build_llm_messages` so the LLM sees a mode-specific addendum
+    # appended to its system prompt for this turn only.
+    mode: str = body.get("mode") or ""
 
     client = get_django_client()
 
@@ -745,6 +757,7 @@ async def post_message_stream(
         tentative = _build_llm_messages(
             thread, history_list, content,
             summary_text=existing_summary_text,
+            mode=mode,
         )
         context_window = get_model_context_window(resolution.model_name)
         target_tokens = int(
@@ -805,6 +818,7 @@ async def post_message_stream(
         llm_messages = _build_llm_messages(
             thread, history_list, content,
             summary_text=existing_summary_text,
+            mode=mode,
         )
         tool_schemas = get_tool_schemas()
         max_rounds = settings.AUTOBOT_MAX_TOOL_ROUNDS
