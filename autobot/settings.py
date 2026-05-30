@@ -62,6 +62,25 @@ class AutobotSettings(BaseSettings):
     # the LLM batches independent calls, and 8–10 if it goes serial.
     # 10 gives generous slack while still bailing on genuine misbehavior.
     AUTOBOT_MAX_TOOL_ROUNDS: int = 10
+
+    # ── Admin pool resilience (T18a) ─────────────────────────────────────
+    # Comma-separated `provider/model` entries to try in order if the
+    # primary admin LLM (DEFAULT_PROVIDER + DEFAULT_MODEL) returns a
+    # retryable error (rate limit, 503, connection drop, timeout).
+    # Empty = no fallback. Example:
+    #   "groq/llama-3.1-70b-versatile,openrouter/meta-llama/llama-3.1-70b-instruct"
+    # Only attempted on round 1 of a tool-call loop and only when no
+    # tokens have been emitted yet — we never swap providers mid-reply.
+    # BYO (user's `LLMConfig`) is final; no fallback for that path.
+    AUTOBOT_ADMIN_FALLBACKS: str = ""
+
+    # Per-user daily quota on ADMIN-keyed chat turns. Tracked in Redis
+    # at `autobot:admin_quota:<sub>:<yyyymmdd>`. Counter ticks once
+    # per chat turn (NOT once per tool-call round inside a turn). At
+    # the cap, the user gets a friendly error and is told to add a
+    # personal LLM key in Customize. BYO turns don't count. Set to 0
+    # to disable the cap entirely.
+    AUTOBOT_ADMIN_DAILY_LIMIT: int = 30
     # Redis TTL for hot conversation context (seconds). Refreshed on access.
     AUTOBOT_CTX_TTL_SECONDS: int = 7200
     # Summarization trigger as a fraction of the model's context window.

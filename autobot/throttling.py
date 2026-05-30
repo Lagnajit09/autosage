@@ -39,6 +39,8 @@ from slowapi import Limiter
 from slowapi.util import get_remote_address
 from starlette.requests import Request
 
+from settings import get_settings
+
 logger = logging.getLogger(__name__)
 
 
@@ -79,8 +81,17 @@ def _user_sub_or_ip(request: Request) -> str:
 # this object — slowapi keeps its counters on the Limiter instance, so
 # every decorated endpoint must reference the SAME instance.
 #
-# Storage backend defaults to in-memory; fine for a single-replica
-# autobot container. Switch to `storage_uri="redis://redis:6379/2"` if
-# we ever scale horizontally (otherwise each replica enforces its own
-# bucket and the effective ceiling becomes N × per-replica limit).
-limiter = Limiter(key_func=_user_sub_or_ip)
+# Storage backend points at the same Redis we already run for the
+# context cache (db /2). This is REQUIRED — not optional — because
+# uvicorn runs with `--workers 2` (one process per worker, separate
+# memory). With the default in-memory backend, "30/minute" would
+# become "30/minute PER WORKER" → effective ceiling 60/minute, and
+# the rate limit would silently underperform. Redis storage gives one
+# shared counter across all workers.
+#
+# Storage URI is read from settings so the same env override that
+# moves Redis also moves the limiter (no separate config to drift).
+limiter = Limiter(
+    key_func=_user_sub_or_ip,
+    storage_uri=get_settings().REDIS_URL,
+)

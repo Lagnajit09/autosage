@@ -55,6 +55,7 @@ from conversation.summarizer import (
 )
 from llm.client import (
     LLMError,
+    LLMResolution,
     acomplete,
     astream_complete,
     resolve_for_thread,
@@ -418,8 +419,12 @@ async def post_message(
 
     # 3. Resolve provider/model/key. T17: per-thread Thread.llm_config >
     #    per-user UserSettings.default_llm_config > admin keys.
+    #    T18a: returns a list (BYO → 1 element, admin → primary +
+    #    fallbacks). The non-streaming endpoint doesn't bother with
+    #    fallback — it's the deprecated path and a single attempt is
+    #    fine. Pick the primary; let any error propagate as a 502.
     try:
-        resolution = await resolve_for_thread(
+        resolutions = await resolve_for_thread(
             jwt=auth.raw_jwt,
             thread=thread,
             user_settings=user_settings,
@@ -431,6 +436,13 @@ async def post_message(
             message="LLM provider is not configured.",
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
         )
+    if not resolutions:
+        return _envelope(
+            success=False,
+            message="LLM provider is not configured.",
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+    resolution = resolutions[0]
 
     # 4. Call the LLM.
     llm_messages = _build_llm_messages(thread, history_list, content)
@@ -641,8 +653,10 @@ async def post_message_stream(
         #     user config is selected; falls back to admin on any
         #     failure (logged but non-fatal so a stale FK doesn't
         #     break chat).
+        # T17 picks the (BYO | admin) path; T18a expands the admin path
+        # into an ordered list of resolutions for round-1 fallback.
         try:
-            resolution = await resolve_for_thread(
+            resolutions = await resolve_for_thread(
                 jwt=auth_handle.raw_jwt,
                 thread=thread,
                 user_settings=user_settings,
@@ -653,6 +667,43 @@ async def post_message_stream(
                 "LLM provider is not configured.", code="llm_unconfigured",
             )
             return
+        if not resolutions:
+            yield sse_error(
+                "No LLM provider is configured. Set an admin key in "
+                "autobot.env or add a personal LLM key in Customize.",
+                code="llm_unconfigured",
+            )
+            return
+        # The primary is used for context-window math and summarization.
+        # Fallback candidates may pick a different provider for the user-
+        # facing chat call, but we don't re-compute the window — they're
+        # all hosted models with comparable budgets at the level we care
+        # about (60 % trigger).
+        resolution = resolutions[0]
+
+        # T18a: per-user daily quota gate on the ADMIN path. BYO turns
+        # don't count (the user is paying their own way). The counter
+        # ticks ONCE per chat turn, regardless of how many tool rounds
+        # the LLM fans out into.
+        settings = get_settings()
+        if resolution.is_admin and settings.AUTOBOT_ADMIN_DAILY_LIMIT > 0:
+            allowed, count = await get_cache().incr_admin_quota_for_today(
+                auth_handle.user_sub,
+                settings.AUTOBOT_ADMIN_DAILY_LIMIT,
+            )
+            if not allowed:
+                yield sse_error(
+                    f"You've used your daily allocation of "
+                    f"{settings.AUTOBOT_ADMIN_DAILY_LIMIT} free LLM "
+                    "calls. Add a personal LLM key in Customize to continue.",
+                    code="admin_quota_exhausted",
+                )
+                return
+            logger.info(
+                "Admin quota tick: user_sub=%s count=%d/%d",
+                auth_handle.user_sub, count,
+                settings.AUTOBOT_ADMIN_DAILY_LIMIT,
+            )
 
         # 2b'. Context-window management (T16).
         #      - Load any existing summary for this thread; only include
@@ -663,7 +714,6 @@ async def post_message_stream(
         #        model window, summarize the OLD portion via a separate
         #        LLM call, persist a Django Summary row + Redis cache,
         #        and replace the old portion with the new summary.
-        settings = get_settings()
         existing_summary = await load_latest_summary(thread_id, auth_handle.raw_jwt)
         existing_summary_text = (
             (existing_summary or {}).get("summary_text") or ""
@@ -759,27 +809,129 @@ async def post_message_stream(
         tool_schemas = get_tool_schemas()
         max_rounds = settings.AUTOBOT_MAX_TOOL_ROUNDS
 
+        # T18a: track which resolution actually succeeded on round 1.
+        # Rounds 2+ stay pinned to that provider — we never swap mid-
+        # tool-loop because the LLM's tool_calls memory is provider-
+        # specific (different providers serialize tool_call ids
+        # differently). `selected_resolution` becomes the active one
+        # once we've committed to it.
+        selected_resolution: LLMResolution | None = None
+
         for round_num in range(1, max_rounds + 1):
             accumulated = ""
             final_payload: dict[str, Any] | None = None
 
-            try:
-                async for kind, payload in astream_complete(
-                    llm_messages, resolution, tools=tool_schemas,
-                ):
-                    if kind == "token":
-                        accumulated += payload
-                        yield sse_token(payload)
-                    elif kind == "done":
-                        final_payload = payload
-            except LLMError as e:
-                logger.error(
-                    "LLM stream failed (round=%d, provider=%s, model=%s): %s",
-                    round_num, resolution.provider, resolution.model_name, e,
-                )
+            # On round 1 with an admin chain we have multiple
+            # candidates; on round 2+ or BYO, we have exactly one.
+            if round_num == 1 and selected_resolution is None:
+                candidates = resolutions
+            else:
+                # `selected_resolution` is set after round 1 succeeds.
+                # If it's still None here (shouldn't happen — we'd have
+                # already returned via sse_error), fall back to primary.
+                candidates = [selected_resolution or resolution]
+
+            stream_succeeded = False
+            for cand_idx, cand in enumerate(candidates):
+                attempt_yielded_token = False
+                attempt_accumulated = ""
+                attempt_final: dict[str, Any] | None = None
+                try:
+                    async for kind, payload in astream_complete(
+                        llm_messages, cand, tools=tool_schemas,
+                    ):
+                        if kind == "token":
+                            attempt_accumulated += payload
+                            attempt_yielded_token = True
+                            yield sse_token(payload)
+                        elif kind == "done":
+                            attempt_final = payload
+                except LLMError as e:
+                    # Salvage path: if the stream errored AFTER content
+                    # was already delivered to the client, treat it as
+                    # success. Real-world trigger: litellm 1.55.x's
+                    # Databricks-shared chunk parser crashes on Groq's
+                    # final usage-only chunk (`choices: []` is valid
+                    # OpenAI protocol but the parser doesn't guard
+                    # `choices[0]`). The full content reached the
+                    # browser; we just need to persist it as the turn's
+                    # answer so future turns see it in history. Token
+                    # counts are zeroed since we lost the usage chunk —
+                    # acceptable tradeoff.
+                    if (
+                        attempt_yielded_token
+                        and attempt_accumulated
+                        and attempt_final is None
+                    ):
+                        logger.warning(
+                            "LLM stream errored after content was "
+                            "delivered (provider=%s model=%s err=%s) — "
+                            "salvaging accumulated reply",
+                            cand.provider, cand.model_name, e,
+                        )
+                        attempt_final = {
+                            "content": attempt_accumulated,
+                            "tool_calls": [],
+                            "provider": cand.provider,
+                            "model_name": cand.model_name,
+                            "prompt_tokens": 0,
+                            "completion_tokens": 0,
+                            "total_tokens": 0,
+                        }
+                        # Fall through to the success branch below.
+                    else:
+                        # No content yielded yet (or no content at all).
+                        # Retryable + more candidates left = safe to
+                        # try the next entry in the fallback chain.
+                        # Anything else is terminal.
+                        has_more = cand_idx < len(candidates) - 1
+                        if (
+                            e.retryable
+                            and not attempt_yielded_token
+                            and has_more
+                        ):
+                            logger.warning(
+                                "Admin provider %s/%s failed (retryable): "
+                                "%s — trying fallback",
+                                cand.provider, cand.model_name, e,
+                            )
+                            continue
+                        logger.error(
+                            "LLM stream failed (round=%d, provider=%s, "
+                            "model=%s): %s",
+                            round_num, cand.provider, cand.model_name, e,
+                        )
+                        yield sse_error(
+                            "The LLM provider is temporarily unavailable.",
+                            code="llm_unavailable",
+                        )
+                        return
+
+                # This candidate succeeded — commit its output to the
+                # round-level variables and pin subsequent rounds to it.
+                accumulated = attempt_accumulated
+                final_payload = attempt_final
+                selected_resolution = cand
+                stream_succeeded = True
+                if cand_idx > 0:
+                    logger.info(
+                        "Recovered via fallback after %d retries: "
+                        "provider=%s model=%s",
+                        cand_idx, cand.provider, cand.model_name,
+                    )
+                break
+
+            if not stream_succeeded:
+                # All candidates failed without a usable response. This
+                # is reached only if every entry in the chain raised a
+                # NON-retryable error or we ran out of fallbacks while
+                # tokens had already been emitted. Either way, the user
+                # has seen something useful — or nothing at all — and
+                # there's no clean recovery beyond surfacing the error.
                 yield sse_error(
-                    "The LLM provider is temporarily unavailable.",
-                    code="llm_unavailable",
+                    "All admin LLM providers exhausted. Try again or "
+                    "add a personal LLM key in Customize.",
+                    code="all_llm_unavailable",
                 )
                 return
 

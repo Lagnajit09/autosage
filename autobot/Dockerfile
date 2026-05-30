@@ -22,7 +22,7 @@ RUN pip install -r requirements.txt
 # ── Source layer ───────────────────────────────────────────────────────
 # Explicit file list (not `COPY . .`) so the bind-mounted venv/ dir in
 # the dev tree never sneaks into the image.
-COPY main.py settings.py auth.py ./
+COPY main.py settings.py auth.py throttling.py ./
 COPY conversation/ ./conversation/
 COPY llm/ ./llm/
 COPY routers/ ./routers/

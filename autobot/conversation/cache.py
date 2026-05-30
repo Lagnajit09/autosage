@@ -133,6 +133,66 @@ class ConversationCache:
     async def invalidate_thread_summary(self, thread_id: str) -> None:
         await self._client.delete(_thread_summary_key(thread_id))
 
+    # ── Admin-key quota (T18a) ────────────────────────────────────────
+
+    async def incr_admin_quota_for_today(
+        self,
+        user_sub: str,
+        daily_limit: int,
+    ) -> tuple[bool, int]:
+        """Increment a user's daily admin-key counter and check the cap.
+
+        Returns ``(allowed, count)``:
+          • ``allowed=True``  if ``count <= daily_limit`` (or limit is 0)
+          • ``allowed=False`` if ``count >  daily_limit`` — caller
+            should refuse the chat turn and prompt the user to add a
+            personal LLM key.
+
+        The counter ticks ONCE per chat turn (not per tool-call round).
+        Keyed by UTC date so it resets at 00:00 UTC. 26h TTL gives DST /
+        clock-skew margin without growing the keyspace unboundedly.
+
+        ``daily_limit=0`` disables the cap entirely — useful for dev
+        and for self-hosted deployments where the admin key is the
+        operator's own paid key.
+
+        Redis errors fail-OPEN (return ``(True, 0)``). If Redis is
+        down, we'd rather let the chat through than block every user;
+        the per-user slowapi throttle still protects against runaway
+        request volume.
+        """
+        if daily_limit <= 0:
+            return True, 0
+
+        # Compute the UTC date string. Imported locally to keep the
+        # cache module's top-level imports tight.
+        from datetime import datetime, timezone
+        today = datetime.now(timezone.utc).strftime("%Y%m%d")
+        key = f"autobot:admin_quota:{user_sub}:{today}"
+
+        try:
+            count = await self._client.incr(key)
+            if count == 1:
+                # First request of the day for this user. Set a TTL so
+                # the counter falls off on its own; 26h covers DST +
+                # any clock skew between containers.
+                await self._client.expire(key, 60 * 60 * 26)
+        except Exception as e:
+            logger.warning(
+                "Admin-quota counter unavailable for user_sub=%s (%s); "
+                "fail-open",
+                user_sub, e,
+            )
+            return True, 0
+
+        allowed = count <= daily_limit
+        if not allowed:
+            logger.info(
+                "Admin-quota exceeded: user_sub=%s count=%d limit=%d",
+                user_sub, count, daily_limit,
+            )
+        return allowed, int(count)
+
 
 @lru_cache
 def get_cache() -> ConversationCache:

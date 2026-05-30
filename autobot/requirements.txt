@@ -2,6 +2,11 @@
 # UTF-8. Trimmed from the FastAPI-CLI scaffold to what Autobot actually
 # uses. Pinned for reproducibility — bump deliberately when adopting new
 # features (litellm in particular evolves fast).
+#
+# Last bump: 2026-05-30. Driven by a litellm 1.55.4 bug in the Databricks-
+# shared chunk parser that crashed on Groq's trailing usage-only chunk
+# (`choices: []` valid OpenAI protocol, parser indexed `choices[0]`
+# without a guard). Newer litellm fixes it AND drops the httpx<0.28 cap.
 
 # Web framework
 fastapi==0.136.1
@@ -13,11 +18,9 @@ pydantic-settings==2.14.1
 python-dotenv==1.2.2
 
 # HTTP client — calls Django internal API + LLM providers (T11+).
-# Pinned to 0.27.2 because litellm 1.55.x explicitly caps httpx<0.28
-# (resolver conflict: "litellm 1.55.4 depends on httpx<0.28.0 and >=0.23.0").
-# When we bump litellm to a version that supports httpx 0.28+ (~1.59+),
-# this pin can move up too.
-httpx==0.27.2
+# Previously pinned to 0.27.2 because litellm 1.55.x capped httpx<0.28;
+# the newer litellm pin below relaxes that, so we can move up.
+httpx==0.28.1
 
 # Redis client for hot-context cache (T11)
 redis==5.2.1
@@ -29,13 +32,20 @@ cryptography==44.0.0
 
 # LLM gateway (T12+). Unified provider interface for Gemini / Groq /
 # OpenRouter / Anthropic / OpenAI / Azure / custom endpoints.
-litellm==1.55.4
+# 1.55.4 → 1.74.0 fixes:
+#   • Databricks-shared chunk parser crash on empty `choices` (fixed
+#     in ~1.56). The autobot salvage path in `llm/client.py` still
+#     catches the case as defense-in-depth.
+#   • Pydantic v2 serializer warnings ("Expected 5 fields but got 4")
+#     from litellm internals.
+#   • Relaxes the httpx<0.28 dependency.
+litellm==1.74.0
 
 # Token counting for summarization threshold (T16)
 tiktoken==0.8.0
 
 # Per-user rate limiting for the chat endpoint (T18). Pure-Python,
-# starlette-native, supports in-memory or Redis storage. We use the
-# default in-memory backend — fine for a single-replica autobot
-# container; switch to Redis storage if/when we scale horizontally.
+# starlette-native, Redis storage (we point it at db /2 so all uvicorn
+# workers share counters — without that, `--workers 2` would silently
+# double the effective rate limit).
 slowapi==0.1.9

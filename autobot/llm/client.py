@@ -25,6 +25,29 @@ import litellm
 
 from settings import get_settings
 
+
+# Litellm exception subclasses that are SAFE to retry against another
+# provider (T18a). RateLimitError + ServiceUnavailableError + APIConnection
+# are transient. Timeout is usually transient too. We deliberately do
+# NOT include BadRequestError / AuthenticationError / ContextWindowExceeded
+# in this set — those reflect the request itself being broken, and a
+# fallback provider would reject for the same reason.
+_RETRYABLE_LITELLM_ERRORS: tuple[type[Exception], ...] = tuple(
+    cls for cls in (
+        getattr(litellm, "RateLimitError", None),
+        getattr(litellm, "ServiceUnavailableError", None),
+        getattr(litellm, "APIConnectionError", None),
+        getattr(litellm, "Timeout", None),
+    ) if cls is not None
+)
+
+
+def _wrap_litellm_error(e: Exception) -> LLMError:
+    """Convert a litellm exception to our LLMError, tagging it
+    retryable if the underlying class is in the safe-to-retry set."""
+    retryable = isinstance(e, _RETRYABLE_LITELLM_ERRORS)
+    return LLMError(str(e), retryable=retryable)
+
 logger = logging.getLogger(__name__)
 
 # Quiet litellm's default chatty INFO logs and disable telemetry. Tokens
@@ -34,7 +57,18 @@ litellm.suppress_debug_info = True
 
 
 class LLMError(Exception):
-    """Surfaces any provider-side or configuration error to the caller."""
+    """Surfaces any provider-side or configuration error to the caller.
+
+    `retryable=True` flags errors that another provider might survive
+    (rate limits, connection drops, 503s). The chat router uses this to
+    decide whether to try the next admin fallback (T18a). `False` —
+    the default — is for errors where retrying gains nothing (bad
+    request, auth failure, context overflow, malformed config).
+    """
+
+    def __init__(self, message: str, *, retryable: bool = False):
+        super().__init__(message)
+        self.retryable = retryable
 
 
 @dataclass(frozen=True)
@@ -57,6 +91,10 @@ class LLMResolution:
     model_name: str     # bare model name stored on Message.model_name
     base_url: str | None = None      # api_base override
     api_version: str | None = None   # required for Azure
+    # T18a: `True` for admin-keyed resolutions (subject to fallback
+    # chain + per-user daily quota), `False` for BYO (LLMConfig). The
+    # chat router branches on this flag for both decisions.
+    is_admin: bool = True
 
 
 # LiteLLM dispatches by the `provider/` prefix on the model string. We
@@ -106,12 +144,21 @@ def resolve_admin(
         raise LLMError("DEFAULT_MODEL is empty — set it in autobot.env.")
 
     # Normalize so the litellm call always sees `provider/model`.
-    if "/" in model:
-        # Already prefixed (e.g. "gemini/gemini-1.5-flash") — trust it.
+    # `model` may arrive in three shapes:
+    #   • "gemini-1.5-flash"             — bare model, prepend provider
+    #   • "gemini/gemini-1.5-flash"      — already provider-prefixed
+    #   • "meta-llama/llama-4-scout-17b" — HF-style `org/name` model
+    #                                       (common on Groq + OpenRouter);
+    #                                       the `/` is NOT a provider tag,
+    #                                       still needs `groq/` prepended
+    # Only treat a leading `{provider}/` segment as the prefix; anything
+    # else (including org/name models) gets the provider tag added.
+    prefix = f"{provider}/"
+    if model.startswith(prefix):
         litellm_model = model
-        bare_model = model.split("/", 1)[1]
+        bare_model = model[len(prefix):]
     else:
-        litellm_model = f"{provider}/{model}"
+        litellm_model = f"{prefix}{model}"
         bare_model = model
 
     return LLMResolution(
@@ -120,6 +167,69 @@ def resolve_admin(
         provider=provider,
         model_name=bare_model,
     )
+
+
+def resolve_admin_chain() -> list[LLMResolution]:
+    """Return the ordered admin LLMResolutions to try for a chat turn (T18a).
+
+    [0] is the primary (DEFAULT_PROVIDER + DEFAULT_MODEL).
+    [1:] are fallbacks parsed from `AUTOBOT_ADMIN_FALLBACKS` env, in
+    declared order. Entries are `provider/model` strings (e.g.
+    `groq/llama-3.1-70b-versatile`). Empty fallback env → list of just
+    the primary. Empty list returned only when no provider is
+    configured at all — caller surfaces a 500-style error.
+
+    Providers with no API key configured (e.g. listed in the fallback
+    chain but missing `GROQ_API_KEY`) are SKIPPED silently — the chain
+    only contains usable resolutions.
+
+    Duplicate `provider|model` pairs across the chain are deduped so a
+    misconfigured fallback that re-lists the primary doesn't burn an
+    extra round of retry attempts.
+    """
+    chain: list[LLMResolution] = []
+    seen: set[str] = set()
+
+    # Primary — exception swallowed; if primary is unconfigured, we
+    # still want to try fallbacks. If everything's empty, return [].
+    try:
+        primary = resolve_admin()
+        chain.append(primary)
+        seen.add(f"{primary.provider}|{primary.model_name}")
+    except LLMError as e:
+        logger.info("Primary admin resolution skipped: %s", e)
+
+    settings = get_settings()
+    fallback_str = (getattr(settings, "AUTOBOT_ADMIN_FALLBACKS", "") or "").strip()
+    if not fallback_str:
+        return chain
+
+    for raw_entry in fallback_str.split(","):
+        entry = raw_entry.strip()
+        if not entry:
+            continue
+        if "/" not in entry:
+            logger.warning(
+                "Bad AUTOBOT_ADMIN_FALLBACKS entry (no '/'): %r — "
+                "expected `provider/model`",
+                entry,
+            )
+            continue
+        provider_part, model_part = entry.split("/", 1)
+        try:
+            res = resolve_admin(provider=provider_part, model=model_part)
+        except LLMError as e:
+            logger.info(
+                "Skipping fallback %s (%s)", entry, e,
+            )
+            continue
+        key = f"{res.provider}|{res.model_name}"
+        if key in seen:
+            continue
+        seen.add(key)
+        chain.append(res)
+
+    return chain
 
 
 def resolve_from_llm_config(config: dict[str, Any]) -> LLMResolution:
@@ -150,14 +260,17 @@ def resolve_from_llm_config(config: dict[str, Any]) -> LLMResolution:
             "have returned a masked serializer instead of the reveal one.",
         )
 
-    if "/" in model:
+    # Same shape-handling as `resolve_admin`. Only strip the
+    # `{provider}/` prefix when it's actually present — HF-style
+    # `org/name` models (e.g. "meta-llama/llama-4-scout-17b-16e-instruct"
+    # on Groq) must still get `groq/` prepended; they aren't "already
+    # prefixed" just because they contain a `/`.
+    prefix = f"{provider}/"
+    if model.startswith(prefix):
         litellm_model = model
-        bare_model = model.split("/", 1)[1]
+        bare_model = model[len(prefix):]
     else:
-        # LiteLLM dispatches by the `provider/` prefix on the model
-        # string. Adding it lets users store the model name as e.g.
-        # "gpt-4o-mini" without worrying about the provider prefix.
-        litellm_model = f"{provider}/{model}"
+        litellm_model = f"{prefix}{model}"
         bare_model = model
 
     return LLMResolution(
@@ -167,6 +280,8 @@ def resolve_from_llm_config(config: dict[str, Any]) -> LLMResolution:
         model_name=bare_model,
         base_url=base_url,
         api_version=api_version,
+        # BYO: never subject to admin fallback chain or per-user quota.
+        is_admin=False,
     )
 
 
@@ -175,23 +290,31 @@ async def resolve_for_thread(
     jwt: str,
     thread: dict[str, Any],
     user_settings: dict[str, Any] | None,
-) -> LLMResolution:
-    """Pick the right LLM config for a chat turn (T17).
+) -> list[LLMResolution]:
+    """Pick the LLM resolution(s) to try for a chat turn (T17 + T18a).
 
-    Priority (first hit wins):
-      1. `thread.llm_config`              — per-thread override
-      2. `user_settings.default_llm_config` — per-user default
-      3. Admin keys via `resolve_admin()` — shared free-tier fallback
+    Priority for selecting the path:
+      1. `thread.llm_config`              — per-thread override (BYO)
+      2. `user_settings.default_llm_config` — per-user default (BYO)
+      3. Admin keys + AUTOBOT_ADMIN_FALLBACKS chain
 
-    For (1) and (2), this function makes ONE extra Django call to the
-    reveal endpoint to fetch the decrypted api_key. The plaintext lives
-    only in the returned `LLMResolution` and is GC'd when that goes out
-    of scope. Never logged. Never cached.
+    Return shape:
+      • BYO path → single-element list `[byo_resolution]`. The user's
+        choice is final; we never silently switch them to a different
+        provider.
+      • Admin path → `[primary, *fallbacks]` from `resolve_admin_chain()`.
+        Caller tries each in order on retryable errors (round 1 only).
 
-    Failure handling: if the reveal call 4xx/5xx/network-fails, we log a
-    warning and fall back to admin keys. The user's chat still works —
-    they just don't get billed against their personal key for this turn.
-    A noisy failure would be worse (one stale FK shouldn't break chat).
+    For BYO, this function makes ONE extra Django call to the reveal
+    endpoint to fetch the decrypted api_key. The plaintext lives only
+    in the returned `LLMResolution` and is GC'd when that goes out of
+    scope. Never logged. Never cached.
+
+    Failure handling: if the BYO reveal call fails (network, 4xx, 5xx,
+    or malformed config), we log a warning and fall back to the ADMIN
+    CHAIN. The user's chat still works — they just don't get billed
+    against their personal key for this turn. A noisy failure would be
+    worse (one stale FK shouldn't break chat).
     """
     # Imported here, not at module top, to avoid a circular import:
     # llm.client → conversation.persistence → settings → llm.client.
@@ -202,7 +325,7 @@ async def resolve_for_thread(
         or (user_settings or {}).get("default_llm_config")
     )
     if not config_id:
-        return resolve_admin()
+        return resolve_admin_chain()
 
     django = get_django_client()
     try:
@@ -216,14 +339,14 @@ async def resolve_for_thread(
             "LLMConfig reveal unreachable for id=%s (%s); using admin fallback",
             config_id, e,
         )
-        return resolve_admin()
+        return resolve_admin_chain()
 
     if status_code != 200:
         logger.warning(
             "LLMConfig reveal returned HTTP %d for id=%s; using admin fallback",
             status_code, config_id,
         )
-        return resolve_admin()
+        return resolve_admin_chain()
 
     config = (body or {}).get("data") or {}
     try:
@@ -233,15 +356,14 @@ async def resolve_for_thread(
             "LLMConfig %s is malformed (%s); using admin fallback",
             config_id, e,
         )
-        return resolve_admin()
+        return resolve_admin_chain()
 
-    # Operational visibility: log WHICH config was selected, but NEVER
-    # the api_key (the resolution dataclass has it; we just log the tag).
     logger.info(
         "Using user LLMConfig %s (provider=%s, model=%s)",
         config_id, resolution.provider, resolution.model_name,
     )
-    return resolution
+    # BYO returns a one-element list — no fallback for user choice.
+    return [resolution]
 
 
 async def acomplete(
@@ -282,16 +404,16 @@ async def acomplete(
     try:
         response = await litellm.acompletion(**completion_kwargs)
     except Exception as e:
-        # Catch broad — litellm raises a zoo of provider-specific subclasses
-        # (RateLimitError, AuthenticationError, APIConnectionError, …) and
-        # the caller only needs to know "the call failed". Log the type so
-        # an operator can grep, but don't log the api_key (litellm doesn't
-        # echo it in __repr__, but be defensive).
+        # Catch broad — litellm raises a zoo of provider-specific subclasses.
+        # `_wrap_litellm_error` tags retryable variants so the chat
+        # router can decide whether to try a fallback admin provider
+        # (T18a). Log the type so an operator can grep, but don't log
+        # the api_key.
         logger.exception(
             "LLM call failed: provider=%s model=%s err_type=%s",
             resolution.provider, resolution.model_name, type(e).__name__,
         )
-        raise LLMError(str(e)) from e
+        raise _wrap_litellm_error(e) from e
 
     # LiteLLM normalizes everything to the OpenAI ChatCompletion shape, so
     # `choices[0].message.content` and `usage.*` are stable across providers.
@@ -388,12 +510,21 @@ async def astream_complete(
     try:
         stream = await litellm.acompletion(**completion_kwargs)
     except Exception as e:
+        # OPEN-time failure — the stream never started, so a fallback
+        # provider could pick up cleanly. Tag retryable so the chat
+        # router knows it's safe to try the next entry in the chain
+        # (no tokens have been yielded yet, no client-side state to
+        # corrupt). T18a.
         logger.exception(
             "LLM stream open failed: provider=%s model=%s err_type=%s",
             resolution.provider, resolution.model_name, type(e).__name__,
         )
-        raise LLMError(str(e)) from e
+        raise _wrap_litellm_error(e) from e
 
+    # `salvaged_error` defers the decision of whether to raise or
+    # salvage until AFTER we've fully iterated the stream and know
+    # whether any output (content OR tool_calls) was accumulated.
+    salvaged_error: LLMError | None = None
     try:
         async for chunk in stream:
             # Per-chunk delta. Usage-only chunks usually have no
@@ -442,11 +573,20 @@ async def astream_complete(
             if chunk_usage is not None:
                 usage_obj = chunk_usage
     except Exception as e:
-        logger.exception(
-            "LLM stream broken mid-flight: provider=%s model=%s err_type=%s",
-            resolution.provider, resolution.model_name, type(e).__name__,
+        # Mid-stream failure. The most common real-world trigger is
+        # litellm 1.55.x's Databricks-shared chunk parser crashing on
+        # the final usage-only chunk that Groq (and other OpenAI-
+        # compatible providers) emit — `choices: []` is valid OpenAI
+        # protocol but the parser indexes `choices[0]` without a guard.
+        # The decision (raise vs salvage) is deferred to after this
+        # block so we have the full accumulated-state picture.
+        salvaged_error = _wrap_litellm_error(e)
+        logger.warning(
+            "LLM stream interrupted mid-flight (provider=%s model=%s "
+            "err_type=%s): %s",
+            resolution.provider, resolution.model_name,
+            type(e).__name__, salvaged_error,
         )
-        raise LLMError(str(e)) from e
 
     # Order tool calls by their original index — keeps the OpenAI
     # tool-call array order stable for downstream consumers (and the
@@ -456,6 +596,27 @@ async def astream_complete(
         for i in sorted(tool_calls_by_index.keys())
         if tool_calls_by_index[i]["function"]["name"]  # drop empties
     ]
+
+    # Salvage policy:
+    #   • Error + ANY accumulated output (content OR tool_calls)
+    #     → yield a synthesized `done` event. The caller never sees
+    #       the error; the chat loop persists what we have and
+    #       continues normally. Token counts will be 0 because the
+    #       usage chunk is what failed in most of these scenarios.
+    #   • Error + NO accumulated output
+    #     → propagate the error normally so the caller can either
+    #       fall back to another provider (T18a) or surface
+    #       `event: error` to the client.
+    has_output = bool(full_content) or bool(tool_calls_list)
+    if salvaged_error is not None and not has_output:
+        raise salvaged_error
+    if salvaged_error is not None:
+        logger.warning(
+            "Salvaging partial LLM output: provider=%s model=%s "
+            "tokens=%d tool_calls=%d (orig err: %s)",
+            resolution.provider, resolution.model_name,
+            len(full_content), len(tool_calls_list), salvaged_error,
+        )
 
     yield (
         "done",
