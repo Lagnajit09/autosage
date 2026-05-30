@@ -30,7 +30,6 @@ export const ExecutionLogsFilters: React.FC<ExecutionLogsFiltersProps> = ({
 }) => {
   return (
     <div className="flex flex-col md:flex-row gap-4 justify-between items-center bg-white dark:bg-gray-800/40 p-4 rounded-xl border border-gray-200 dark:border-gray-700/50 shadow-sm">
-
       {/* Category Filters */}
       <div className="flex gap-1.5 overflow-x-auto w-full md:w-auto pb-1 md:pb-0 scrollbar-hide">
         <Button
@@ -41,7 +40,7 @@ export const ExecutionLogsFilters: React.FC<ExecutionLogsFiltersProps> = ({
             "rounded-lg px-4 font-medium transition-all text-xs h-9",
             categoryFilter === "all"
               ? "bg-[#a768d0] hover:bg-[#9556bf] text-white shadow-sm"
-              : "bg-white dark:bg-gray-800/50 dark:text-gray-200"
+              : "bg-white dark:bg-gray-800/50 dark:text-gray-200",
           )}
         >
           All Types
@@ -54,7 +53,7 @@ export const ExecutionLogsFilters: React.FC<ExecutionLogsFiltersProps> = ({
             "rounded-lg px-4 font-medium transition-all text-xs h-9",
             categoryFilter === "workflow"
               ? "bg-[#a768d0] hover:bg-[#9556bf] text-white shadow-sm"
-              : "bg-white dark:bg-gray-800/50 dark:text-gray-200"
+              : "bg-white dark:bg-gray-800/50 dark:text-gray-200",
           )}
         >
           <WorkflowIcon className="w-3.5 h-3.5 mr-1.5" />
@@ -68,7 +67,7 @@ export const ExecutionLogsFilters: React.FC<ExecutionLogsFiltersProps> = ({
             "rounded-lg px-4 font-medium transition-all text-xs h-9",
             categoryFilter === "script"
               ? "bg-[#a768d0] hover:bg-[#9556bf] text-white shadow-sm"
-              : "bg-white dark:bg-gray-800/50 dark:text-gray-200"
+              : "bg-white dark:bg-gray-800/50 dark:text-gray-200",
           )}
         >
           <FileText className="w-3.5 h-3.5 mr-1.5" />
@@ -78,7 +77,6 @@ export const ExecutionLogsFilters: React.FC<ExecutionLogsFiltersProps> = ({
 
       {/* Status & Search Inputs */}
       <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto items-stretch sm:items-center">
-
         {/* Status Selector using Shadcn Select */}
         <div className="w-full sm:w-40">
           <Select value={statusFilter} onValueChange={setStatusFilter}>
@@ -86,19 +84,34 @@ export const ExecutionLogsFilters: React.FC<ExecutionLogsFiltersProps> = ({
               <SelectValue placeholder="All Statuses" />
             </SelectTrigger>
             <SelectContent className="dark:bg-gray-800 dark:border-gray-700 dark:text-gray-200">
-              <SelectItem value="all" className="cursor-pointer dark:hover:bg-gray-700 text-xs dark:hover:text-gray-200">
+              <SelectItem
+                value="all"
+                className="cursor-pointer dark:hover:bg-gray-700 text-xs dark:hover:text-gray-200"
+              >
                 All Statuses
               </SelectItem>
-              <SelectItem value="success" className="cursor-pointer dark:hover:bg-gray-700 text-xs dark:hover:text-gray-200">
+              <SelectItem
+                value="success"
+                className="cursor-pointer dark:hover:bg-gray-700 text-xs dark:hover:text-gray-200"
+              >
                 Success
               </SelectItem>
-              <SelectItem value="failed" className="cursor-pointer dark:hover:bg-gray-700 text-xs dark:hover:text-gray-200">
+              <SelectItem
+                value="failed"
+                className="cursor-pointer dark:hover:bg-gray-700 text-xs dark:hover:text-gray-200"
+              >
                 Failed
               </SelectItem>
-              <SelectItem value="running" className="cursor-pointer dark:hover:bg-gray-700 text-xs dark:hover:text-gray-200">
+              <SelectItem
+                value="running"
+                className="cursor-pointer dark:hover:bg-gray-700 text-xs dark:hover:text-gray-200"
+              >
                 Running
               </SelectItem>
-              <SelectItem value="cancelled" className="cursor-pointer dark:hover:bg-gray-700 text-xs dark:hover:text-gray-200">
+              <SelectItem
+                value="cancelled"
+                className="cursor-pointer dark:hover:bg-gray-700 text-xs dark:hover:text-gray-200"
+              >
                 Cancelled
               </SelectItem>
             </SelectContent>
@@ -116,7 +129,6 @@ export const ExecutionLogsFilters: React.FC<ExecutionLogsFiltersProps> = ({
           />
         </div>
       </div>
-
     </div>
   );
 };

@@ -1,6 +1,11 @@
 import React from "react";
 import { Button } from "@/components/ui/button";
-import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from "lucide-react";
+import {
+  ChevronLeft,
+  ChevronRight,
+  ChevronsLeft,
+  ChevronsRight,
+} from "lucide-react";
 
 interface ExecutionLogsPaginationProps {
   currentPage: number;
@@ -10,13 +15,9 @@ interface ExecutionLogsPaginationProps {
   onPageChange: (page: number) => void;
 }
 
-export const ExecutionLogsPagination: React.FC<ExecutionLogsPaginationProps> = ({
-  currentPage,
-  totalPages,
-  totalRecords,
-  pageSize,
-  onPageChange,
-}) => {
+export const ExecutionLogsPagination: React.FC<
+  ExecutionLogsPaginationProps
+> = ({ currentPage, totalPages, totalRecords, pageSize, onPageChange }) => {
   if (totalPages <= 1) return null;
 
   const startRecord = (currentPage - 1) * pageSize + 1;
@@ -25,9 +26,19 @@ export const ExecutionLogsPagination: React.FC<ExecutionLogsPaginationProps> = (
   return (
     <div className="flex flex-col sm:flex-row items-center justify-between gap-4 bg-white dark:bg-gray-800/40 p-4 rounded-xl border border-gray-200 dark:border-gray-700/50 shadow-sm mt-4">
       <div className="text-xs text-gray-500 dark:text-gray-400 font-medium">
-        Showing <span className="font-semibold text-gray-900 dark:text-gray-100">{startRecord}</span> to{" "}
-        <span className="font-semibold text-gray-900 dark:text-gray-100">{endRecord}</span> of{" "}
-        <span className="font-semibold text-gray-900 dark:text-gray-100">{totalRecords}</span> records
+        Showing{" "}
+        <span className="font-semibold text-gray-900 dark:text-gray-100">
+          {startRecord}
+        </span>{" "}
+        to{" "}
+        <span className="font-semibold text-gray-900 dark:text-gray-100">
+          {endRecord}
+        </span>{" "}
+        of{" "}
+        <span className="font-semibold text-gray-900 dark:text-gray-100">
+          {totalRecords}
+        </span>{" "}
+        records
       </div>
 
       <div className="flex items-center gap-1.5">

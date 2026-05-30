@@ -6,8 +6,14 @@ import {
   deleteGlobalHttpTrigger,
   deleteGlobalScheduleTrigger,
 } from "@/lib/actions/triggers";
-import { ScheduleTriggersTable } from "@/components/Workflows/Triggers/ScheduleTriggersTable";
-import { HttpTriggersTable } from "@/components/Workflows/Triggers/HttpTriggersTable";
+import {
+  ScheduleTriggersTable,
+  type ScheduleTrigger,
+} from "@/components/Workflows/Triggers/ScheduleTriggersTable";
+import {
+  HttpTriggersTable,
+  type HttpTrigger,
+} from "@/components/Workflows/Triggers/HttpTriggersTable";
 import { Loader2 } from "lucide-react";
 
 import LeftNav, { NavItems } from "@/components/LeftNav";
@@ -52,8 +58,10 @@ const Workflows = () => {
   );
 
   // Triggers State
-  const [httpTriggers, setHttpTriggers] = useState<any[]>([]);
-  const [scheduleTriggers, setScheduleTriggers] = useState<any[]>([]);
+  const [httpTriggers, setHttpTriggers] = useState<HttpTrigger[]>([]);
+  const [scheduleTriggers, setScheduleTriggers] = useState<ScheduleTrigger[]>(
+    [],
+  );
   const [triggersLoading, setTriggersLoading] = useState(false);
   const [deleteTriggerModalOpen, setDeleteTriggerModalOpen] = useState(false);
   const [triggerToDelete, setTriggerToDelete] = useState<{

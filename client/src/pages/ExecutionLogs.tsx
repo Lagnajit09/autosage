@@ -4,7 +4,10 @@ import { useAuth } from "@clerk/clerk-react";
 import LeftNav from "@/components/LeftNav";
 import { ExecutionLogsHeader } from "@/components/ExecutionLogs/ExecutionLogsHeader";
 import { ExecutionLogsFilters } from "@/components/ExecutionLogs/ExecutionLogsFilters";
-import { ExecutionLogsTable, ExecutionRecord } from "@/components/ExecutionLogs/ExecutionLogsTable";
+import {
+  ExecutionLogsTable,
+  ExecutionRecord,
+} from "@/components/ExecutionLogs/ExecutionLogsTable";
 import { ExecutionLogsPagination } from "@/components/ExecutionLogs/ExecutionLogsPagination";
 import { executionsService } from "@/lib/api/executions";
 import { toast } from "sonner";
@@ -27,36 +30,47 @@ const ExecutionLogs = () => {
 
   // Search & Filter State
   const [searchQuery, setSearchQuery] = useState("");
-  const [categoryFilter, setCategoryFilter] = useState<"all" | "workflow" | "script">("all");
+  const [categoryFilter, setCategoryFilter] = useState<
+    "all" | "workflow" | "script"
+  >("all");
   const [statusFilter, setStatusFilter] = useState<string>("all");
-  const [sortField, setSortField] = useState<"created_at" | "name" | "duration">("created_at");
+  const [sortField, setSortField] = useState<
+    "created_at" | "name" | "duration"
+  >("created_at");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
 
   // Fetch Unified Executions with pagination
-  const fetchExecutions = useCallback(async (page = 1, silent = false) => {
-    if (!isSignedIn) return;
-    if (!silent) setLoading(true);
-    try {
-      const token = await getToken();
-      if (!token) throw new Error("No authentication token");
+  const fetchExecutions = useCallback(
+    async (page = 1, silent = false) => {
+      if (!isSignedIn) return;
+      if (!silent) setLoading(true);
+      try {
+        const token = await getToken();
+        if (!token) throw new Error("No authentication token");
 
-      const data = await executionsService.getAllExecutions(token, page, PAGE_SIZE);
-      // data contains executions and pagination metadata
-      setExecutions(data.executions || []);
-      setTotalPages(data.total_pages || 1);
-      setTotalRecords(data.total_count || 0);
-      setCurrentPage(page);
+        const data = await executionsService.getAllExecutions(
+          token,
+          page,
+          PAGE_SIZE,
+        );
+        // data contains executions and pagination metadata
+        setExecutions(data.executions || []);
+        setTotalPages(data.total_pages || 1);
+        setTotalRecords(data.total_count || 0);
+        setCurrentPage(page);
 
-      if (silent) {
-        toast.success("Execution logs refreshed.");
+        if (silent) {
+          toast.success("Execution logs refreshed.");
+        }
+      } catch (error) {
+        console.error("Failed to fetch executions:", error);
+        toast.error("Failed to load execution logs.");
+      } finally {
+        setLoading(false);
       }
-    } catch (error) {
-      console.error("Failed to fetch executions:", error);
-      toast.error("Failed to load execution logs.");
-    } finally {
-      setLoading(false);
-    }
-  }, [getToken, isSignedIn]);
+    },
+    [getToken, isSignedIn],
+  );
 
   useEffect(() => {
     // Initial load fetch
@@ -89,7 +103,8 @@ const ExecutionLogs = () => {
     return executions
       .filter((item) => {
         // Category Filter
-        if (categoryFilter !== "all" && item.tag !== categoryFilter) return false;
+        if (categoryFilter !== "all" && item.tag !== categoryFilter)
+          return false;
 
         // Status Filter
         if (statusFilter !== "all") {
@@ -112,7 +127,8 @@ const ExecutionLogs = () => {
       .sort((a, b) => {
         let comparison = 0;
         if (sortField === "created_at") {
-          comparison = new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+          comparison =
+            new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
         } else if (sortField === "name") {
           comparison = a.name.localeCompare(b.name);
         } else if (sortField === "duration") {
@@ -120,7 +136,14 @@ const ExecutionLogs = () => {
         }
         return sortOrder === "asc" ? comparison : -comparison;
       });
-  }, [executions, searchQuery, categoryFilter, statusFilter, sortField, sortOrder]);
+  }, [
+    executions,
+    searchQuery,
+    categoryFilter,
+    statusFilter,
+    sortField,
+    sortOrder,
+  ]);
 
   // Date Range Filtering for Exports
   const getFilteredExportList = (range: "24h" | "7d" | "30d" | "all") => {
@@ -141,7 +164,9 @@ const ExecutionLogs = () => {
       startOfMonth.setHours(0, 0, 0, 0);
       limit = startOfMonth.getTime();
     }
-    return processedExecutions.filter((item) => new Date(item.created_at).getTime() >= limit);
+    return processedExecutions.filter(
+      (item) => new Date(item.created_at).getTime() >= limit,
+    );
   };
 
   // Helper to fetch GCS log files client-side on user click
@@ -224,7 +249,7 @@ const ExecutionLogs = () => {
         loading: "Retrieving logs from GCS...",
         success: "Logs successfully copied to clipboard!",
         error: "Failed to copy logs.",
-      }
+      },
     );
   };
 
@@ -252,7 +277,7 @@ const ExecutionLogs = () => {
         loading: "Downloading logs from GCS...",
         success: "Download started successfully!",
         error: "Failed to download logs.",
-      }
+      },
     );
   };
 
@@ -266,7 +291,7 @@ const ExecutionLogs = () => {
       }
 
       // Strip any signed URL fields before exporting
-      const sanitizedItems = itemsToExport.map(item => ({
+      const sanitizedItems = itemsToExport.map((item) => ({
         id: item.id,
         name: item.name,
         tag: item.tag,
@@ -275,10 +300,15 @@ const ExecutionLogs = () => {
         created_at: item.created_at,
       }));
 
-      const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(sanitizedItems, null, 2));
+      const dataStr =
+        "data:text/json;charset=utf-8," +
+        encodeURIComponent(JSON.stringify(sanitizedItems, null, 2));
       const downloadAnchor = document.createElement("a");
       downloadAnchor.setAttribute("href", dataStr);
-      downloadAnchor.setAttribute("download", `autosage_executions_${range}_${Date.now()}.json`);
+      downloadAnchor.setAttribute(
+        "download",
+        `autosage_executions_${range}_${Date.now()}.json`,
+      );
       document.body.appendChild(downloadAnchor);
       downloadAnchor.click();
       downloadAnchor.remove();
@@ -298,7 +328,7 @@ const ExecutionLogs = () => {
       }
 
       const headers = ["ID", "Name", "Type", "Duration", "Status", "Date"];
-      const rows = itemsToExport.map(item => [
+      const rows = itemsToExport.map((item) => [
         item.id,
         `"${item.name.replace(/"/g, '""')}"`,
         item.tag,
@@ -306,10 +336,15 @@ const ExecutionLogs = () => {
         item.status,
         item.created_at,
       ]);
-      const csvContent = "data:text/csv;charset=utf-8," + [headers.join(","), ...rows.map(e => e.join(","))].join("\n");
+      const csvContent =
+        "data:text/csv;charset=utf-8," +
+        [headers.join(","), ...rows.map((e) => e.join(","))].join("\n");
       const downloadAnchor = document.createElement("a");
       downloadAnchor.setAttribute("href", encodeURI(csvContent));
-      downloadAnchor.setAttribute("download", `autosage_executions_${range}_${Date.now()}.csv`);
+      downloadAnchor.setAttribute(
+        "download",
+        `autosage_executions_${range}_${Date.now()}.csv`,
+      );
       document.body.appendChild(downloadAnchor);
       downloadAnchor.click();
       downloadAnchor.remove();
@@ -326,7 +361,6 @@ const ExecutionLogs = () => {
       <div className="flex-1 flex flex-col h-full overflow-hidden">
         <main className="flex-1 overflow-y-auto p-4 md:p-8">
           <div className="max-w-7xl mx-auto space-y-6 md:space-y-8">
-
             {/* Header Section */}
             <ExecutionLogsHeader
               loading={loading}
@@ -375,7 +409,6 @@ const ExecutionLogs = () => {
                 />
               </>
             )}
-
           </div>
         </main>
       </div>

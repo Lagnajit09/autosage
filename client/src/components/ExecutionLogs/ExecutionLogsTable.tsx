@@ -25,7 +25,13 @@ export interface ExecutionRecord {
   name: string;
   workflow_id?: string;
   duration: string;
-  status: "pending" | "running" | "completed" | "success" | "failed" | "cancelled";
+  status:
+    | "pending"
+    | "running"
+    | "completed"
+    | "success"
+    | "failed"
+    | "cancelled";
   tag: "workflow" | "script";
   stdout_signed_url?: string;
   stderr_signed_url?: string;
@@ -56,19 +62,24 @@ export const ExecutionLogsTable: React.FC<ExecutionLogsTableProps> = ({
   const formatDate = (dateString: string) => {
     if (!dateString) return "—";
     const date = new Date(dateString);
-    return date.toLocaleDateString(undefined, {
-      month: "short",
-      day: "numeric",
-      year: "numeric",
-    }) + " " + date.toLocaleTimeString(undefined, {
-      hour: "2-digit",
-      minute: "2-digit",
-    });
+    return (
+      date.toLocaleDateString(undefined, {
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+      }) +
+      " " +
+      date.toLocaleTimeString(undefined, {
+        hour: "2-digit",
+        minute: "2-digit",
+      })
+    );
   };
 
   // Render Status Badge
   const getStatusBadge = (status: string) => {
-    const norm = status === "completed" || status === "success" ? "success" : status;
+    const norm =
+      status === "completed" || status === "success" ? "success" : status;
     switch (norm) {
       case "success":
         return (
@@ -105,7 +116,11 @@ export const ExecutionLogsTable: React.FC<ExecutionLogsTableProps> = ({
           </Badge>
         );
       default:
-        return <Badge variant="outline" className="capitalize">{status}</Badge>;
+        return (
+          <Badge variant="outline" className="capitalize">
+            {status}
+          </Badge>
+        );
     }
   };
 
@@ -218,14 +233,19 @@ export const ExecutionLogsTable: React.FC<ExecutionLogsTableProps> = ({
               </TableCell>
               <TableCell className="text-right">
                 <div className="flex items-center justify-end gap-1">
-
                   {/* Redirection for Workflow executions or Scripts */}
                   <Button
                     variant="ghost"
                     size="sm"
                     title={`Go to ${item.tag} execution details`}
                     className="h-8 w-8 p-0 text-gray-400 hover:text-purple-600 dark:hover:text-purple-400"
-                    onClick={() => onNavigate(item.tag === "workflow" ? `/workflow/execution/${item.workflow_id}` : `/script-editor/${item.name}`)}
+                    onClick={() =>
+                      onNavigate(
+                        item.tag === "workflow"
+                          ? `/workflow/execution/${item.workflow_id}`
+                          : `/script-editor/${item.name}`,
+                      )
+                    }
                   >
                     <ExternalLink className="h-3.5 w-3.5 text-[#a768d0]" />
                   </Button>
@@ -237,7 +257,9 @@ export const ExecutionLogsTable: React.FC<ExecutionLogsTableProps> = ({
                     title="Copy log to clipboard"
                     className="h-8 w-8 p-0 text-gray-400 hover:text-purple-600 dark:hover:text-purple-400"
                     onClick={() => onCopyLogs(item)}
-                    disabled={item.status === "pending" || item.status === "running"}
+                    disabled={
+                      item.status === "pending" || item.status === "running"
+                    }
                   >
                     <Copy className="h-3.5 w-3.5" />
                   </Button>
@@ -248,11 +270,12 @@ export const ExecutionLogsTable: React.FC<ExecutionLogsTableProps> = ({
                     title="Download log"
                     className="h-8 w-8 p-0 text-gray-400 hover:text-purple-600 dark:hover:text-purple-400"
                     onClick={() => onDownloadLogs(item)}
-                    disabled={item.status === "pending" || item.status === "running"}
+                    disabled={
+                      item.status === "pending" || item.status === "running"
+                    }
                   >
                     <Download className="h-3.5 w-3.5" />
                   </Button>
-
                 </div>
               </TableCell>
             </TableRow>

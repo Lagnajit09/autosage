@@ -10,7 +10,12 @@ import {
   DropdownMenuSubContent,
   DropdownMenuPortal,
 } from "@/components/ui/dropdown-menu";
-import { Sheet, SheetContent, SheetHeader, SheetTrigger } from "@/components/ui/sheet";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTrigger,
+} from "@/components/ui/sheet";
 import { Loader2, Menu, Activity, Download } from "lucide-react";
 import { NavItems } from "@/components/LeftNav";
 import Logo from "../Logo";
@@ -32,7 +37,6 @@ export const ExecutionLogsHeader: React.FC<ExecutionLogsHeaderProps> = ({
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-
           {/* Mobile Menu Navigation */}
           <div className="md:hidden">
             <Sheet>
@@ -83,11 +87,11 @@ export const ExecutionLogsHeader: React.FC<ExecutionLogsHeaderProps> = ({
                 Execution Logs
               </h1>
               <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5 hidden md:block">
-                Monitor execution logs, statuses, and performance for your automation runs.
+                Monitor execution logs, statuses, and performance for your
+                automation runs.
               </p>
             </div>
           </div>
-
         </div>
 
         <div className="flex items-center gap-2">
@@ -112,7 +116,10 @@ export const ExecutionLogsHeader: React.FC<ExecutionLogsHeaderProps> = ({
                 Export
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-48 dark:bg-gray-800 dark:border-gray-700">
+            <DropdownMenuContent
+              align="end"
+              className="w-48 dark:bg-gray-800 dark:border-gray-700"
+            >
               {/* CSV Sub-menu */}
               <DropdownMenuSub>
                 <DropdownMenuSubTrigger className="cursor-pointer dark:hover:bg-gray-700 text-gray-800 dark:text-gray-200">

@@ -21,7 +21,7 @@ import ExecutionParameters from "@/components/Execution/ExecutionParameters";
 import { useAuth, useUser } from "@clerk/clerk-react";
 import { apiRequest } from "@/lib/api-client";
 import Loader from "@/components/Loader";
-import { WorkflowData } from "@/utils/types";
+import { Node, Parameter, WorkflowData } from "@/utils/types";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Mail } from "lucide-react";
@@ -79,8 +79,8 @@ const WorkflowExecution = () => {
 
         // Initialize inputs
         const initialInputs: Record<string, string> = {};
-        data?.nodes?.forEach((node: any) => {
-          node.data?.parameters?.forEach((param: any) => {
+        data?.nodes?.forEach((node: Node) => {
+          node.data?.parameters?.forEach((param: Parameter) => {
             if (param.id) {
               let defaultValue = param.value || "";
               if (param.type === "boolean" && !defaultValue) {

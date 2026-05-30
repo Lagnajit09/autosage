@@ -19,7 +19,7 @@ import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
 import { SearchInput } from "./SearchInput";
 
-interface HttpTrigger {
+export interface HttpTrigger {
   id: string;
   workflow_id: string;
   workflow_name: string;

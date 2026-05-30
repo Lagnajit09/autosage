@@ -5,7 +5,18 @@ const BASE_URL = "/api/execution-engine";
 
 import { ExecutionRecord } from "@/components/ExecutionLogs/ExecutionLogsTable";
 
-export interface ExecutionHistoryResponse {
+// `/history/` returns full ScriptExecution rows (script_id, script_name,
+// exit_code, signed URLs, …) — the shape from ScriptExecutionHistorySerializer.
+export interface ScriptExecutionHistoryResponse {
+  executions: ScriptExecution[];
+  total_count: number;
+  total_pages: number;
+  current_page: number;
+}
+
+// `/executions/all/` returns the UNIFIED scripts-plus-workflows display
+// shape (id, name, tag, duration, signed URLs) — see `all_executions` view.
+export interface AllExecutionsResponse {
   executions: ExecutionRecord[];
   total_count: number;
   total_pages: number;
@@ -18,7 +29,7 @@ export const executionsService = {
     token: string,
     page: number = 1,
     pageSize: number = 50,
-  ): Promise<ExecutionHistoryResponse> => {
+  ): Promise<ScriptExecutionHistoryResponse> => {
     const response = await apiRequest(
       `${BASE_URL}/history/?page=${page}&page_size=${pageSize}`,
       {},
@@ -78,7 +89,7 @@ export const executionsService = {
     return response.data;
   },
 
-  getAllExecutions: async (token: string, page: number = 1, pageSize: number = 20): Promise<ExecutionHistoryResponse> => {
+  getAllExecutions: async (token: string, page: number = 1, pageSize: number = 20): Promise<AllExecutionsResponse> => {
     const response = await apiRequest(
       `${BASE_URL}/executions/all/?page=${page}&page_size=${pageSize}`,
       {},

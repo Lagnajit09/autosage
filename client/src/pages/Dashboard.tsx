@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Plus, Loader2 } from "lucide-react";
@@ -29,7 +30,7 @@ const Dashboard = () => {
   //   const getClerkToken = async () => {
   //     try {
   //       const clerkToken = await getToken({ template: "LongLivedJWT" });
-  //       // console.log("LongLivedJWT clerkToken", clerkToken);
+  //       console.log("LongLivedJWT clerkToken", clerkToken);
   //     } catch (error) {
   //       console.error("Failed to get token:", error);
   //     }
@@ -128,7 +129,11 @@ const Dashboard = () => {
     const diffInDays = Math.floor(diffInHours / 24);
     if (diffInDays === 1) return "yesterday";
     if (diffInDays < 30) return `${diffInDays} days ago`;
-    return date.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+    return date.toLocaleDateString(undefined, {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+    });
   };
 
   useEffect(() => {
@@ -136,26 +141,30 @@ const Dashboard = () => {
       try {
         const token = await getToken();
         if (token) {
-          const response = await apiRequest("/api/dashboard/", { method: "GET" }, token);
+          const response = await apiRequest(
+            "/api/dashboard/",
+            { method: "GET" },
+            token,
+          );
           if (response.success && response.data) {
             setStats(response.data.stats);
             setRecentWorkflows(
               response.data.recentWorkflows.map((item: any) => ({
                 ...item,
                 date: getRelativeTime(item.date),
-              }))
+              })),
             );
             setRecentScripts(
               response.data.recentScripts.map((item: any) => ({
                 ...item,
                 date: getRelativeTime(item.date),
-              }))
+              })),
             );
             setRecentExecutions(
               response.data.recentExecutions.map((item: any) => ({
                 ...item,
                 time: getRelativeTime(item.time),
-              }))
+              })),
             );
           }
         }
@@ -170,8 +179,6 @@ const Dashboard = () => {
       fetchDashboardData();
     }
   }, [user, getToken]);
-
-
 
   return (
     <SidebarProvider>
@@ -254,8 +261,8 @@ const Dashboard = () => {
                 <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
                   {/* Main Content Area */}
                   {recentWorkflows.length === 0 &&
-                    recentScripts.length === 0 &&
-                    recentExecutions.length === 0 ? (
+                  recentScripts.length === 0 &&
+                  recentExecutions.length === 0 ? (
                     <div className="lg:col-span-3 flex flex-col items-center justify-center min-h-[400px] text-center space-y-6 bg-white dark:bg-gray-800/40 rounded-xl border border-gray-200 dark:border-gray-700/50 border-dashed p-12">
                       <div className="space-y-4 flex flex-col items-center">
                         <img
@@ -268,7 +275,8 @@ const Dashboard = () => {
                         </h2>
                         <p className="text-gray-500 dark:text-gray-400 max-w-md mx-auto">
                           It looks like you haven't created anything yet. Start
-                          your automation journey by building your first workflow.
+                          your automation journey by building your first
+                          workflow.
                         </p>
                       </div>
                       <Button
@@ -288,61 +296,63 @@ const Dashboard = () => {
                       {/* Recent Activity Grid */}
                       {(recentWorkflows.length > 0 ||
                         recentScripts.length > 0) && (
-                          <div
-                            className={`grid grid-cols-1 ${recentWorkflows.length > 0 && recentScripts.length > 0
+                        <div
+                          className={`grid grid-cols-1 ${
+                            recentWorkflows.length > 0 &&
+                            recentScripts.length > 0
                               ? "md:grid-cols-2"
                               : ""
-                              } gap-6`}
-                          >
-                            {/* Recent Workflows */}
-                            {recentWorkflows.length > 0 && (
-                              <div className="space-y-4">
-                                <div className="flex items-center justify-between">
-                                  <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
-                                    Recent Workflows
-                                  </h2>
+                          } gap-6`}
+                        >
+                          {/* Recent Workflows */}
+                          {recentWorkflows.length > 0 && (
+                            <div className="space-y-4">
+                              <div className="flex items-center justify-between">
+                                <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
+                                  Recent Workflows
+                                </h2>
 
-                                  <Button
-                                    variant="link"
-                                    className="text-blue-600 dark:text-blue-400 p-0 h-auto"
-                                    onClick={() => navigate("/workflows")}
-                                  >
-                                    View All
-                                  </Button>
-                                </div>
-                                <div className="space-y-3">
-                                  {recentWorkflows.map((item, i) => (
-                                    <RecentItemCard key={i} item={item} />
-                                  ))}
-                                </div>
+                                <Button
+                                  variant="link"
+                                  className="text-blue-600 dark:text-blue-400 p-0 h-auto"
+                                  onClick={() => navigate("/workflows")}
+                                >
+                                  View All
+                                </Button>
                               </div>
-                            )}
-
-                            {/* Recent Scripts */}
-                            {recentScripts.length > 0 && (
-                              <div className="space-y-4">
-                                <div className="flex items-center justify-between">
-                                  <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
-                                    Recent Scripts
-                                  </h2>
-
-                                  <Button
-                                    variant="link"
-                                    className="text-blue-600 dark:text-blue-400 p-0 h-auto"
-                                    onClick={() => navigate("/script-editor/")}
-                                  >
-                                    View All
-                                  </Button>
-                                </div>
-                                <div className="space-y-3">
-                                  {recentScripts.map((item, i) => (
-                                    <RecentItemCard key={i} item={item} />
-                                  ))}
-                                </div>
+                              <div className="space-y-3">
+                                {recentWorkflows.map((item, i) => (
+                                  <RecentItemCard key={i} item={item} />
+                                ))}
                               </div>
-                            )}
-                          </div>
-                        )}
+                            </div>
+                          )}
+
+                          {/* Recent Scripts */}
+                          {recentScripts.length > 0 && (
+                            <div className="space-y-4">
+                              <div className="flex items-center justify-between">
+                                <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
+                                  Recent Scripts
+                                </h2>
+
+                                <Button
+                                  variant="link"
+                                  className="text-blue-600 dark:text-blue-400 p-0 h-auto"
+                                  onClick={() => navigate("/script-editor/")}
+                                >
+                                  View All
+                                </Button>
+                              </div>
+                              <div className="space-y-3">
+                                {recentScripts.map((item, i) => (
+                                  <RecentItemCard key={i} item={item} />
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
 
                       {/* Recent Executions */}
                       {recentExecutions.length > 0 && (
