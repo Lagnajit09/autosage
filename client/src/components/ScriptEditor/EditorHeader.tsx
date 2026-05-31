@@ -88,7 +88,7 @@ export function EditorHeader({
             <Save size={16} />
             <span className="hidden sm:inline">Save</span>
           </Button>
-          <GenieButton onClick={onToggleAI} />
+          {!isAISidebarOpen && <GenieButton onClick={onToggleAI} />}
         </div>
       </div>
       <Vault isOpen={showVault} setIsOpen={setShowVault} />

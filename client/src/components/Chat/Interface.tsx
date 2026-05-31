@@ -404,10 +404,15 @@ const Interface = () => {
               break;
             }
             case "error": {
+              // Tear down the streaming bubble — the turn is over.
+              // Leaving `pendingAssistant` populated would keep
+              // "Thinking…" or the half-streamed cursor on screen
+              // alongside the error banner, which reads as "still in
+              // progress" to the user. `pendingUser` stays so they can
+              // see what they sent and retry without re-typing.
+              setPendingAssistant(null);
               setStreamError(event.message);
               toast.error(event.message);
-              // Keep the pending bubbles visible so the user can see
-              // what they sent + any partial reply for context.
               break;
             }
           }

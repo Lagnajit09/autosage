@@ -100,7 +100,7 @@ export const ModelPicker = ({
           className={`cursor-pointer text-sm ${
             selectedConfigId === null
               ? "bg-purple-50 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300"
-              : "text-gray-800 dark:text-gray-200"
+              : "text-gray-800 dark:text-gray-200 dark:hover:bg-gray-700/60"
           }`}
         >
           <div className="flex flex-col">
@@ -113,7 +113,9 @@ export const ModelPicker = ({
           </div>
         </DropdownMenuItem>
 
-        {configs.length > 0 && <DropdownMenuSeparator />}
+        {configs.length > 0 && (
+          <DropdownMenuSeparator className="dark:bg-gray-600" />
+        )}
 
         {configs.map((config) => (
           <DropdownMenuItem
@@ -122,7 +124,7 @@ export const ModelPicker = ({
             className={`cursor-pointer text-sm ${
               selectedConfigId === config.id
                 ? "bg-purple-50 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300"
-                : "text-gray-800 dark:text-gray-200"
+                : "text-gray-800 dark:text-gray-200 dark:hover:bg-gray-700/60"
             }`}
           >
             <div className="flex flex-col">

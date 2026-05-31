@@ -42,7 +42,8 @@ const ScriptEditor = () => {
     handleDeleteScriptClick,
     confirmDeleteScript,
     handleEditorChange,
-    handleGeneratedScript,
+    handleScriptCreated,
+    handleScriptUpdated,
     duplicateFile,
     downloadFile,
     configureMonacoEditor,
@@ -158,9 +159,22 @@ const ScriptEditor = () => {
             </div>
           </div>
 
+          {/* Inline Script Generator panel — runs autobot directly.
+           * Passes the currently-open script (if any) as context so the
+           * LLM can default to updating it without re-prompting the user
+           * for a target. */}
           <AIScriptGeneratorSidebar
-            scriptType={"python"}
-            onGeneratedScript={handleGeneratedScript}
+            openScript={
+              currentFile
+                ? {
+                    id: currentFile.id,
+                    name: currentFile.name,
+                    language: currentFile.language,
+                  }
+                : null
+            }
+            onScriptCreated={handleScriptCreated}
+            onScriptUpdated={handleScriptUpdated}
             isOpen={isAISidebarOpen}
             onToggle={() => setIsAISidebarOpen(!isAISidebarOpen)}
           />

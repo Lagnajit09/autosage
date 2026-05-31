@@ -753,61 +753,128 @@ export function useScriptEditor() {
     }
   };
 
-  const handleGeneratedScript = async (script: string, filename: string) => {
-    if (!token) {
-      clientToast({
-        variant: "destructive",
-        title: "Authentication Error",
-        description: "You must be signed in to save scripts.",
-      });
-      return;
-    }
+  // ── AI Script Generator callbacks (T22) ──────────────────────────────
+  //
+  // The AIScriptGenerator panel runs autobot directly — autobot owns the
+  // create_script / update_script tool calls and the Django write. These
+  // callbacks just sync local state (files list + open tabs) with what
+  // already exists on the server.
+  //
+  // Why we refetch instead of patching local state from the tool result
+  // alone: the tool returns only id/name/version, while ScriptFile needs
+  // content + pathname + blob_url. Refetching is one round-trip per
+  // create/update and gives us the full row guaranteed-fresh.
 
-    try {
-      const language = getLanguageFromExtension(filename);
-      const basename = filename.split(".")[0];
+  const handleScriptCreated = useCallback(
+    async (scriptId: string, _scriptName: string) => {
+      // Unused param kept for API stability — the parent might use it
+      // for toast copy in the future.
+      void _scriptName;
+      // Sonner loading toast bridges the gap between the LLM saying
+      // "done" and the editor actually showing the new script (the
+      // refetch + navigate + load takes ~500ms). We replace the same
+      // toast id on success/failure so the user sees one continuous
+      // status indicator instead of stacked toasts.
+      const toastId = toast.loading("Loading new script into editor…");
+      try {
+        const clerkToken = await getToken();
+        if (!clerkToken) throw new Error("Not signed in.");
 
-      const createdScript = await scriptService.create(
-        basename,
-        language,
-        script,
-        token,
-      );
+        // Refetch the full list so the new script appears in the file
+        // explorer immediately. Then locate the new row by id and open it.
+        const scripts = await scriptService.getAll(clerkToken);
+        const all = scripts.map((s) => mapScriptToScriptFile(s));
+        setFiles(all);
 
-      const newFile = mapScriptToScriptFile(createdScript, script);
+        const newFile = all.find((f) => f.id === scriptId);
+        if (!newFile) {
+          // Stale ids (server-side race) — surface a generic refresh
+          // hint rather than failing silently.
+          toast.warning(
+            "Script created — couldn't locate it in the file list. Try refreshing.",
+            { id: toastId },
+          );
+          return;
+        }
 
-      setFiles((prev) => [...prev, newFile]);
-      navigate(`/script-editor/${newFile.name}`);
-
-      setOpenTabs((prev) => {
-        if (!prev.find((t) => t.id === newFile.id)) {
-          const newTabs = [...prev, newFile];
+        // Open the new file in the editor pane via URL — the existing
+        // name-driven useEffect handles the rest.
+        navigate(`/script-editor/${newFile.name}`);
+        setOpenTabs((prev) => {
+          if (prev.find((t) => t.id === newFile.id)) return prev;
+          const next = [...prev, newFile];
           localStorage.setItem(
             "openTabs",
-            JSON.stringify(newTabs.map((t) => t.id)),
+            JSON.stringify(next.map((t) => t.id)),
           );
-          return newTabs;
+          return next;
+        });
+
+        toast.success(`${newFile.name} is open in the editor.`, {
+          id: toastId,
+        });
+      } catch (error) {
+        console.error("handleScriptCreated failed:", error);
+        toast.error(
+          (error as Error).message ||
+            "Script was created but the editor couldn't refresh.",
+          { id: toastId },
+        );
+      }
+    },
+    [getToken, navigate],
+  );
+
+  const handleScriptUpdated = useCallback(
+    async (scriptId: string) => {
+      const toastId = toast.loading("Reloading script…");
+      try {
+        const clerkToken = await getToken();
+        if (!clerkToken) throw new Error("Not signed in.");
+
+        // Refetch THIS script's metadata + content. The list itself
+        // doesn't need refetching — name/version on other rows didn't
+        // change — but the open editor pane needs the new body.
+        const [allScripts, scriptContent] = await Promise.all([
+          scriptService.getAll(clerkToken),
+          scriptService.getContent(scriptId, clerkToken),
+        ]);
+        const fresh = allScripts.find(
+          (s) => s.id.toString() === scriptId,
+        );
+        if (!fresh) {
+          toast.warning("Script updated but couldn't refetch its content.", {
+            id: toastId,
+          });
+          return;
         }
-        return prev;
-      });
 
-      setHasUnsavedChanges(false);
-      setIsAISidebarOpen(false);
+        const updatedFile = mapScriptToScriptFile(fresh, scriptContent.content);
 
-      clientToast({
-        title: "Success",
-        description: "Script generated and saved successfully.",
-      });
-    } catch (error: unknown) {
-      console.error("Failed to save generated script:", error);
-      clientToast({
-        variant: "destructive",
-        title: "Error",
-        description:
-          (error as Error).message || "Failed to save generated script.",
-      });
-    }
-  };
+        setFiles((prev) =>
+          prev.map((f) => (f.id === scriptId ? updatedFile : f)),
+        );
+        setOpenTabs((prev) =>
+          prev.map((f) => (f.id === scriptId ? updatedFile : f)),
+        );
+        // Reflect the new content in the editor pane IF this is the
+        // currently-open file. Otherwise leave currentFile alone — the
+        // user might be on a different tab.
+        setCurrentFile((cur) => (cur && cur.id === scriptId ? updatedFile : cur));
+        setHasUnsavedChanges(false);
+
+        toast.success(`${updatedFile.name} reloaded.`, { id: toastId });
+      } catch (error) {
+        console.error("handleScriptUpdated failed:", error);
+        toast.error(
+          (error as Error).message ||
+            "Script was updated but the editor couldn't refresh.",
+          { id: toastId },
+        );
+      }
+    },
+    [getToken],
+  );
 
   const duplicateFile = async (file: ScriptFile) => {
     setIsLoading(true);
@@ -888,7 +955,8 @@ export function useScriptEditor() {
     handleDeleteScriptClick,
     confirmDeleteScript,
     handleEditorChange,
-    handleGeneratedScript,
+    handleScriptCreated,
+    handleScriptUpdated,
     duplicateFile,
     downloadFile,
     configureMonacoEditor,
