@@ -60,7 +60,7 @@ from llm.client import (
     astream_complete,
     resolve_for_thread,
 )
-from llm.prompts import get_system_prompt
+from llm.prompts import get_panel_allowed_tools, get_system_prompt
 from llm.tools import dispatch_tool, get_tool_schemas
 from settings import get_settings
 from streaming.sse import (
@@ -170,6 +170,7 @@ def _build_llm_messages(
     *,
     summary_text: str = "",
     mode: str = "",
+    panel: str = "",
 ) -> list[dict[str, Any]]:
     """Assemble the messages list passed to litellm.
 
@@ -209,6 +210,7 @@ def _build_llm_messages(
     system_prompt = get_system_prompt(
         user_customizations=thread.get("system_prompt_override") or "",
         mode=mode,
+        panel=panel,
     )
     if summary_text:
         system_prompt = (
@@ -338,6 +340,11 @@ async def post_message(
     # Optional Research/Generation/Execution mode hint from the UI. Used
     # only to bias the system prompt — unknown values are ignored.
     mode: str = body.get("mode") or ""
+    # Optional inline-AI panel identifier (script_editor /
+    # workflow_builder). Appends a surface-scoped addendum to the
+    # system prompt AND filters the advertised tool schemas to the
+    # panel's allow-list (see `llm/prompts.py::_PANEL_ALLOWED_TOOLS`).
+    panel: str = body.get("panel") or ""
 
     client = get_django_client()
 
@@ -451,7 +458,7 @@ async def post_message(
 
     # 4. Call the LLM.
     llm_messages = _build_llm_messages(
-        thread, history_list, content, mode=mode,
+        thread, history_list, content, mode=mode, panel=panel,
     )
     try:
         result = await acomplete(llm_messages, resolution)
@@ -552,6 +559,11 @@ async def post_message_stream(
     # `_build_llm_messages` so the LLM sees a mode-specific addendum
     # appended to its system prompt for this turn only.
     mode: str = body.get("mode") or ""
+    # Optional inline-AI panel identifier (script_editor /
+    # workflow_builder). Drives BOTH the system-prompt panel addendum
+    # AND the tool-schemas filter — so a panel can be hard-restricted
+    # to a subset of tools even if the model tries to reach further.
+    panel: str = body.get("panel") or ""
 
     client = get_django_client()
 
@@ -758,6 +770,7 @@ async def post_message_stream(
             thread, history_list, content,
             summary_text=existing_summary_text,
             mode=mode,
+            panel=panel,
         )
         context_window = get_model_context_window(resolution.model_name)
         target_tokens = int(
@@ -819,8 +832,21 @@ async def post_message_stream(
             thread, history_list, content,
             summary_text=existing_summary_text,
             mode=mode,
+            panel=panel,
         )
-        tool_schemas = get_tool_schemas()
+        # Tool schemas filtered by panel — surface-specific allow-list.
+        # `None` from `get_panel_allowed_tools` means "no filter" (the
+        # main /ai/autobot chat sees all tools). The inline panels
+        # (script_editor / workflow_builder) get narrowed sets that
+        # exclude tools they shouldn't reach.
+        tool_schemas = get_tool_schemas(
+            allowed_names=get_panel_allowed_tools(panel),
+        )
+        if panel:
+            logger.info(
+                "Panel=%s: advertising %d tool(s)",
+                panel, len(tool_schemas),
+            )
         max_rounds = settings.AUTOBOT_MAX_TOOL_ROUNDS
 
         # T18a: track which resolution actually succeeded on round 1.
@@ -1054,7 +1080,16 @@ async def post_message_stream(
                 fn_args = (tc.get("function") or {}).get("arguments") or ""
 
                 yield sse_tool_call_start(tc_id, fn_name, fn_args)
-                result = await dispatch_tool(fn_name, fn_args, auth_handle.raw_jwt)
+                # Pass the SAME panel allow-list that filtered tool
+                # schemas above — re-checked at dispatch time so a
+                # hallucinated tool call (model emits a name that
+                # wasn't advertised) is refused before it executes.
+                result = await dispatch_tool(
+                    fn_name,
+                    fn_args,
+                    auth_handle.raw_jwt,
+                    allowed_names=get_panel_allowed_tools(panel),
+                )
                 yield sse_tool_result(tc_id, fn_name, result)
 
                 # T18: invalidate the thread's hot-context cache on

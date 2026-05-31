@@ -75,13 +75,27 @@ def register_tool(definition: ToolDefinition) -> None:
     _REGISTRY[definition.name] = definition
 
 
-def get_tool_schemas() -> list[dict[str, Any]]:
+def get_tool_schemas(
+    allowed_names: frozenset[str] | set[str] | None = None,
+) -> list[dict[str, Any]]:
     """Build the `tools=` payload for `litellm.acompletion()`.
 
     Empty list ⇒ no tools advertised to the LLM (and the LLM won't
-    attempt any function call). The chat router can swap this for a
-    subset later (e.g. only `create_script` for the AIScriptGenerator
-    quick-action endpoint).
+    attempt any function call).
+
+    `allowed_names` filters the registry to a subset — used by the
+    chat router for surface-specific panels (e.g. the ScriptEditor's
+    AI panel sees only the script tools; the WorkflowBuilder's AI
+    panel sees workflow + read-only script tools, but NOT
+    `create_script` / `update_script`). Pass `None` (the default) to
+    advertise every registered tool — what the main /ai/autobot chat
+    wants.
+
+    Filtering is enforced at the LLM API layer: a tool not in the
+    payload simply isn't callable, regardless of what the system
+    prompt says. That's the real-teeth guard against a model "going
+    off-script" (literally — calling `create_script` from a workflow
+    panel where the system prompt said not to).
     """
     return [
         {
@@ -93,6 +107,7 @@ def get_tool_schemas() -> list[dict[str, Any]]:
             },
         }
         for t in _REGISTRY.values()
+        if allowed_names is None or t.name in allowed_names
     ]
 
 
@@ -105,6 +120,8 @@ async def dispatch_tool(
     name: str,
     args_json: str,
     jwt: str,
+    *,
+    allowed_names: frozenset[str] | set[str] | None = None,
 ) -> dict[str, Any]:
     """Execute one tool call. Always returns a dict — never raises.
 
@@ -113,13 +130,39 @@ async def dispatch_tool(
     the provider serialized — usually JSON). Empty string is treated
     as `{}`.
 
+    ``allowed_names`` is the SAME panel allow-list that was used to
+    filter the advertised `tool_schemas` for this turn. Re-checking it
+    here is belt-and-suspenders: even if the LLM hallucinates a tool
+    call for a name that wasn't advertised (provider drift, prompt
+    injection, jailbreak), we refuse to execute. The schema filter is
+    the primary guard; this is the hard floor. Pass ``None`` to allow
+    any registered tool (the default — what the main /ai/autobot chat
+    wants).
+
     Failure modes folded into ``{"error": "..."}``:
+      • Tool name not in `allowed_names` (panel restriction)
       • Unknown tool name
       • Malformed JSON arguments
       • Tool timed out
       • Tool raised any exception
       • Tool returned a non-JSON-serializable value
     """
+    # Panel allow-list check FIRST — block before we even look up the
+    # tool. A panel restriction supersedes the global registry: if the
+    # panel says "no", the tool may as well not exist for this turn.
+    if allowed_names is not None and name not in allowed_names:
+        logger.warning(
+            "Tool '%s' blocked by panel allow-list (advertised set: %s)",
+            name, sorted(allowed_names),
+        )
+        return {
+            "error": (
+                f"Tool '{name}' is not available in this context and "
+                "cannot be called from here. Refer the user to the "
+                "appropriate panel if they need it."
+            ),
+        }
+
     tool = _REGISTRY.get(name)
     if tool is None:
         return {"error": f"Unknown tool: '{name}'."}

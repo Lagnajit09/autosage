@@ -110,8 +110,9 @@ _MODEL_CONTEXT_WINDOWS: dict[str, int] = {
     "gpt-4o-mini":        128_000,
     "gpt-4-turbo":        128_000,
     # Groq (Llama 3.1 generation).
-    "llama-3.1-70b-versatile": 131_072,
-    "llama-3.1-8b-instant":    131_072,
+    "llama-3.1-70b-versatile":          131_072,
+    "llama-3.1-8b-instant":             131_072,
+    "llama-4-scout-17b-16e-instruct":   131_072,
     # Older Groq Llama-3 — much smaller context.
     "llama3-70b-8192":    8_192,
     "llama3-8b-8192":     8_192,

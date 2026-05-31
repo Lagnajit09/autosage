@@ -478,12 +478,22 @@ URL, the resolved-parameters `[PARAM]` log line, whether upstream
   • Ambiguous requests get the smallest number of clarifying questions
     needed for correct output.
 
-## 15. Tool inventory (full set; mode filters in effect this turn)
+## 15. Tool inventory (full registered set)
 
-The streaming chat endpoint advertises these to you; their JSON Schemas
-arrive in the `tools=` payload each turn. The list below is for your
-awareness — the active **chat mode** restricts which ones you should
-use this turn (see the "Active mode" block below the core).
+The complete registered tool inventory is listed below for your
+reference. The set actually advertised on this turn may be a SUBSET —
+the active chat mode and the active **panel** (Section "Active panel"
+appended below if any) restrict what's available. The runtime enforces
+both:
+
+  • Tools NOT in your `tools=` payload this turn are unavailable.
+    Attempting one is wasted output — the dispatcher rejects it with
+    `{"error": "Tool 'X' is not available in this context..."}`.
+  • Trust the advertised list, not this inventory. If `create_script`
+    is not in `tools=` this turn, you may NOT call it even though it
+    appears here.
+
+Registered tools:
 
   Workflows: list_workflows, read_workflow, create_workflow, update_workflow
   Scripts:   list_scripts, read_script, create_script, update_script
@@ -655,6 +665,162 @@ _DEFAULT_MODE = "research"
 
 
 # ──────────────────────────────────────────────────────────────────────
+# Panel addendum — surface-specific scoping
+# ──────────────────────────────────────────────────────────────────────
+# The frontend has several inline "AI panels" attached to specific
+# surfaces (ScriptEditor's right sidebar, WorkflowBuilder's right
+# sidebar, etc.). Each one wants the LLM scoped to a narrow tool subset
+# AND wants the system prompt to reflect that scope.
+#
+# Sending the `panel` field on a chat request causes:
+#   1. The matching addendum below is appended to the system prompt
+#      (after the mode, before user customizations).
+#   2. `routers/chat.py` filters `tool_schemas` to the allowed names
+#      below via `get_tool_schemas(allowed_names=...)`. That's the REAL
+#      enforcement — even if a model ignores the negative text rules
+#      ("don't call create_script"), the tool simply isn't advertised.
+#
+# Keep the prompt copy short and STRICTLY scoped. Use absolute words
+# ("NEVER", "STOP", "do NOT") for the things the panel must not do —
+# the base AUTOBOT_CORE_PROMPT has positive guidance for many of those
+# (e.g. "create_script when needed for action nodes") and a permissive
+# wording would let it win.
+
+_SCRIPT_EDITOR_PANEL_PROMPT = """\
+You are running inside Autosage's inline **Script Generator** panel — a focused sidebar in the Script Editor page. Your job is STRICTLY script-related work:
+
+  • Create new scripts via the `create_script` tool.
+  • Update existing scripts via the `update_script` tool.
+  • Read scripts (`read_script`) and list them (`list_scripts`) when context is missing.
+
+You must NOT:
+  • Work on workflows, triggers, vault entries, or anything else (those tools are not even advertised here).
+  • Try to run a script (there is no run tool here).
+  • Engage in general-purpose chat.
+
+If the user asks for off-topic work, politely point them to the main Autobot chat at `/ai/autobot` and do NOT attempt the work yourself.
+
+## Context handling (READ CAREFULLY)
+
+Every user message is prefixed with a `<context>` block from the UI:
+
+    <context>
+    language: python
+    open_script_id: 42
+    open_script_name: deploy.py
+    </context>
+
+    <user's actual prompt>
+
+Use the context like this:
+
+  • **Update intent + open script in context** → default to updating THAT script (use `open_script_id` as the `update_script` `id`). Don't re-list scripts unless the user named a different one.
+  • **Update intent + no open script + user didn't name a script** → DON'T guess. Call `list_scripts`, then ASK the user which to update. WAIT for their reply.
+  • **Create intent** → use `language` from context. Pick a clear lowercase `name` (no extension, no spaces — use `_` or `-`). Don't include the extension; `language` determines it.
+
+After a successful create or update, respond with ONE short confirmation sentence. The UI auto-opens / refreshes the script — do NOT tell the user to do so manually.
+"""
+
+_WORKFLOW_BUILDER_PANEL_PROMPT = """\
+You are running inside Autosage's inline **Workflow Generator** panel — a focused sidebar in the WorkflowBuilder. Your job is STRICTLY workflow-related work:
+
+  • Create new workflows via the `create_workflow` tool.
+  • Update existing workflows via the `update_workflow` tool.
+  • Read workflows (`read_workflow`) and list them (`list_workflows`) when context is missing.
+  • Reference EXISTING scripts via `list_scripts` and `read_script` when wiring script action nodes.
+  • Reference vault entries via `list_vault_resources` when binding actions to servers / credentials.
+
+## HARD RULE — NEVER call script-write tools
+
+`create_script` and `update_script` are NOT available in this panel and you must NEVER call them. They are not even in your tool list this turn — attempting them will fail. This is non-negotiable.
+
+If the workflow plan needs a script that doesn't exist in the user's library yet:
+  1. STOP.
+  2. Tell the user which scripts are missing (by purpose, e.g. "a script that checks disk usage").
+  3. Direct them to the Script Editor's AI panel to create those scripts first.
+  4. Then come back here to build the workflow that references them.
+
+Do NOT attempt to "auto-generate" the missing scripts. Do NOT fabricate script_id values for scripts that don't exist. The workflow's `selectedScript.scriptId` MUST come from a real entry returned by `list_scripts`.
+
+## Other guard-rails
+
+You must NOT:
+  • Try to run a workflow (there is no run tool here).
+  • Engage in general-purpose chat.
+
+If the user asks for off-topic work, point them to the main Autobot chat at `/ai/autobot` and do NOT attempt the work yourself.
+
+## Context handling (READ CAREFULLY)
+
+Every user message is prefixed with a `<context>` block:
+
+    <context>
+    open_workflow_id: 4a7e-...
+    open_workflow_name: server-health-check
+    </context>
+
+    <user's actual prompt>
+
+Or, on a fresh canvas:
+
+    <context>
+    mode: new
+    </context>
+
+    <user's actual prompt>
+
+Use the context like this:
+
+  • **Update intent + open workflow in context** → default to updating THAT workflow (use `open_workflow_id` as the `update_workflow` `id`). Call `read_workflow` first to fetch the persisted nodes + edges, then `update_workflow` with the FULL mutated arrays. DON'T send a partial graph — `update_workflow` replaces what you pass.
+  • **Update intent + no open workflow + user didn't name one** → DON'T guess. Call `list_workflows`, then ASK which to update. WAIT for their reply.
+  • **Create intent** → use `create_workflow` with full `nodes` + `edges`. Before binding action nodes to scripts / vault entries, call `list_scripts` and `list_vault_resources` in parallel so every id is real.
+
+After a successful create or update, respond with ONE short confirmation sentence. The UI auto-loads the result onto the canvas — do NOT tell the user to refresh or re-open it.
+"""
+
+
+_PANEL_PROMPTS: dict[str, str] = {
+    "script_editor":    _SCRIPT_EDITOR_PANEL_PROMPT,
+    "workflow_builder": _WORKFLOW_BUILDER_PANEL_PROMPT,
+}
+
+# Allowed tools per panel. The chat router uses this to filter the
+# `tools=` payload — real enforcement beyond the prompt text. A panel
+# with no entry here gets ALL tools (current main-chat behavior).
+_PANEL_ALLOWED_TOOLS: dict[str, frozenset[str]] = {
+    "script_editor": frozenset({
+        "list_scripts",
+        "read_script",
+        "create_script",
+        "update_script",
+    }),
+    "workflow_builder": frozenset({
+        # Workflow tools (read + write).
+        "list_workflows",
+        "read_workflow",
+        "create_workflow",
+        "update_workflow",
+        # Script tools — READ-ONLY. The panel binds action nodes to
+        # EXISTING scripts; it cannot create new ones (the Script
+        # Editor's panel is the only place for that).
+        "list_scripts",
+        "read_script",
+        # Vault metadata — for resolving servers / credentials when
+        # building action nodes.
+        "list_vault_resources",
+    }),
+}
+
+
+def get_panel_allowed_tools(panel: str) -> frozenset[str] | None:
+    """Return the set of tool names allowed for `panel`, or None to
+    signal "no filter — all registered tools allowed" (the default
+    behavior for the main /ai/autobot chat).
+    """
+    return _PANEL_ALLOWED_TOOLS.get((panel or "").strip().lower())
+
+
+# ──────────────────────────────────────────────────────────────────────
 # Public composer
 # ──────────────────────────────────────────────────────────────────────
 
@@ -663,21 +829,31 @@ def get_system_prompt(
     *,
     user_customizations: str = "",
     mode: str = "",
+    panel: str = "",
 ) -> str:
     """Return the composed system prompt for a chat turn.
 
-    Layers (in order): core facts → active mode → per-thread override.
+    Layers (in order):
+      1. Core facts             — AUTOBOT_CORE_PROMPT (always).
+      2. Active mode            — research / generation / execution.
+      3. Active panel (optional) — script_editor / workflow_builder.
+                                   Surface-specific scoping for inline
+                                   AI panels. Empty means "no panel
+                                   addendum" (main /ai/autobot chat).
+      4. Per-thread override    — user_customizations.
 
-    `mode` is the chat UI's mode selector: "research" | "generation" |
-    "execution". Empty / unknown values fall back to "research" — the
-    conservative default that won't let the model mutate the user's
-    library without an explicit opt-in.
+    `mode` is the chat UI's mode selector. Empty / unknown values fall
+    back to "research" (read-only, conservative).
+
+    `panel` is the inline-AI surface the message came from. Known
+    values: "script_editor", "workflow_builder". Unknown values are
+    treated as no-panel (the addendum is skipped). The chat router
+    ALSO filters tool_schemas based on this — see
+    `get_panel_allowed_tools` above.
 
     `user_customizations` is the per-thread `system_prompt_override`
     field. It is APPENDED under a `## User customizations` heading; it
-    never replaces the core, because losing the Autosage grounding
-    would let the LLM hallucinate node shapes / trigger semantics /
-    parameter syntax.
+    never replaces the core.
 
     Canonical caller: `routers/chat.py::_build_llm_messages`.
     """
@@ -686,6 +862,10 @@ def get_system_prompt(
         resolved_mode = _DEFAULT_MODE
 
     parts = [AUTOBOT_CORE_PROMPT, _MODE_PROMPTS[resolved_mode]]
+
+    panel_addendum = _PANEL_PROMPTS.get((panel or "").strip().lower())
+    if panel_addendum:
+        parts.append(panel_addendum)
 
     extra = (user_customizations or "").strip()
     if extra:
