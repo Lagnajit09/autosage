@@ -24,7 +24,7 @@ import { validateConnection } from "@/utils/graph";
 import { ImportWorkflowDialog } from "./ImportWorkflowDialog";
 import { DeleteConfirmationModal } from "@/components/DeleteConfirmationModal";
 import { DecisionNode } from "./nodes/DecisionNode";
-import { AIWorkflowGenerator } from "./AIWorkflowGenerator";
+import { AIWorkflowGeneratorSidebar } from "./AIWorkflowGeneratorSidebar";
 import GenieButton from "../GenieButton";
 import { Vault } from "../vault/Vault";
 import { useTheme } from "@/contexts/theme/theme-context";
@@ -36,7 +36,11 @@ import {
   updateWorkflow,
   deleteWorkflow,
 } from "@/lib/actions/workflow";
-import { deleteHttpTrigger, deleteScheduleTrigger } from "@/lib/actions/triggers";
+import {
+  deleteHttpTrigger,
+  deleteScheduleTrigger,
+} from "@/lib/actions/triggers";
+import { apiRequest } from "@/lib/api-client";
 import { useAuth } from "@clerk/clerk-react";
 
 const nodeTypes = {
@@ -67,16 +71,15 @@ const WorkflowBuilderContent = ({
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [showImportDialog, setShowImportDialog] = useState(false);
   const [showVault, setShowVault] = useState(false);
-  const [showAIGenerator, setShowAIGenerator] = useState(false);
+  const [aiPanelOpen, setAiPanelOpen] = useState(false);
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [nodeDeleteModalOpen, setNodeDeleteModalOpen] = useState(false);
-  const [pendingRemovals, setPendingRemovals] = useState<NodeChange<Node>[]>([]);
+  const [pendingRemovals, setPendingRemovals] = useState<NodeChange<Node>[]>(
+    [],
+  );
   const [reactFlowInstance, setReactFlowInstance] =
     useState<ReactFlowInstance | null>(null);
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
-  // Holds the most recent rejection reason produced by isValidConnection so
-  // we can surface it once on onConnectEnd (toast on actual failed drop, not
-  // on every mousemove during the drag).
   const rejectionReasonRef = useRef<string | null>(null);
 
   // Load workflow from localStorage on component mount
@@ -153,6 +156,78 @@ const WorkflowBuilderContent = ({
       toast2.dismiss();
     }
   };
+
+  // ── AI Workflow Generator callbacks (T22 part 2) ────────────────────
+  //
+  // The AI panel runs autobot's `create_workflow` / `update_workflow`
+  // tools directly. These callbacks fire AFTER the stream closes —
+  // they just sync the canvas with whatever the server now holds.
+
+  const handleAIWorkflowCreated = useCallback(
+    async (newWorkflowId: string, newWorkflowName: string) => {
+      // Sonner loading toast covers the gap between the LLM's "done"
+      // and the canvas actually showing the new graph (navigate →
+      // Workflow.tsx refetch → setNodes/setEdges takes ~500ms).
+      // Replace the same toast id on success/failure so the user sees
+      // one continuous status indicator.
+      const toastId = toast2.loading(
+        `Loading "${newWorkflowName}" onto canvas…`,
+      );
+      try {
+        // Navigate so the URL reflects the persisted workflow. Workflow.tsx
+        // re-fetches on `id` change and feeds fresh `initialData` to
+        // WorkflowBuilder, which re-imports onto the canvas via the
+        // existing useEffect. We use `replace` so the user's back button
+        // doesn't return them to a stale `/workflow/new`.
+        navigate(`/workflow/${newWorkflowId}`, { replace: true });
+        toast2.success(`Created "${newWorkflowName}"`, { id: toastId });
+      } catch (err) {
+        console.error("handleAIWorkflowCreated failed:", err);
+        toast2.error("Workflow created — refresh to load it on the canvas.", {
+          id: toastId,
+        });
+      }
+    },
+    [navigate],
+  );
+
+  const handleAIWorkflowUpdated = useCallback(
+    async (updatedWorkflowId: string) => {
+      // If the updated workflow isn't the one on canvas (the user
+      // asked the bot to edit a different workflow), just toast and
+      // leave the canvas alone — re-importing would lose their work.
+      if (updatedWorkflowId !== workflowId) {
+        toast2.success("Workflow updated");
+        return;
+      }
+      // Same workflow → refetch + re-import so the canvas reflects the
+      // bot's edits. The URL stays the same.
+      const toastId = toast2.loading("Reloading workflow on canvas…");
+      try {
+        const token = await getToken();
+        if (!token) throw new Error("Not signed in.");
+        const response = await apiRequest(
+          `/api/workflows/${updatedWorkflowId}/`,
+          {},
+          token,
+        );
+        const data = response?.data || response;
+        if (data) {
+          importWorkflow(data);
+        }
+        toast2.success("Workflow updated", { id: toastId });
+      } catch (err) {
+        console.error("handleAIWorkflowUpdated failed:", err);
+        toast2.error("Workflow updated — refresh the page to see changes.", {
+          id: toastId,
+        });
+      }
+    },
+    // `importWorkflow` is a stable function declared above this useCallback —
+    // it doesn't depend on changing state, so omitting from deps is safe.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [workflowId, getToken],
+  );
 
   const onConnect = useCallback(
     (params: Connection) => {
@@ -699,6 +774,7 @@ const WorkflowBuilderContent = ({
           onClearCanvas={handleClearCanvas}
           onDeleteWorkflow={handleDeleteWorkflow}
           workflowId={workflowId}
+          aiPanelOpen={aiPanelOpen}
         />
 
         {/* Main Content */}
@@ -787,10 +863,25 @@ const WorkflowBuilderContent = ({
                 </div>
               )}
 
-              {/* Enhanced AI Automation Floating Button */}
-              <GenieButton onClick={() => setShowAIGenerator(true)} />
+              {!aiPanelOpen && (
+                <GenieButton onClick={() => setAiPanelOpen((p) => !p)} />
+              )}
             </div>
           </AppContextMenu>
+
+          {/* Inline AI Workflow Generator panel — autobot streaming
+           * chat scoped to workflow create / update / read / list.
+           * Stays mounted across toggles so the chat thread survives
+           * close → open cycles (see AIWorkflowGeneratorSidebar). */}
+          <AIWorkflowGeneratorSidebar
+            openWorkflow={
+              workflowId ? { id: workflowId, name: workflowName } : null
+            }
+            onWorkflowCreated={handleAIWorkflowCreated}
+            onWorkflowUpdated={handleAIWorkflowUpdated}
+            isOpen={aiPanelOpen}
+            onToggle={() => setAiPanelOpen((p) => !p)}
+          />
 
           <RightSidebar
             selectedNode={selectedNode}
@@ -825,13 +916,6 @@ const WorkflowBuilderContent = ({
 
       {/* Credential Vault */}
       <Vault isOpen={showVault} setIsOpen={setShowVault} />
-
-      {/* AI Workflow Generator */}
-      <AIWorkflowGenerator
-        isOpen={showAIGenerator}
-        onClose={() => setShowAIGenerator(false)}
-        onGenerate={importWorkflow}
-      />
 
       <DeleteConfirmationModal
         isOpen={deleteModalOpen}

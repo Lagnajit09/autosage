@@ -105,6 +105,11 @@ export interface ThreadCreateBody {
   title?: string;
   llm_config?: string | null;
   system_prompt_override?: string;
+  /** Set true to keep the thread out of the user's chat-history
+   * sidebar from the moment of creation. Useful for tool-internal
+   * threads (e.g. the inline Script Generator panel) where the chat is
+   * a means to an end and shouldn't pollute the main history. */
+  is_archived?: boolean;
 }
 
 export interface ThreadUpdateBody {

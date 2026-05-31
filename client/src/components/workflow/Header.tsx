@@ -35,6 +35,7 @@ const Header = ({
   onClearCanvas,
   onDeleteWorkflow,
   workflowId,
+  aiPanelOpen = false,
 }: {
   nodes: number;
   edges: number;
@@ -44,12 +45,23 @@ const Header = ({
   onClearCanvas?: () => void;
   onDeleteWorkflow?: () => void;
   workflowId?: string;
+  /** True when the AI Workflow Generator side panel is open. The Header
+   * is absolute-positioned against the viewport, so without this flag
+   * its rightmost ~300px sits visually on top of the AI panel (Run +
+   * toolbar overlap the panel header). Shifting left by the panel's
+   * full width (320px) + the panel's left border + our original 16px
+   * margin = 336px keeps both fully visible side-by-side. */
+  aiPanelOpen?: boolean;
 }) => {
   const { isDark, toggleTheme } = useTheme();
   const navigate = useNavigate();
 
   return (
-    <div className="w-[32%] flex items-center justify-end gap-2 absolute right-4 top-4 z-50">
+    <div
+      className={`w-[32%] flex items-center justify-end gap-2 absolute top-4 z-30 transition-[right] duration-300 ${
+        aiPanelOpen ? "right-[336px]" : "right-4"
+      }`}
+    >
       <Button
         onClick={() => navigate(`/workflow/execution/${workflowId}`)}
         className="flex items-center bg-green-100 hover:bg-green-200 dark:bg-green-900/50 dark:hover:bg-green-800 text-green-600 dark:text-green-400 border-2 border-green-500/90 rounded-xl"

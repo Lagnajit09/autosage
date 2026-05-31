@@ -114,6 +114,15 @@ export interface StreamMessageBody {
    * appends a mode-specific instruction to the system prompt at turn
    * time. Omit (or "research") for safe default. */
   mode?: "research" | "generation" | "execution";
+  /** Inline-AI panel identifier. Drives two things server-side:
+   *   1. The system prompt gets a surface-scoped addendum
+   *      (see `autobot/llm/prompts.py::_PANEL_PROMPTS`).
+   *   2. The advertised tool schemas are filtered to the panel's
+   *      allow-list (see `_PANEL_ALLOWED_TOOLS`) — so a panel cannot
+   *      reach tools outside its scope even if the model tries.
+   * Known values: "script_editor", "workflow_builder". Omit for the
+   * main /ai/autobot chat (full tool set, no panel addendum). */
+  panel?: "script_editor" | "workflow_builder";
 }
 
 export interface StreamMessageOptions {
