@@ -160,7 +160,7 @@ class Thread(models.Model):
     is_archived = models.BooleanField(default=False)
 
     # Hot ordering key for the history list — "what did I last work on".
-    # Touched by the message-create endpoint (T07/T13). Indexed because
+    # Touched by the message-create endpoint. Indexed because
     # the history sidebar query is `... ORDER BY last_message_at DESC LIMIT N`.
     last_message_at = models.DateTimeField(null=True, blank=True)
 
@@ -224,7 +224,7 @@ class Message(models.Model):
     model_name = models.CharField(max_length=255, blank=True)
 
     # Token accounting. Populated by the chat endpoint from LiteLLM's
-    # response usage block. Used by the summarizer (T16) + future cost UI.
+    # response usage block. Used by the summarizer + future cost UI.
     prompt_tokens = models.PositiveIntegerField(null=True, blank=True)
     completion_tokens = models.PositiveIntegerField(null=True, blank=True)
     total_tokens = models.PositiveIntegerField(null=True, blank=True)
@@ -246,7 +246,7 @@ class Message(models.Model):
     # True when the turn was served from the user's BYO LLMConfig.
     # Distinguishes provider="gemini" via admin pool from provider="gemini"
     # via a user-supplied Gemini key — same provider string, different
-    # billing surface. Needed by the dashboard (T25) to split tokens into
+    # billing surface. Needed by the dashboard to split tokens into
     # admin vs BYO. Indexed because the dashboard aggregator groups on it.
     is_byo = models.BooleanField(default=False, db_index=True)
 
@@ -281,7 +281,7 @@ class Message(models.Model):
 class Summary(models.Model):
     """A rolling summary of older Messages in a Thread.
 
-    Created by the summarizer (T16) when the in-memory context grows
+    Created by the summarizer when the in-memory context grows
     past `AUTOBOT_CONTEXT_TARGET_RATIO * model_context_window`. All messages
     older than `up_to_message` (exclusive of newer ones) are collapsed into
     `summary_text`. Persisted in Postgres so context can be re-hydrated
@@ -320,7 +320,7 @@ class Summary(models.Model):
 
 
 class UserSettings(models.Model):
-    """Per-user Autobot preferences. Auto-created on first GET by T08."""
+    """Per-user Autobot preferences."""
 
     class Expertise(models.TextChoices):
         BEGINNER = 'beginner', _('Beginner')

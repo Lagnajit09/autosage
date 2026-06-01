@@ -1,10 +1,5 @@
 # autobot dependencies. Pinned for reproducibility — bump deliberately
 # when adopting new features (litellm in particular evolves fast).
-#
-# Last bump: 2026-05-30. Driven by a litellm 1.55.4 bug in the Databricks-
-# shared chunk parser that crashed on Groq's trailing usage-only chunk
-# (`choices: []` valid OpenAI protocol, parser indexed `choices[0]`
-# without a guard). Newer litellm fixes it AND drops the httpx<0.28 cap.
 
 # Web framework
 fastapi==0.136.1
