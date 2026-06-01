@@ -17,6 +17,7 @@ No streaming, no tools yet. T13 adds streaming; T14 adds tool dispatch.
 from __future__ import annotations
 
 import logging
+import uuid
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from typing import Any
@@ -42,11 +43,60 @@ _RETRYABLE_LITELLM_ERRORS: tuple[type[Exception], ...] = tuple(
 )
 
 
+# Mapping from litellm exception class → our friendly `kind` discriminator.
+# Order matters: more-specific classes first (ContextWindowExceeded is a
+# subclass of BadRequest on some litellm versions, so check it first).
+def _kind_for(e: Exception) -> str:
+    """Classify a litellm exception into a friendly-message bucket.
+
+    The chat router maps each bucket to a user-facing string via
+    `friendly_llm_message()` — we deliberately don't expose the raw
+    provider error to the UI (it can leak provider names, api keys
+    in stack traces, internal model ids, etc.).
+    """
+    # Most specific first.
+    ctx_cls = getattr(litellm, "ContextWindowExceededError", None)
+    if ctx_cls is not None and isinstance(e, ctx_cls):
+        return "context_overflow"
+
+    cp_cls = getattr(litellm, "ContentPolicyViolationError", None)
+    if cp_cls is not None and isinstance(e, cp_cls):
+        return "content_policy"
+
+    rl_cls = getattr(litellm, "RateLimitError", None)
+    if rl_cls is not None and isinstance(e, rl_cls):
+        return "rate_limit"
+
+    sv_cls = getattr(litellm, "ServiceUnavailableError", None)
+    if sv_cls is not None and isinstance(e, sv_cls):
+        return "service_unavailable"
+
+    auth_cls = getattr(litellm, "AuthenticationError", None)
+    if auth_cls is not None and isinstance(e, auth_cls):
+        return "auth"
+
+    to_cls = getattr(litellm, "Timeout", None)
+    if to_cls is not None and isinstance(e, to_cls):
+        return "timeout"
+
+    conn_cls = getattr(litellm, "APIConnectionError", None)
+    if conn_cls is not None and isinstance(e, conn_cls):
+        return "connection"
+
+    bad_cls = getattr(litellm, "BadRequestError", None)
+    if bad_cls is not None and isinstance(e, bad_cls):
+        return "bad_request"
+
+    return "unknown"
+
+
 def _wrap_litellm_error(e: Exception) -> LLMError:
     """Convert a litellm exception to our LLMError, tagging it
-    retryable if the underlying class is in the safe-to-retry set."""
+    retryable if the underlying class is in the safe-to-retry set,
+    and stamping a friendly-message kind for the UI."""
     retryable = isinstance(e, _RETRYABLE_LITELLM_ERRORS)
-    return LLMError(str(e), retryable=retryable)
+    return LLMError(str(e), retryable=retryable, kind=_kind_for(e))
+
 
 logger = logging.getLogger(__name__)
 
@@ -64,11 +114,95 @@ class LLMError(Exception):
     decide whether to try the next admin fallback (T18a). `False` —
     the default — is for errors where retrying gains nothing (bad
     request, auth failure, context overflow, malformed config).
+
+    `kind` is the friendly-message discriminator: one of
+    `rate_limit | service_unavailable | context_overflow |
+    content_policy | auth | bad_request | connection | timeout |
+    unknown`. The chat router maps it to a user-facing string via
+    `friendly_llm_message()` so the UI never sees a raw provider error.
     """
 
-    def __init__(self, message: str, *, retryable: bool = False):
+    def __init__(
+        self,
+        message: str,
+        *,
+        retryable: bool = False,
+        kind: str = "unknown",
+    ):
         super().__init__(message)
         self.retryable = retryable
+        self.kind = kind
+
+
+# Friendly message table — what the UI ACTUALLY shows for each kind.
+# Keep these short, neutral, and free of provider names. The raw
+# provider error is logged server-side only (operators grep it).
+_FRIENDLY_LLM_MESSAGES: dict[str, str] = {
+    "rate_limit": (
+        "The AI model hit its rate limit. Please try again in a minute."
+    ),
+    "service_unavailable": (
+        "The AI provider is temporarily unavailable. Please try again "
+        "shortly."
+    ),
+    "connection": (
+        "Network issue reaching the AI provider. Please retry."
+    ),
+    "timeout": (
+        "The AI took too long to respond. Please try again."
+    ),
+    "context_overflow": (
+        "This conversation is too long for the current model. Start a "
+        "new chat or shorten your message."
+    ),
+    "content_policy": (
+        "Your message was blocked by the AI provider's content policy. "
+        "Please rephrase and try again."
+    ),
+    "auth": (
+        "The AI provider rejected our credentials. The site operators "
+        "have been notified — please try again later."
+    ),
+    "bad_request": (
+        "The AI couldn't process this request. Try rephrasing your "
+        "message or starting a new chat."
+    ),
+    "unknown": (
+        "Something went wrong reaching the AI model. Please try again "
+        "shortly."
+    ),
+}
+
+
+def friendly_llm_message(kind: str, *, all_exhausted: bool = False) -> str:
+    """Map an `LLMError.kind` to the user-facing string.
+
+    `all_exhausted=True` means every provider in the admin chain failed
+    — the user has hit a hard wall and retrying immediately won't help.
+    We surface a slightly different framing for that case so the UI
+    can offer the "add a personal LLM key" escape hatch.
+    """
+    base = _FRIENDLY_LLM_MESSAGES.get(kind, _FRIENDLY_LLM_MESSAGES["unknown"])
+    if not all_exhausted:
+        return base
+    # All admin providers down → tell the user the fallbacks didn't help
+    # and point at the BYO option. Friendly framings per-kind:
+    if kind == "rate_limit":
+        return (
+            "All available AI models are rate-limited right now. Please "
+            "try again in a few minutes, or add a personal LLM key in "
+            "Customize to keep working."
+        )
+    if kind in ("service_unavailable", "connection", "timeout", "unknown"):
+        return (
+            "We couldn't reach any available AI model right now. Please "
+            "try again shortly, or add a personal LLM key in Customize "
+            "to keep working."
+        )
+    # context_overflow / content_policy / auth / bad_request → the same
+    # underlying message applies no matter how many providers we tried;
+    # appending the BYO hint is overkill for these.
+    return base
 
 
 @dataclass(frozen=True)
@@ -99,7 +233,7 @@ class LLMResolution:
 
 # LiteLLM dispatches by the `provider/` prefix on the model string. We
 # don't add new providers without also wiring an API-key field in settings.
-_ADMIN_PROVIDERS = {"gemini", "groq", "openrouter"}
+_ADMIN_PROVIDERS = {"gemini", "groq", "openrouter", "cerebras"}
 
 
 def resolve_admin(
@@ -132,6 +266,7 @@ def resolve_admin(
         "gemini": settings.GEMINI_API_KEY,
         "groq": settings.GROQ_API_KEY,
         "openrouter": settings.OPENROUTER_API_KEY,
+        "cerebras": settings.CEREBRAS_API_KEY,
     }
     api_key = api_key_map[provider]
     if not api_key:
@@ -552,8 +687,17 @@ async def astream_complete(
                         # Provider didn't supply an index — fall back
                         # to len() so we still accumulate something.
                         idx = len(tool_calls_by_index)
+                    # Seed with a synthetic id so we ALWAYS have a non-empty
+                    # `id`. Some providers (notably Groq's
+                    # meta-llama/llama-4-scout-17b-16e-instruct) emit
+                    # tool_call deltas without an `id` at all — the OpenAI
+                    # protocol then rejects the follow-up `role: "tool"`
+                    # message with "Missing tool_call_id" because it has
+                    # nothing to bind to. Providers that DO send an `id`
+                    # (Gemini, OpenAI, most OpenRouter models) overwrite
+                    # the synthetic on the next line.
                     entry = tool_calls_by_index.setdefault(idx, {
-                        "id": None,
+                        "id": f"call_{uuid.uuid4().hex[:24]}",
                         "type": "function",
                         "function": {"name": "", "arguments": ""},
                     })

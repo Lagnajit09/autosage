@@ -14,6 +14,7 @@ from auth import AuthContext, get_verifier, install_log_redaction, require_auth
 from conversation.cache import close_cache
 from conversation.persistence import close_django_client
 from llm.tools import list_tool_names
+from routers import analytics as analytics_router
 from routers import chat as chat_router
 from routers import proxy as proxy_router
 from settings import get_settings
@@ -122,6 +123,11 @@ app.include_router(proxy_router.router)
 # the SSE streaming variant; this endpoint stays as the internal /
 # fallback path.
 app.include_router(chat_router.router)
+
+# ── Analytics route (T26) ─────────────────────────────────────────────
+# GET /dashboard/ — per-user usage telemetry, merging Django aggregation
+# with the Redis admin-quota counter.
+app.include_router(analytics_router.router)
 
 
 @app.get("/health/")

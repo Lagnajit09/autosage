@@ -58,6 +58,7 @@ from llm.client import (
     LLMResolution,
     acomplete,
     astream_complete,
+    friendly_llm_message,
     resolve_for_thread,
 )
 from llm.prompts import get_panel_allowed_tools, get_system_prompt
@@ -464,14 +465,17 @@ async def post_message(
         result = await acomplete(llm_messages, resolution)
     except LLMError as e:
         logger.error(
-            "LLM call failed (provider=%s, model=%s): %s",
-            resolution.provider, resolution.model_name, e,
+            "LLM call failed (provider=%s, model=%s, kind=%s): %s",
+            resolution.provider, resolution.model_name, e.kind, e,
         )
         # User's message is already persisted; the LLM failure surfaces
-        # as a 502 so the client can retry without re-sending the user msg.
+        # as a 502 so the client can retry without re-sending the user
+        # msg. Surface the FRIENDLY message keyed to the error kind —
+        # never the raw provider error (it can leak api keys / internal
+        # model ids / stack-trace fragments).
         return _envelope(
             success=False,
-            message="The LLM provider is temporarily unavailable. Please try again.",
+            message=friendly_llm_message(e.kind),
             status_code=status.HTTP_502_BAD_GATEWAY,
         )
 
@@ -487,6 +491,7 @@ async def post_message(
         "prompt_tokens": result["prompt_tokens"],
         "completion_tokens": result["completion_tokens"],
         "total_tokens": result["total_tokens"],
+        "is_byo": not resolution.is_admin,
     }
     try:
         s, assistant_env = await client.request(
@@ -857,6 +862,18 @@ async def post_message_stream(
         # once we've committed to it.
         selected_resolution: LLMResolution | None = None
 
+        # Per-turn token accumulator. Each round's `final_payload` has
+        # its own usage block; we sum them so a single log line at the
+        # exit points captures the FULL cost of the turn — useful for
+        # comparing against provider TPM caps when picking the default
+        # admin model. Logged as `TURN_TOKENS` so it's easy to grep.
+        turn_prompt_tokens = 0
+        turn_completion_tokens = 0
+        turn_total_tokens = 0
+        turn_tool_calls = 0
+        turn_provider = ""
+        turn_model = ""
+
         for round_num in range(1, max_rounds + 1):
             accumulated = ""
             final_payload: dict[str, Any] | None = None
@@ -872,6 +889,11 @@ async def post_message_stream(
                 candidates = [selected_resolution or resolution]
 
             stream_succeeded = False
+            # Track the most recent LLMError kind across the candidate
+            # loop so the terminal "all exhausted" branch can emit a
+            # message that reflects WHY everything failed (rate limit vs
+            # connection vs auth) — see `friendly_llm_message` below.
+            last_err_kind = "unknown"
             for cand_idx, cand in enumerate(candidates):
                 attempt_yielded_token = False
                 attempt_accumulated = ""
@@ -887,6 +909,7 @@ async def post_message_stream(
                         elif kind == "done":
                             attempt_final = payload
                 except LLMError as e:
+                    last_err_kind = e.kind or "unknown"
                     # Salvage path: if the stream errored AFTER content
                     # was already delivered to the client, treat it as
                     # success. Real-world trigger: litellm 1.55.x's
@@ -936,14 +959,20 @@ async def post_message_stream(
                                 cand.provider, cand.model_name, e,
                             )
                             continue
+                        # Terminal: either non-retryable, or out of
+                        # fallbacks, or already streamed tokens (can't
+                        # safely swap providers mid-reply). Log the raw
+                        # error for ops; surface a friendly one to the
+                        # user.
                         logger.error(
                             "LLM stream failed (round=%d, provider=%s, "
-                            "model=%s): %s",
-                            round_num, cand.provider, cand.model_name, e,
+                            "model=%s, kind=%s): %s",
+                            round_num, cand.provider, cand.model_name,
+                            e.kind, e,
                         )
                         yield sse_error(
-                            "The LLM provider is temporarily unavailable.",
-                            code="llm_unavailable",
+                            friendly_llm_message(e.kind),
+                            code=f"llm_{e.kind}",
                         )
                         return
 
@@ -962,16 +991,20 @@ async def post_message_stream(
                 break
 
             if not stream_succeeded:
-                # All candidates failed without a usable response. This
-                # is reached only if every entry in the chain raised a
-                # NON-retryable error or we ran out of fallbacks while
-                # tokens had already been emitted. Either way, the user
-                # has seen something useful — or nothing at all — and
-                # there's no clean recovery beyond surfacing the error.
+                # All candidates failed. The terminal-per-candidate
+                # branch above usually `return`s before we reach here;
+                # we end up here mainly when the inner loop's `continue`
+                # path ran out of fallbacks. Surface a message keyed to
+                # the most recent failure kind, with the "all exhausted"
+                # framing that prompts the user toward BYO.
+                logger.error(
+                    "All Default LLM candidates exhausted (last_kind=%s) "
+                    "after round=%d",
+                    last_err_kind, round_num,
+                )
                 yield sse_error(
-                    "All admin LLM providers exhausted. Try again or "
-                    "add a personal LLM key in Customize.",
-                    code="all_llm_unavailable",
+                    friendly_llm_message(last_err_kind, all_exhausted=True),
+                    code=f"llm_{last_err_kind}_exhausted",
                 )
                 return
 
@@ -988,6 +1021,15 @@ async def post_message_stream(
                 }
             tool_calls = final_payload.get("tool_calls") or []
 
+            # Accumulate per-turn token counters (one log line covers all
+            # rounds; see TURN_TOKENS log at exit points).
+            turn_prompt_tokens += int(final_payload.get("prompt_tokens") or 0)
+            turn_completion_tokens += int(final_payload.get("completion_tokens") or 0)
+            turn_total_tokens += int(final_payload.get("total_tokens") or 0)
+            turn_tool_calls += len(tool_calls)
+            turn_provider = final_payload.get("provider") or turn_provider
+            turn_model = final_payload.get("model_name") or turn_model
+
             # ── Branch A: no tool calls → this is the final answer ──
             if not tool_calls:
                 assistant_payload: dict[str, Any] = {
@@ -999,6 +1041,7 @@ async def post_message_stream(
                     "prompt_tokens": final_payload["prompt_tokens"],
                     "completion_tokens": final_payload["completion_tokens"],
                     "total_tokens": final_payload["total_tokens"],
+                    "is_byo": not resolution.is_admin,
                 }
                 try:
                     ps, persisted_env = await client.request(
@@ -1022,6 +1065,13 @@ async def post_message_stream(
                         code=f"assistant_persist_status_{ps}",
                     )
                     return
+                logger.info(
+                    "TURN_TOKENS thread=%s rounds=%d tool_calls=%d "
+                    "prompt=%d completion=%d total=%d provider=%s model=%s",
+                    thread_id, round_num, turn_tool_calls,
+                    turn_prompt_tokens, turn_completion_tokens,
+                    turn_total_tokens, turn_provider, turn_model,
+                )
                 yield sse_done((persisted_env or {}).get("data") or {})
                 return
 
@@ -1037,6 +1087,7 @@ async def post_message_stream(
                 "prompt_tokens": final_payload["prompt_tokens"],
                 "completion_tokens": final_payload["completion_tokens"],
                 "total_tokens": final_payload["total_tokens"],
+                "is_byo": not resolution.is_admin,
                 "tool_calls": tool_calls,
             }
             try:
@@ -1162,6 +1213,14 @@ async def post_message_stream(
         logger.warning(
             "Tool-call loop hit max rounds (%d) without a final reply",
             max_rounds,
+        )
+        logger.info(
+            "TURN_TOKENS thread=%s rounds=%d tool_calls=%d "
+            "prompt=%d completion=%d total=%d provider=%s model=%s "
+            "(hit_max_rounds)",
+            thread_id, max_rounds, turn_tool_calls,
+            turn_prompt_tokens, turn_completion_tokens,
+            turn_total_tokens, turn_provider, turn_model,
         )
         yield sse_error(
             f"The assistant ran {max_rounds} tool rounds without "

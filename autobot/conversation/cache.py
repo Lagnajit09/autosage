@@ -193,6 +193,33 @@ class ConversationCache:
             )
         return allowed, int(count)
 
+    async def get_admin_quota_for_today(self, user_sub: str) -> int:
+        """Return today's admin-key usage count for a user.
+
+        Read-only sibling of :meth:`incr_admin_quota_for_today` — used by
+        the dashboard endpoint (T26) to surface "default requests remaining"
+        without touching the counter. Returns 0 on cache miss or any Redis
+        error; the caller treats missing data as "no usage yet today" rather
+        than 5xx-ing the whole dashboard.
+        """
+        from datetime import datetime, timezone
+        today = datetime.now(timezone.utc).strftime("%Y%m%d")
+        key = f"autobot:admin_quota:{user_sub}:{today}"
+        try:
+            raw = await self._client.get(key)
+        except Exception as e:
+            logger.warning(
+                "Admin-quota read failed for user_sub=%s (%s); fail-open",
+                user_sub, e,
+            )
+            return 0
+        if raw is None:
+            return 0
+        try:
+            return int(raw)
+        except (TypeError, ValueError):
+            return 0
+
 
 @lru_cache
 def get_cache() -> ConversationCache:

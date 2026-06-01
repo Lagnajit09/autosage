@@ -50,10 +50,35 @@ class AutobotSettings(BaseSettings):
     GEMINI_API_KEY: str = ""
     GROQ_API_KEY: str = ""
     OPENROUTER_API_KEY: str = ""
+    # Cerebras has the most generous quota of the providers we tested
+    # for the admin tier (65k context, 32k output, high TPM/RPD). Used
+    # as the second link in the default fallback chain below.
+    CEREBRAS_API_KEY: str = ""
 
+    # ── Default admin LLM selection ─────────────────────────────────────
+    # Quota-fit ranking (best → worst) at v1, given our typical turn
+    # cost (~5k prompt tokens + 2-3 tool calls + workflow JSON output):
+    #
+    #   1. groq/meta-llama/llama-4-scout-17b-16e-instruct
+    #         30 RPM, 1000 RPD, 30k TPM, 500k TPD, 8k completion cap.
+    #         Best free Groq tier — only model whose TPM doesn't get
+    #         saturated by a single multi-tool turn. 8k completion cap
+    #         can truncate very large workflow JSON, acceptable risk.
+    #   2. cerebras/gpt-oss-120b
+    #         65k context, 32k output. Generous all-around. No completion
+    #         truncation risk on workflows.
+    #   3. openrouter/openai/gpt-oss-120b:free
+    #         20 RPM, 50 RPD. Free tier — survives short bursts.
+    #   4. openrouter/nvidia/llama-3.1-nemotron-70b-instruct:free
+    #         Same OpenRouter free-tier limits.
+    #   5. gemini/gemini-2.5-flash
+    #         5 RPM, 250 RPD — last resort, tiny RPM.
+    #   6. gemini/gemini-2.5-flash-lite
+    #         Even tighter than flash — absolute last resort.
+    #
     # Used when the user has no `default_llm_config` set in UserSettings.
-    DEFAULT_PROVIDER: str = "gemini"
-    DEFAULT_MODEL: str = "gemini/gemini-1.5-flash"
+    DEFAULT_PROVIDER: str = "groq"
+    DEFAULT_MODEL: str = "groq/meta-llama/llama-4-scout-17b-16e-instruct"
 
     # ── Behavior tuning (T13+) ──────────────────────────────────────────
     # Hard cap on tool-call rounds per user turn. Bounds runaway loops
@@ -67,12 +92,21 @@ class AutobotSettings(BaseSettings):
     # Comma-separated `provider/model` entries to try in order if the
     # primary admin LLM (DEFAULT_PROVIDER + DEFAULT_MODEL) returns a
     # retryable error (rate limit, 503, connection drop, timeout).
-    # Empty = no fallback. Example:
-    #   "groq/llama-3.1-70b-versatile,openrouter/meta-llama/llama-3.1-70b-instruct"
     # Only attempted on round 1 of a tool-call loop and only when no
     # tokens have been emitted yet — we never swap providers mid-reply.
     # BYO (user's `LLMConfig`) is final; no fallback for that path.
-    AUTOBOT_ADMIN_FALLBACKS: str = ""
+    #
+    # Default chain mirrors the quota-fit ranking documented above on
+    # DEFAULT_MODEL. Providers with no API key configured are skipped
+    # silently by `resolve_admin_chain()`, so leaving e.g.
+    # `CEREBRAS_API_KEY` blank degrades gracefully to the next link.
+    AUTOBOT_ADMIN_FALLBACKS: str = (
+        "cerebras/gpt-oss-120b,"
+        "openrouter/openai/gpt-oss-120b:free,"
+        "openrouter/nvidia/llama-3.1-nemotron-70b-instruct:free,"
+        "gemini/gemini-2.5-flash,"
+        "gemini/gemini-2.5-flash-lite"
+    )
 
     # Per-user daily quota on ADMIN-keyed chat turns. Tracked in Redis
     # at `autobot:admin_quota:<sub>:<yyyymmdd>`. Counter ticks once
@@ -80,7 +114,13 @@ class AutobotSettings(BaseSettings):
     # the cap, the user gets a friendly error and is told to add a
     # personal LLM key in Customize. BYO turns don't count. Set to 0
     # to disable the cap entirely.
-    AUTOBOT_ADMIN_DAILY_LIMIT: int = 30
+    #
+    # 10/day matches what the cheapest links in the fallback chain
+    # (Gemini 2.5 flash = 250 RPD shared across ALL users; OpenRouter
+    # free = 50 RPD per model) can realistically sustain once the
+    # primary provider is rate-limited. Raise only if the Groq quota
+    # holds in practice.
+    AUTOBOT_ADMIN_DAILY_LIMIT: int = 10
     # Redis TTL for hot conversation context (seconds). Refreshed on access.
     AUTOBOT_CTX_TTL_SECONDS: int = 7200
     # Summarization trigger as a fraction of the model's context window.
