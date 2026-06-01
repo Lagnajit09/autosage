@@ -1,11 +1,14 @@
 import logging
+from datetime import timedelta
 
 from django.core.paginator import EmptyPage, Paginator
 from django.db import IntegrityError, transaction
-from django.db.models import Count
+from django.db.models import Count, Sum
+from django.utils import timezone
 from rest_framework import generics, status
 from rest_framework.exceptions import NotFound
 from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from autobot_api.models import LLMConfig, Message, Summary, Thread, UserSettings
@@ -639,5 +642,110 @@ class UserSettingsView(generics.RetrieveUpdateAPIView):
             success=True,
             message='Settings updated successfully.',
             data=response.data,
+            status_code=status.HTTP_200_OK,
+        )
+
+
+# ── Dashboard (T25) ──────────────────────────────────────────────────────────
+#
+# Aggregator endpoint that surfaces token/request usage for the caller.
+# Buckets are computed at three fixed windows (today, last 7 days, all-time)
+# in one response so the client never has to make multiple round-trips just
+# to render the dashboard. Aggregation rules:
+#   • Only assistant messages count — user-turn rows carry no tokens.
+#   • Threads scope by request.user; cross-user message rows never bleed
+#     through (the queryset filter is `thread__user=request.user`).
+#   • Provider/model rows with both blank are excluded from `model_usage`
+#     to avoid an "Unknown/Unknown" bucket dominating early/no-data states.
+
+
+def _bucket_stats(qs):
+    """Reduce an assistant-message queryset to the dashboard bucket shape.
+
+    Single pass over the queryset; the SUMs and COUNT come back from
+    Postgres as one aggregate row, and a separate `values().annotate()`
+    powers the per-(provider, model_name) breakdown.
+    """
+    totals = qs.aggregate(
+        requests=Count('id'),
+        total_tokens=Sum('total_tokens'),
+        prompt_tokens=Sum('prompt_tokens'),
+        completion_tokens=Sum('completion_tokens'),
+    )
+    # Split admin vs BYO token totals — provider strings are not enough
+    # to tell them apart because users can BYO the same provider that
+    # admin pool uses (e.g. user-supplied Gemini key vs admin Gemini).
+    admin_tokens = qs.filter(is_byo=False).aggregate(s=Sum('total_tokens'))['s'] or 0
+    byo_tokens = qs.filter(is_byo=True).aggregate(s=Sum('total_tokens'))['s'] or 0
+
+    requests = totals['requests'] or 0
+    total_tokens = totals['total_tokens'] or 0
+    avg = (total_tokens // requests) if requests else 0
+
+    # Per (provider, model_name) breakdown — drives the model-usage chart.
+    # Exclude rows where both fields are blank (legacy/pre-T25 data).
+    usage_qs = (
+        qs.exclude(provider='', model_name='')
+        .values('provider', 'model_name')
+        .annotate(count=Count('id'))
+        .order_by('-count')
+    )
+    model_usage = [
+        {
+            'provider': row['provider'],
+            'model': row['model_name'],
+            'count': row['count'],
+        }
+        for row in usage_qs
+    ]
+
+    return {
+        'requests': requests,
+        'total_tokens': total_tokens,
+        'prompt_tokens': totals['prompt_tokens'] or 0,
+        'completion_tokens': totals['completion_tokens'] or 0,
+        'avg_tokens_per_request': avg,
+        'admin_tokens': admin_tokens,
+        'byo_tokens': byo_tokens,
+        'model_usage': model_usage,
+    }
+
+
+class DashboardView(APIView):
+    """GET /api/autobot/dashboard/
+
+    Returns per-user usage telemetry across three windows. No path params,
+    no query params — keep the surface trivial. Throttled with the same
+    autobot_burst/sustained scopes as the other Autobot endpoints so a
+    dashboard tab on a poll loop can't escape the request budget.
+    """
+
+    permission_classes = [IsAuthenticated]
+    throttle_classes = [AutobotBurstThrottle, AutobotSustainedThrottle]
+
+    def get(self, request):
+        now = timezone.now()
+        # `today` is the start of the current UTC day. The Autobot quota
+        # counter (T18a) uses the same UTC date boundary in its Redis key
+        # name (`yyyymmdd`), so this matches — no drift between the two
+        # "today" definitions.
+        today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        week_start = now - timedelta(days=7)
+
+        base = Message.objects.filter(
+            thread__user=request.user,
+            role=Message.Role.ASSISTANT,
+        )
+
+        payload = {
+            'today': _bucket_stats(base.filter(created_at__gte=today_start)),
+            'last_7d': _bucket_stats(base.filter(created_at__gte=week_start)),
+            'all_time': _bucket_stats(base),
+        }
+
+        return api_response(
+            success=True,
+            message='Dashboard retrieved successfully.',
+            data=payload,
             status_code=status.HTTP_200_OK,
         )

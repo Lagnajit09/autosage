@@ -52,4 +52,11 @@ urlpatterns = [
         views.UserSettingsView.as_view(),
         name='user-settings',
     ),
+
+    # ── Dashboard analytics (T25) ──────────────────────────────────────────
+    path(
+        'dashboard/',
+        views.DashboardView.as_view(),
+        name='dashboard',
+    ),
 ]

@@ -243,6 +243,13 @@ class Message(models.Model):
     # SSE streams that die mid-flight and trigger a client retry.
     client_id = models.CharField(max_length=128, blank=True)
 
+    # True when the turn was served from the user's BYO LLMConfig.
+    # Distinguishes provider="gemini" via admin pool from provider="gemini"
+    # via a user-supplied Gemini key — same provider string, different
+    # billing surface. Needed by the dashboard (T25) to split tokens into
+    # admin vs BYO. Indexed because the dashboard aggregator groups on it.
+    is_byo = models.BooleanField(default=False, db_index=True)
+
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

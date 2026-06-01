@@ -172,6 +172,7 @@ class MessageSerializer(serializers.ModelSerializer):
             'tool_calls',
             'tool_call_id',
             'client_id',
+            'is_byo',
             'created_at',
         ]
         read_only_fields = ['id', 'created_at']
