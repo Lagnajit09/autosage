@@ -1,15 +1,10 @@
 /**
  * Chat-mode segmented control (Research / Generation / Execution).
  *
- * Three modes the user can hint to autobot before sending:
- *   • Research   — focus on read-only exploration (list_*, read_*).
- *   • Generation — create scripts / workflows; allowed to call write tools.
- *   • Execution  — parking-lot: workflow execution as a tool isn't shipped
- *                  yet (see plan T15 + parking lot). Greyed out.
- *
- * The mode is a system-prompt hint, not a hard restriction. The LLM is
- * free to choose appropriate tools, but the hint biases it toward the
- * intended outcome and shows the user what role autobot will play.
+ * Modes bias the system prompt:
+ *   • Research   — read-only exploration (list_*, read_*).
+ *   • Generation — create/modify scripts and workflows.
+ *   • Execution  — not yet shipped; greyed out.
  */
 
 import { Search, Atom, Cpu, Check, Lock } from "lucide-react";

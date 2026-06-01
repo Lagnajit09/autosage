@@ -4,19 +4,6 @@ import { Copy, Check } from "lucide-react";
 import { useTheme } from "@/contexts/theme/theme-context";
 import { getDarkTheme, getLightTheme } from "@/utils/getCodeTheme";
 
-/**
- * Minimalist code block for chat markdown.
- *
- * Design:
- *   • No borders. Distinguished from chat surface by a subtle one-step
- *     darker/lighter background.
- *   • Optional language label sits flush-left in a soft header strip
- *     so the user can tell python vs bash at a glance without it being
- *     a visual obstacle.
- *   • Copy button is icon-only, top-right, always visible (no hover
- *     reveal — discoverable on mobile, predictable on desktop). Flips
- *     to a green check for 1.5s after copying.
- */
 export const CodeBlock = ({
   code,
   language,
@@ -38,11 +25,6 @@ export const CodeBlock = ({
     }
   };
 
-  // Chat surface is roughly:
-  //   light: bg-gray-50 / bg-white
-  //   dark:  bg-workflow-void/90 (~slate-950ish)
-  // Code block sits ONE step off — gray-100 (light) / gray-900 (dark).
-  // Just enough contrast to delineate without a border.
   const surfaceBg = isDark ? "#171923" : "#f3f4f6";
   const surfaceText = isDark ? "#e2e8f0" : "#1f2937";
 

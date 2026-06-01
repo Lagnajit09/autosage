@@ -1,29 +1,15 @@
-"""Conversation summarizer (T16).
+"""Conversation summarizer.
 
 Three jobs:
-
-  1. **Token accounting** — count tokens of a chat history so the chat
-     loop can decide whether to summarize. Uses tiktoken's `cl100k_base`
-     encoder as a vendor-neutral approximation. Per-provider tokenizers
-     would be more accurate (±10–20 % for Gemini) but tiktoken is good
-     enough to gate the summarization trigger, and shipping multiple
-     tokenizers just to refine the estimate isn't worth the weight.
-
-  2. **Pre-compaction** — when a tool result message is huge (e.g. a 5 KB
-     `list_scripts` dump), collapse it to a one-line digest IN-MEMORY
-     before feeding to the LLM. The full content stays in Postgres for
-     audit; only the LLM-visible context gets compressed. This defers
-     full summarization by 5–10 turns.
-
-  3. **Summarization** — when the assembled context still exceeds
-     `AUTOBOT_CONTEXT_TARGET_RATIO * model_context_window` after
-     pre-compaction, do a separate non-streaming LLM call that turns the
-     OLD portion of history into a paragraph summary. Persist as a
-     Django Summary row (+ Redis cache) and replace the old portion with
-     the summary in-context for THIS turn and future turns.
-
-The chat router (`routers/chat.py`) is the only intended caller; this
-module doesn't enforce ordering or know about SSE.
+  1. Token accounting via tiktoken's `cl100k_base` (vendor-neutral
+     approximation, ±10–20% off per-provider but good enough to gate
+     the summarization trigger).
+  2. Pre-compaction: collapse tool messages >2KB to one-line digests
+     in-memory (full content stays in Postgres for audit).
+  3. Summarization: when post-compaction context still exceeds
+     `AUTOBOT_CONTEXT_TARGET_RATIO * model_context_window`, do a
+     separate non-streaming LLM call, persist a Summary row, and
+     replace the old portion of history in-context.
 """
 
 from __future__ import annotations
@@ -37,67 +23,49 @@ import tiktoken
 
 from conversation.cache import get_cache
 from conversation.persistence import DjangoUnavailable, get_django_client
-from llm.client import LLMError, LLMResolution, acomplete
+from llm.client import LLMResolution, acomplete
 from llm.prompts import SUMMARIZER_SYSTEM_PROMPT
 
 logger = logging.getLogger(__name__)
 
 
-# ── Token accounting ─────────────────────────────────────────────────
-
-
 @lru_cache(maxsize=1)
 def _get_tiktoken_encoding():
-    """`cl100k_base` is OpenAI's encoder for GPT-4/3.5; it's the closest
-    portable approximation we have for Gemini, Groq Llama, etc. Counts
-    will diverge by ±10–20 % vs the provider's true tokenizer, but for
-    the trigger threshold (60 % of window) that's well within margin."""
     return tiktoken.get_encoding("cl100k_base")
 
 
 def count_tokens(text: str) -> int:
-    """Token count for a single string."""
     if not text:
         return 0
     return len(_get_tiktoken_encoding().encode(text))
 
 
 def count_message_tokens(messages: list[dict[str, Any]]) -> int:
-    """Approximate token cost of a full OpenAI-format messages list.
+    """Approximate token cost of an OpenAI-format messages list.
 
-    Each message carries a small structural overhead (role tag + JSON
-    wrapping); OpenAI's reference doc says ~4 tokens per message plus 2
-    priming tokens. We use 3 per message as the rough constant — close
-    enough for budgeting, and the actual provider serialization will
-    differ slightly anyway. Tool calls and tool_call_ids are counted
-    against the message that carries them.
+    Uses 3 tokens per message for role+wrapping overhead plus 2 priming
+    tokens (per OpenAI's reference doc).
     """
     total = 0
     for m in messages:
-        total += 3  # role tag + JSON wrapping overhead
+        total += 3
         content = m.get("content") or ""
         total += count_tokens(content)
         tool_calls = m.get("tool_calls") or []
         for tc in tool_calls:
             if isinstance(tc, dict):
-                # Each tool_call is a small JSON object. Counting its
-                # serialized form is the easiest accurate estimate.
                 try:
                     total += count_tokens(json.dumps(tc))
                 except (TypeError, ValueError):
-                    total += 50  # fallback constant
+                    total += 50
         tool_call_id = m.get("tool_call_id") or ""
         if tool_call_id:
             total += count_tokens(tool_call_id)
-    return total + 2  # priming overhead per OpenAI doc
+    return total + 2
 
 
-# ── Model context windows ────────────────────────────────────────────
-
-
-# Known max-token windows. LiteLLM has `litellm.model_cost` but it's
-# patchy and version-dependent; hardcoding the models we actually use
-# is more reliable. Add new entries as new providers / models land.
+# LiteLLM has `litellm.model_cost` but it's patchy and version-dependent;
+# hardcoding the models we use is more reliable.
 _MODEL_CONTEXT_WINDOWS: dict[str, int] = {
     # Gemini family — all 1M-context.
     "gemini-1.5-flash":   1_000_000,
@@ -123,15 +91,11 @@ _MODEL_CONTEXT_WINDOWS: dict[str, int] = {
     "claude-opus-4":      200_000,
 }
 
-# Conservative fallback when the model name doesn't match — picks a
-# small window so summarization triggers EARLY rather than after a
-# silent overflow. Better to over-summarize than to 400 the call.
+# Conservative fallback — summarize early rather than 400 on overflow.
 _DEFAULT_CONTEXT_WINDOW = 32_000
 
 
 def get_model_context_window(model_name: str) -> int:
-    """Resolve a model name (with or without provider prefix) to its
-    max context window in tokens. Falls back to a conservative default."""
     if not model_name:
         return _DEFAULT_CONTEXT_WINDOW
     bare = model_name.rsplit("/", 1)[-1].lower().strip()
@@ -148,11 +112,7 @@ def get_model_context_window(model_name: str) -> int:
     return _DEFAULT_CONTEXT_WINDOW
 
 
-# ── Pre-compaction ───────────────────────────────────────────────────
-
-
-# Tool messages over this size get replaced with a one-line digest in
-# the LLM-visible context. The full content stays in Postgres.
+# Tool messages over this size are digested before being sent to the LLM.
 TOOL_RESULT_BYTES_THRESHOLD = 2048
 
 
@@ -160,14 +120,9 @@ def precompact_tool_results(
     messages: list[dict[str, Any]],
     max_bytes: int = TOOL_RESULT_BYTES_THRESHOLD,
 ) -> list[dict[str, Any]]:
-    """Replace `role: tool` messages with content larger than `max_bytes`
-    by a short digest. Returns a NEW list — does not mutate input or
-    Django storage.
+    """Replace oversized `role: tool` messages with a short digest.
 
-    The digest tries to be informative: for JSON list-of-objects results
-    (e.g. `{"scripts": [...]}`), it reports the count per top-level
-    array. For error results, it surfaces the error. For unknown shapes,
-    it lists the top-level keys.
+    Returns a new list — does not mutate input or Django storage.
     """
     out: list[dict[str, Any]] = []
     for m in messages:
@@ -179,15 +134,14 @@ def precompact_tool_results(
             out.append(m)
             continue
         digest = _tool_result_digest(content)
-        # Preserve every field except `content` so tool_call_id stays
-        # bound to the originating assistant tool_call.
+        # Preserve every other field so tool_call_id stays bound to the
+        # originating assistant tool_call.
         compacted = {**m, "content": digest}
         out.append(compacted)
     return out
 
 
 def _tool_result_digest(content: str) -> str:
-    """Build a one-line digest of a tool result JSON. Best-effort."""
     try:
         parsed = json.loads(content)
     except json.JSONDecodeError:
@@ -201,22 +155,17 @@ def _tool_result_digest(content: str) -> str:
             "chars; full data in Postgres]"
         )
     if "error" in parsed:
-        # Errors are usually short; surface the message verbatim.
         return f"[tool error: {parsed['error']}]"
     # Common shape: {"<resource>": [item, item, ...]}
     list_keys = [k for k, v in parsed.items() if isinstance(v, list)]
     if list_keys:
         counts = ", ".join(f"{len(parsed[k])} {k}" for k in list_keys)
         return f"[tool result compacted: {counts}; full data in Postgres]"
-    # Fall back to listing top-level keys.
     keys = list(parsed.keys())[:6]
     return (
         f"[tool result compacted: object with keys "
         f"{', '.join(keys)}; full data in Postgres]"
     )
-
-
-# ── Summary load / persist ───────────────────────────────────────────
 
 
 async def load_latest_summary(
@@ -225,22 +174,13 @@ async def load_latest_summary(
 ) -> dict[str, Any] | None:
     """Return the latest summary dict for a thread, or None.
 
-    Shape (on hit):
-      ``{"id": ..., "summary_text": "...", "summary_tokens": N,
-         "up_to_message": "<uuid>", "created_at": "..."}``
-
-    Tries Redis first (JSON-encoded). On miss, hits Django's
-    `/api/autobot/threads/<id>/summaries/?page=1&page_size=1` and warms
-    the cache.
+    Tries Redis first; on miss, fetches from Django and warms the cache.
     """
     cache = get_cache()
     cached = await cache.get_thread_summary(thread_id)
     if cached:
         try:
             data = json.loads(cached)
-            # Sanity-check it has the expected shape; otherwise treat
-            # as a corrupt entry (e.g. older plain-text format from
-            # before this module landed).
             if isinstance(data, dict) and "summary_text" in data:
                 return data
         except json.JSONDecodeError:
@@ -266,7 +206,6 @@ async def load_latest_summary(
     if not summaries:
         return None
     latest = summaries[0]
-    # Warm the cache for the next turn.
     try:
         await cache.set_thread_summary(thread_id, json.dumps(latest, default=str))
     except Exception as e:
@@ -282,11 +221,10 @@ async def persist_summary(
     up_to_message_id: str,
     summary_tokens: int,
 ) -> dict[str, Any] | None:
-    """Write a new Summary row to Django and update the Redis cache.
+    """Write a new Summary row and update the Redis cache.
 
-    Returns the persisted summary dict, or None on failure (caller may
-    still proceed with the summary in-memory — Django storage is
-    persistence for future turns, not for THIS one).
+    Returns None on failure — the caller can still proceed with the
+    summary in-memory for this turn.
     """
     client = get_django_client()
     try:
@@ -320,13 +258,6 @@ async def persist_summary(
     return summary
 
 
-# ── LLM-driven summarization ─────────────────────────────────────────
-#
-# The system prompt for the summarizer LLM call lives in `llm/prompts.py`
-# (as `SUMMARIZER_SYSTEM_PROMPT`) — kept alongside the main system prompt
-# so all LLM-facing prompts are auditable in one place.
-
-
 async def summarize_to_text(
     messages: list[dict[str, Any]],
     resolution: LLMResolution,
@@ -335,13 +266,8 @@ async def summarize_to_text(
 ) -> str:
     """Produce a paragraph summary of `messages` via a non-streaming LLM call.
 
-    If `existing_summary` is non-empty, the model is asked to merge it
-    with the new content rather than start fresh — so the summary stays
-    coherent across multiple summarization rounds over a long thread.
-
-    Raises:
-      LLMError — propagated; the chat router catches and either skips
-      summarization or surfaces a soft warning.
+    A non-empty `existing_summary` is merged with the new content so the
+    summary stays coherent across multiple summarization rounds.
     """
     if existing_summary:
         user_prompt = (
@@ -362,18 +288,13 @@ async def summarize_to_text(
         {"role": "system", "content": SUMMARIZER_SYSTEM_PROMPT},
         {"role": "user", "content": user_prompt},
     ]
-    # Low temperature so summaries are deterministic — we don't want
-    # creative paraphrasing of UUIDs or counts.
+    # Low temperature: avoid creative paraphrasing of UUIDs or counts.
     result = await acomplete(summary_messages, resolution, temperature=0.2)
     return result["content"]
 
 
 def _format_messages_for_summary(messages: list[dict[str, Any]]) -> str:
-    """Render OpenAI-format messages as plain text the summarizer can read.
-
-    Tool calls and tool results are tagged distinctly so the summarizer
-    can pick them out as "actions" rather than chat.
-    """
+    """Render messages as plain text; tag tool calls/results distinctly."""
     lines: list[str] = []
     for m in messages:
         role = (m.get("role") or "?").upper()

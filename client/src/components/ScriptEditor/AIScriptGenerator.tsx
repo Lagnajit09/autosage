@@ -1,41 +1,17 @@
 /**
- * AI Script Generator (T22, part 1).
+ * Inline AI Script Generator panel for the ScriptEditor sidebar.
  *
- * Inline streaming chat panel that lives in the ScriptEditor's right
- * sidebar. **Does not** redirect the user to /ai/autobot — the chat
- * happens here, scoped strictly to script create / update / read /
- * list operations.
- *
- * Why a panel instead of a redirect:
- *   • The user is mid-edit. Sending them to a separate chat page
- *     breaks their flow. They want "make this script do X" right next
- *     to the editor pane.
- *   • Tool callbacks (`create_script`, `update_script`) wire DIRECTLY
- *     back into the editor — new scripts open automatically, updates
- *     refresh the visible content without a manual reload.
+ * Tool callbacks (`create_script`, `update_script`) wire directly back
+ * into the editor so the user stays in their flow.
  *
  * Thread lifecycle:
- *   - Created lazily on first prompt, with `is_archived: true` so it
- *     stays out of the main /ai/autobot chat history sidebar.
- *   - Held in component state — fresh thread per page load. No
- *     localStorage persistence (avoids stale context bleeding into
- *     unrelated editing sessions).
- *   - The "Clear chat" button wipes local state; the next prompt
- *     creates a new thread.
+ *   - Lazily created on first prompt with `is_archived: true` so it
+ *     stays out of the main /ai/autobot history sidebar.
+ *   - Held in component state — fresh thread per page load (no
+ *     localStorage persistence).
  *
- * Per-turn payload shape (only the LLM sees the context block; the
- * chat UI displays the user's typed text alone):
- *
- *     <context>
- *     language: python
- *     open_script_id: 42
- *     open_script_name: deploy.py
- *     </context>
- *
- *     <user's actual prompt>
- *
- * The system_prompt_override taught the LLM how to parse that block
- * (see `SCRIPT_EDITOR_SYSTEM_PROMPT` below).
+ * Each user message is prefixed with a `<context>` block (language +
+ * open_script_id) that only the LLM sees.
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";

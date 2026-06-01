@@ -1,30 +1,14 @@
 /**
- * Autobot chat interface (T20).
+ * Autobot chat interface.
  *
- * Two routing modes:
- *   • `/ai/autobot`          → "welcome" state with no thread yet. The
- *     first submitted message creates a thread, then we navigate to
- *     `/ai/autobot/<id>` (replace, so back-button doesn't return to the
- *     blank state) and pick up streaming where the create left off.
- *   • `/ai/autobot/:id`      → load thread + history on mount, stream
- *     new turns into a live assistant draft.
+ * Routes:
+ *   • /ai/autobot      → welcome state; first message creates a thread.
+ *   • /ai/autobot/:id  → load history, stream new turns.
  *
- * Streaming state shape:
- *   - `messages` is the persisted history (loaded from Django).
- *   - `pendingAssistant` holds the in-flight assistant turn — accumulated
- *     `token` deltas plus a running list of tool calls (id-keyed). When
- *     `done` fires we replace `pendingAssistant` with the persisted
- *     `AutobotMessage` from the payload (authoritative — its content may
- *     differ from the concatenated tokens if the provider trimmed).
- *   - `pendingUser` is the optimistically-rendered user turn shown while
- *     the first SSE frame is still in flight. Cleared once `stream_start`
- *     lands (by which point Django has persisted the user message and the
- *     follow-up history fetch — or the live stream — will re-emit it).
- *
- * Markdown rendering policy: live assistant text streams as plain text
- * (no markdown parse on every token — would be expensive and visually
- * jumpy as fence detection flickers). Once `done` fires we render the
- * authoritative content through ReactMarkdown like the rest of history.
+ * Live assistant tokens render as plain text (markdown parse on every
+ * delta would be expensive and visually jumpy). On `done` we replace
+ * the draft with the authoritative persisted Message and render through
+ * ReactMarkdown like the rest of history.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -108,10 +92,7 @@ interface PendingUserMessage {
   clientId: string;
 }
 
-// `crypto.randomUUID` is available in all modern browsers + secure
-// contexts (https + localhost). Fall back to a basic random string in
-// the unlikely case it isn't available — the value only needs to be
-// unique within a thread.
+// Falls back to a random string when `crypto.randomUUID` is unavailable.
 const newClientId = (): string => {
   try {
     return crypto.randomUUID();
@@ -120,9 +101,8 @@ const newClientId = (): string => {
   }
 };
 
-// T29: archived-thread banner. Non-dismissible — the input is the affordance
-// for re-engaging with the chat, so dismissing the banner without unarchiving
-// would leave the user staring at a disabled input with no explanation.
+// Non-dismissible — dismissing without unarchiving would leave the
+// user staring at a disabled input with no explanation.
 const ArchivedBanner = ({
   onUnarchive,
   busy,
@@ -192,11 +172,7 @@ const Interface = () => {
   const [modelSwitching, setModelSwitching] = useState(false);
 
   // ── Mode state (Research / Generation / Execution) ─────────────────
-  // Default to "research" — read-only is the safest assumption for a
-  // fresh thread. Mode is held in client state (no server persistence)
-  // because it's a per-turn UI hint that prepends an instruction to the
-  // user message before sending. Persisting would mean PATCH-ing the
-  // thread on every change, which is overkill.
+  // Mode is per-turn client state — not persisted on Thread.
   const [mode, setMode] = useState<ChatMode>("research");
 
   const [shareModalOpen, setShareModalOpen] = useState(false);
@@ -204,14 +180,8 @@ const Interface = () => {
   const [vaultModalOpen, setVaultModalOpen] = useState(false);
 
   const messagesContainerRef = useRef<HTMLDivElement>(null);
-  // Abort controller for the in-flight SSE stream. Keyed by component
-  // instance so navigating away or unmounting cancels cleanly.
   const abortRef = useRef<AbortController | null>(null);
 
-  // ── Load LLM configs + user settings once on mount ────────────────
-  // These don't depend on threadId — the user's keys and global default
-  // are stable across threads. CustomizeModal can refresh via the
-  // `onConfigsChanged` callback when the user adds/edits/deletes.
   const refreshConfigs = useCallback(async () => {
     try {
       const token = await getToken();
@@ -223,10 +193,8 @@ const Interface = () => {
       setConfigs(configList);
       setUserDefaultId(settings.default_llm_config);
     } catch (err) {
-      // Non-fatal — picker just shows "Default (admin keys)" with an
-      // empty list. Surface to console for debugging but don't toast
-      // (this fires on every mount and would spam errors if Django is
-      // temporarily down).
+      // Non-fatal — picker falls back to "Default (admin keys)".
+      // Console-only so we don't toast on every mount during outages.
       console.warn("Failed to load LLM configs:", err);
     }
   }, [getToken]);
@@ -235,13 +203,10 @@ const Interface = () => {
     void refreshConfigs();
   }, [refreshConfigs]);
 
-  // ── History load on thread change ──────────────────────────────────
   useEffect(() => {
     if (!threadId) {
-      // Welcome state — clear any prior thread's data. The picker
-      // selection ALSO resets so the user starts with "Default" on
-      // every new chat (avoids surprise inheritance from the last
-      // visited thread).
+      // Welcome state — reset picker so users don't inherit the last
+      // visited thread's config.
       setThread(null);
       setMessages([]);
       setPendingUser(null);
@@ -258,18 +223,13 @@ const Interface = () => {
       try {
         const token = await getToken();
         if (!token) throw new Error("Not signed in.");
-        // Fetch thread metadata + first page of history in parallel.
         const [threadData, historyPage] = await Promise.all([
           getThread(token, threadId),
           listMessages(token, threadId, 1, 50),
         ]);
         if (cancelled) return;
         setThread(threadData);
-        // Picker mirrors the thread's stored override. `null` = no
-        // thread-level override (falls through to user default / admin).
         setSelectedConfigId(threadData.llm_config);
-        // Django returns ASC by default — keep as-is for chronological
-        // render. We trust the backend's `?ordering=created_at` default.
         setMessages(historyPage.messages);
       } catch (err) {
         if (cancelled) return;
@@ -287,7 +247,6 @@ const Interface = () => {
     };
   }, [threadId, getToken]);
 
-  // ── Cancel any in-flight stream on unmount ─────────────────────────
   useEffect(
     () => () => {
       abortRef.current?.abort();
@@ -295,22 +254,18 @@ const Interface = () => {
     [],
   );
 
-  // ── Auto-scroll on any content change ──────────────────────────────
   useEffect(() => {
     const el = messagesContainerRef.current;
     if (!el) return;
-    // Defer to next paint so newly-appended DOM is measured before scroll.
+    // Defer to next paint so newly-appended DOM is measured.
     const timeoutId = setTimeout(() => {
       el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
     }, 0);
     return () => clearTimeout(timeoutId);
   }, [messages.length, pendingUser, pendingAssistant]);
 
-  // ── Streaming helper ───────────────────────────────────────────────
-  // Opens an SSE stream for `targetThreadId` and reduces every event
-  // into the local state. Returns when the stream terminates (success
-  // or error). Caller is responsible for setting `isStreaming` true
-  // before calling and false after.
+  // Opens an SSE stream and reduces every event into local state.
+  // Caller is responsible for the surrounding `isStreaming` flag.
   const runStream = useCallback(
     async (
       targetThreadId: string,
@@ -327,8 +282,6 @@ const Interface = () => {
         return;
       }
 
-      // Reset the assistant draft to empty for this fresh turn. Tool
-      // calls start empty and grow as the LLM emits them.
       setPendingAssistant({ content: "", toolCalls: [] });
 
       await streamMessage(
@@ -343,13 +296,9 @@ const Interface = () => {
         (event: AutobotStreamEvent) => {
           switch (event.type) {
             case "stream_start": {
-              // Stream is live — the user message has been persisted by
-              // Django. Drop the optimistic bubble; the next history
-              // refresh (or page reload) will re-render from server truth.
-              // We DON'T clear it here because the live UI needs to keep
-              // showing it until `done` lands; clearing now would make
-              // the bubble flicker out and back in. Stored stream_id is
-              // unused for now (T18 token-refresh wiring is for later).
+              // User message is persisted on Django. Keep the optimistic
+              // bubble visible until `done` lands — clearing now would
+              // make it flicker out and back in.
               break;
             }
             case "token": {
@@ -363,8 +312,7 @@ const Interface = () => {
             case "tool_call_start": {
               setPendingAssistant((prev) => {
                 const base = prev ?? { content: "", toolCalls: [] };
-                // Replace any existing entry with the same id (re-emit
-                // safety) rather than appending a duplicate.
+                // Replace any same-id entry (re-emit safety).
                 const without = base.toolCalls.filter(
                   (tc) => tc.id !== event.id,
                 );
@@ -406,13 +354,10 @@ const Interface = () => {
               break;
             }
             case "done": {
-              // Authoritative finalization. Build an optimistic user
-              // message from the local input (server has already
-              // persisted the canonical version with the same content,
-              // different id — a future refresh will swap it in
-              // transparently). Without this, clearing `pendingUser`
-              // below would erase the user's bubble from the visible
-              // thread and they'd think their message vanished.
+              // Build an optimistic user message so clearing
+              // `pendingUser` below doesn't make the bubble disappear.
+              // The canonical row was persisted by Django; a future
+              // refresh swaps it in transparently.
               const optimisticUser: AutobotMessage = {
                 id: `optimistic-user-${clientId}`,
                 role: "user",
@@ -434,12 +379,9 @@ const Interface = () => {
               break;
             }
             case "error": {
-              // Tear down the streaming bubble — the turn is over.
-              // Leaving `pendingAssistant` populated would keep
-              // "Thinking…" or the half-streamed cursor on screen
-              // alongside the error banner, which reads as "still in
-              // progress" to the user. `pendingUser` stays so they can
-              // see what they sent and retry without re-typing.
+              // Clear the assistant bubble so "Thinking…" doesn't sit
+              // next to the error banner. `pendingUser` stays so the
+              // user can retry without re-typing.
               setPendingAssistant(null);
               setStreamError(event.message);
               toast.error(event.message);
@@ -453,19 +395,12 @@ const Interface = () => {
     [getToken],
   );
 
-  // ── Submit handler ─────────────────────────────────────────────────
-  // Handles both modes:
-  //   1. Existing thread → POST stream directly.
-  //   2. New thread     → create thread, navigate to /ai/autobot/<id>,
-  //      then POST stream against the new id.
   const handleSend = useCallback(
     async (content: string) => {
       const trimmed = content.trim();
       if (!trimmed || isStreaming) return;
-      // T29: hard-block sends on archived threads — UI disables the input
-      // and shows a banner, but a stale instance or race could still reach
-      // this handler. Refuse silently here as belt-and-braces; the banner
-      // already explains why the input is locked.
+      // Hard-block sends on archived threads — UI disables the input
+      // but a race could still reach this handler.
       if (thread?.is_archived) {
         toast.error("This chat is archived. Unarchive to send messages.");
         return;
@@ -481,14 +416,6 @@ const Interface = () => {
         let activeThreadId = threadId;
 
         if (!activeThreadId) {
-          // ── New-thread bootstrap ─────────────────────────────────
-          // Derive a title from the first 60 chars of the message. The
-          // user can rename later via the history sidebar.
-          //
-          // The picker selection (`selectedConfigId`) is passed through
-          // as the thread's `llm_config` override. Backend treats null
-          // as "no thread-level override; resolve via UserSettings then
-          // admin keys."
           const token = await getToken();
           if (!token) throw new Error("Not signed in.");
           const title =
@@ -499,10 +426,8 @@ const Interface = () => {
           });
           activeThreadId = created.id;
           setThread(created);
-          // `replace: true` so the empty-state URL doesn't end up in
-          // history. Otherwise back-button → blank screen → forward.
+          // replace: true so back-button doesn't return to the blank state.
           navigate(`/ai/autobot/${activeThreadId}`, { replace: true });
-          // Refresh the sidebar so the new thread appears immediately.
           window.dispatchEvent(new CustomEvent(THREADS_CHANGED_EVENT));
         }
 
@@ -511,8 +436,7 @@ const Interface = () => {
         const msg = err instanceof Error ? err.message : "Failed to send.";
         setStreamError(msg);
         toast.error(msg);
-        // Keep the pending user bubble visible so the user can see what
-        // they typed and retry without re-entering it.
+        // Keep the pending user bubble visible so the user can retry.
       } finally {
         setIsStreaming(false);
         abortRef.current = null;
@@ -530,10 +454,6 @@ const Interface = () => {
     ],
   );
 
-  // T29: unarchive handler — used by the archived banner inline button.
-  // Mirrors the History sidebar archive flow but in reverse: PATCH
-  // is_archived=false, swap the local thread, notify listeners so the
-  // sidebar re-fetches and the row reappears.
   const [unarchiving, setUnarchiving] = useState(false);
   const unarchiveCurrentThread = useCallback(async () => {
     if (!thread || unarchiving) return;
@@ -555,8 +475,7 @@ const Interface = () => {
     }
   }, [thread, unarchiving, getToken]);
 
-  // Adapter for ChatInput's (e, value, category) signature. The category
-  // arg is legacy ServiceNow-flow plumbing that autobot doesn't use.
+  // Adapter for ChatInput's (e, value, category) signature.
   const onChatInputSubmit = useCallback(
     (_e: React.FormEvent, value: string) => {
       void handleSend(value);
@@ -564,12 +483,8 @@ const Interface = () => {
     [handleSend],
   );
 
-  // ── Model picker change ────────────────────────────────────────────
-  // Two paths:
-  //   • Existing thread → optimistically update local state, fire a
-  //     background PATCH. Roll back on failure (toast + restore).
-  //   • Welcome screen  → just stash the choice; createThread on the
-  //     next send will persist it.
+  // Existing thread → optimistic update + background PATCH, roll back on failure.
+  // Welcome screen → stash; createThread on next send persists it.
   const handleModelChange = useCallback(
     async (newId: string | null) => {
       const previous = selectedConfigId;
@@ -946,10 +861,8 @@ const historicalBadges = (
     name: tc.function.name,
     argumentsJson: tc.function.arguments,
     status: "done" as const,
-    // We don't have the matching tool result attached to the assistant
-    // row — that's a separate role=tool Message. For v1 we surface the
-    // call as "done" with no body. T21 can wire history-expansion that
-    // joins the result back in if users ask for it.
+    // The matching tool result is a separate role=tool Message; we
+    // surface this call as "done" without a body for now.
     result: undefined,
   }));
 };

@@ -1,31 +1,13 @@
-"""Workflow tools (T15) — list / read / create / update.
+"""Workflow tools — list / read / create / update.
 
-Thin async wrappers around Django's `/api/workflows/*` endpoints. Each
-handler forwards the caller's JWT; Django enforces per-user ownership
-via `filter(user=request.user)`. Autobot does no authorization checks.
+Async wrappers around Django's `/api/workflows/*` endpoints. The JWT
+is forwarded; Django enforces per-user ownership.
 
-Django quirks worth knowing about for the LLM's tool-call shapes:
-
-  • `nodes` and `edges` are plain `JSONField`s on the Workflow model.
-    Django does NOT validate their structure on save — any JSON is
-    accepted. The execution engine validates the graph shape only at
-    runtime (see `server/execution_engine/helpers/graph.py`), so a
-    malformed workflow stores fine but fails when a user clicks Run.
-  • To shield the LLM (and the user) from "looks fine in chat, blows
-    up at runtime" failures, the tool wrappers here do MINIMAL
-    structural validation before forwarding to Django: nodes must be
-    a list of dicts with `id` + `type`, edges must be dicts with
-    `source` + `target`. Deeper validation (parameter resolution,
-    cycle detection) is deliberately not duplicated — that belongs
-    in the runtime graph helper.
-  • LIST responses omit `nodes`/`edges` and add derived fields
-    (`total_nodes`, `total_edges`, `runs`, `last_run`). The LLM gets a
-    cheap inventory; DETAIL (`read_workflow`) gets the full JSON.
-  • UPDATE supports PATCH semantics — only the fields you send are
-    changed. Sending `nodes=[]` clears the workflow, so don't send
-    `nodes` on a partial update unless that's actually the intent.
-
-Authorization: per-user via `user=request.user`. Cross-user UUIDs 404.
+Django stores `nodes` and `edges` as plain JSONFields with NO validation
+on save — a malformed graph stores fine and fails only at runtime. To
+catch obvious shape bugs early, wrappers here do minimal validation
+(node id + type, edge source + target). Deeper checks (parameter
+resolution, cycle detection) belong in the runtime graph helper.
 """
 
 from __future__ import annotations
@@ -40,9 +22,6 @@ logger = logging.getLogger(__name__)
 
 
 _VALID_NODE_TYPES = {"trigger", "action", "decision"}
-
-
-# ── Helpers ──────────────────────────────────────────────────────────
 
 
 def _django_error(status_code: int, body: Any, default: str) -> dict[str, Any]:
@@ -61,8 +40,7 @@ def _django_error(status_code: int, body: Any, default: str) -> dict[str, Any]:
 
 
 def _validate_nodes(nodes: Any) -> str | None:
-    """Return None on valid, or an error string. Minimal shape check —
-    the runtime graph helper does the deeper validation."""
+    """Return None on valid, or an error string."""
     if not isinstance(nodes, list):
         return "`nodes` must be a JSON array."
     for i, n in enumerate(nodes):
@@ -81,8 +59,9 @@ def _validate_nodes(nodes: Any) -> str | None:
 
 
 def _validate_edges(edges: Any, node_ids: set[str] | None = None) -> str | None:
-    """Return None on valid, or an error string. If `node_ids` is given,
-    cross-check that every edge endpoint refers to a real node."""
+    """Return None on valid, or an error string. If `node_ids` given,
+    cross-check that every edge endpoint refers to a real node.
+    """
     if not isinstance(edges, list):
         return "`edges` must be a JSON array."
     for i, e in enumerate(edges):
@@ -201,8 +180,7 @@ async def _handler_update_workflow(args: dict[str, Any], jwt: str) -> dict[str, 
         return {"error": str(e)}
 
     # PATCH semantics — only forward fields the LLM explicitly set.
-    # In particular DON'T send `nodes: []` unless the LLM means "clear
-    # the workflow"; absence != empty array on a partial update.
+    # `nodes: []` would clear the workflow, so absence ≠ empty array.
     patch_body: dict[str, Any] = {}
     if "name" in args:
         if not isinstance(args["name"], str) or not args["name"].strip():
@@ -218,9 +196,8 @@ async def _handler_update_workflow(args: dict[str, Any], jwt: str) -> dict[str, 
             return {"error": err}
         patch_body["nodes"] = args["nodes"]
     if "edges" in args:
-        # If nodes also being updated, validate edges against new node ids.
-        # Otherwise we'd need to fetch the existing workflow to cross-check;
-        # let Django's lack of validation be the safety floor there.
+        # Only cross-check edges against nodes when both are being updated;
+        # otherwise we'd need to fetch the existing workflow to validate.
         node_ids = None
         if "nodes" in patch_body:
             node_ids = {n["id"] for n in patch_body["nodes"]}
@@ -250,9 +227,6 @@ async def _handler_update_workflow(args: dict[str, Any], jwt: str) -> dict[str, 
     if s not in (200, 201):
         return _django_error(s, body, "Failed to update workflow")
     return (body or {}).get("data") or {}
-
-
-# ── Registration ─────────────────────────────────────────────────────
 
 
 register_tool(ToolDefinition(

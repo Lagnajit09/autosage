@@ -1,7 +1,5 @@
-# ── autobot dependencies (T09) ─────────────────────────────────────────
-# UTF-8. Trimmed from the FastAPI-CLI scaffold to what Autobot actually
-# uses. Pinned for reproducibility — bump deliberately when adopting new
-# features (litellm in particular evolves fast).
+# autobot dependencies. Pinned for reproducibility — bump deliberately
+# when adopting new features (litellm in particular evolves fast).
 #
 # Last bump: 2026-05-30. Driven by a litellm 1.55.4 bug in the Databricks-
 # shared chunk parser that crashed on Groq's trailing usage-only chunk
@@ -17,35 +15,28 @@ pydantic==2.13.4
 pydantic-settings==2.14.1
 python-dotenv==1.2.2
 
-# HTTP client — calls Django internal API + LLM providers (T11+).
-# Previously pinned to 0.27.2 because litellm 1.55.x capped httpx<0.28;
-# the newer litellm pin below relaxes that, so we can move up.
+# HTTP client for Django and LLM providers
 httpx==0.28.1
 
-# Redis client for hot-context cache (T11)
+# Redis client for hot-context cache
 redis==5.2.1
 
-# Clerk JWT verification (T10). [crypto] pulls in `cryptography` which is
-# needed for RS256 signature verification against Clerk's JWKS.
+# Clerk JWT verification — [crypto] pulls in `cryptography` for RS256.
 PyJWT[crypto]==2.10.1
 cryptography==44.0.0
 
-# LLM gateway (T12+). Unified provider interface for Gemini / Groq /
-# OpenRouter / Anthropic / OpenAI / Azure / custom endpoints.
-# 1.55.4 → 1.74.0 fixes:
-#   • Databricks-shared chunk parser crash on empty `choices` (fixed
-#     in ~1.56). The autobot salvage path in `llm/client.py` still
-#     catches the case as defense-in-depth.
-#   • Pydantic v2 serializer warnings ("Expected 5 fields but got 4")
-#     from litellm internals.
+# LLM gateway. 1.55.4 → 1.74.0 fixes:
+#   • Databricks-shared chunk parser crash on empty `choices` (the
+#     autobot salvage path in `llm/client.py` still catches this case
+#     as defense-in-depth).
+#   • Pydantic v2 serializer warnings from litellm internals.
 #   • Relaxes the httpx<0.28 dependency.
 litellm==1.74.0
 
-# Token counting for summarization threshold (T16)
+# Token counting for the summarization threshold
 tiktoken==0.8.0
 
-# Per-user rate limiting for the chat endpoint (T18). Pure-Python,
-# starlette-native, Redis storage (we point it at db /2 so all uvicorn
-# workers share counters — without that, `--workers 2` would silently
-# double the effective rate limit).
+# Per-user rate limiting for the chat endpoint. Storage URI points at
+# Redis db /2 so all uvicorn workers share counters — without that,
+# `--workers 2` would silently double the effective rate limit.
 slowapi==0.1.9

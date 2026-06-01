@@ -1,30 +1,17 @@
-"""Script tools (T14) — list / read / create / update.
+"""Script tools — list / read / create / update.
 
-Thin async wrappers around Django's `/api/scripts/*` endpoints. Each
-handler forwards the caller's JWT; Django enforces per-user ownership
-via its queryset filtering. Autobot does no authorization checks here.
+Async wrappers around Django's `/api/scripts/*` endpoints. The JWT is
+forwarded; Django enforces per-user ownership.
 
-Notable Django API quirks worth knowing about so the LLM's tool-call
-shapes line up:
+Django API quirks:
+  • List response is `data: [...]` (flat array), not `data.scripts`.
+  • Metadata and content are split — `read_script` hits the content URL.
+  • Update is `POST /api/scripts/<id>/update/`, not PATCH on the main URL.
+  • `language` is serializer-level; the model stores `pathname` + `content_type`.
 
-  • The list response is ``data: [{...}, {...}]`` (a flat array), NOT
-    ``data.scripts: [...]`` like `autobot_api` uses. We don't normalize
-    that here — the LLM sees Django's exact shape.
-  • Metadata (`GET /api/scripts/<id>/`) and content (`GET /api/scripts/
-    <id>/content/`) are split. `read_script` calls the CONTENT endpoint
-    so the LLM gets the source it actually wants to read or modify.
-  • Update is `POST /api/scripts/<id>/update/` (NOT PATCH on the main
-    URL). Same for `/rename/`. This is a legacy oddity in the scripts
-    app's URL design; mirror it exactly or you get 405s.
-  • `language` is a serializer-level field; the model stores `pathname`
-    + `content_type`. The serializer accepts a language name (e.g.
-    "python") on create and maps it to the right extension/MIME.
-
-Language enum surfaced to the LLM is a subset of the full Django enum —
-keep this list aligned with `server/scripts/serializers.py::LANGUAGE_MAP`.
-We only expose languages the workflow runtime understands; "html"/"css"
-type entries exist in the Django enum but are nonsensical as workflow
-scripts and would just confuse the model.
+Language list is a deliberate subset of Django's full enum — only
+languages the workflow runtime understands. Keep aligned with
+`server/scripts/serializers.py::LANGUAGE_MAP`.
 """
 
 from __future__ import annotations
@@ -37,10 +24,6 @@ from llm.tools import ToolDefinition, register_tool
 
 logger = logging.getLogger(__name__)
 
-# Languages the LLM may emit on `create_script`. Aligned with workflow
-# semantics — see the system prompt's Section 5/13. The full Django list
-# is broader; we deliberately narrow it so the LLM doesn't generate
-# nonsensical workflow node bindings (e.g. an HTML "script").
 _SCRIPT_LANGUAGES = [
     "python",
     "shell",
@@ -55,16 +38,13 @@ _SCRIPT_LANGUAGES = [
 ]
 
 
-# ── Helpers ──────────────────────────────────────────────────────────
-
-
 def _django_error(status_code: int, body: Any, default: str) -> dict[str, Any]:
     """Normalize a non-2xx Django response into a tool-result error dict."""
     msg = None
     if isinstance(body, dict):
         msg = body.get("message") or body.get("detail")
         errs = body.get("errors")
-        # Surface field-level validation errors so the LLM can self-correct.
+        # Surface field-level errors so the LLM can self-correct.
         if errs and isinstance(errs, dict):
             try:
                 pairs = ", ".join(f"{k}: {v}" for k, v in errs.items())
@@ -75,11 +55,6 @@ def _django_error(status_code: int, body: Any, default: str) -> dict[str, Any]:
 
 
 def _require(args: dict[str, Any], field: str, expected_type: type) -> Any:
-    """Type-check one argument or return an error sentinel via raise.
-
-    Returns the value on success. Raises `ValueError` with a precise
-    message on failure — the dispatcher converts that to `{error: ...}`.
-    """
     if field not in args:
         raise ValueError(f"Missing required argument '{field}'.")
     value = args[field]
@@ -89,9 +64,6 @@ def _require(args: dict[str, Any], field: str, expected_type: type) -> Any:
             f"{expected_type.__name__} (got {type(value).__name__}).",
         )
     return value
-
-
-# ── Handlers ─────────────────────────────────────────────────────────
 
 
 async def _handler_list_scripts(args: dict[str, Any], jwt: str) -> dict[str, Any]:
@@ -178,9 +150,6 @@ async def _handler_update_script(args: dict[str, Any], jwt: str) -> dict[str, An
     if s not in (200, 201):
         return _django_error(s, body, "Failed to update script")
     return (body or {}).get("data") or {}
-
-
-# ── Registration ─────────────────────────────────────────────────────
 
 
 register_tool(ToolDefinition(

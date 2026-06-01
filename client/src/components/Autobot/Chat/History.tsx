@@ -1,18 +1,10 @@
 /**
- * Chat history sidebar (T21).
+ * Chat history sidebar.
  *
- * Lists the caller's threads (paginated) and lets them switch / rename /
- * delete. Active thread comes from the URL via `useParams`. The "New
- * Chat" button just navigates to `/ai/autobot` — the actual thread
- * creation happens inside Interface on first message send.
+ * Active thread comes from the URL via `useParams`. "New Chat" just
+ * navigates to `/ai/autobot` — thread creation happens on first send.
  *
- * Refresh trigger: Interface dispatches a window-level
- * `autobot-threads-changed` event after creating or deleting a thread.
- * History listens for it and re-fetches. Avoids lifting state into
- * AutobotChat which would be a bigger refactor than the feature warrants.
- *
- * Rename UX: clicking "Rename" swaps the row's button for an inline
- * input. Enter commits via patchThread; Escape cancels.
+ * Refresh: window-level `autobot-threads-changed` event triggers re-fetch.
  */
 
 import React, { useCallback, useEffect, useState } from "react";
@@ -94,24 +86,16 @@ const History: React.FC<HistoryProps> = ({ className }) => {
   const [threads, setThreads] = useState<AutobotThread[]>([]);
   const [loading, setLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
-  // Rename in-progress state — id of the row being edited, plus the
-  // draft title. Null = no inline edit open.
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameDraft, setRenameDraft] = useState("");
   const [renaming, setRenaming] = useState(false);
-  // Delete confirmation — split into two states (target id + open
-  // boolean) so the dropdown has a tick to tear down before the dialog
-  // mounts. Without the split, both portals stack their overlays and
-  // freeze the page until reload. Same pattern used by the Workflows
-  // page's `handleDeleteClick` (cf. pages/Workflows.tsx).
+  // Split target + open state so the dropdown's Radix portal fully
+  // tears down before the dialog mounts — otherwise the stacked
+  // overlays freeze the page (same pattern as pages/Workflows.tsx).
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
-  // Two-step open: stash the id now, defer the modal open by a tick.
-  // Radix DropdownMenu fully closes its portal between these two ticks,
-  // so the alert dialog's overlay no longer stacks on top of a stale
-  // dropdown overlay.
   const openDeleteModal = (threadId: string) => {
     setDeleteTargetId(threadId);
     setTimeout(() => setDeleteModalOpen(true), 0);
@@ -127,8 +111,6 @@ const History: React.FC<HistoryProps> = ({ className }) => {
     try {
       const token = await getToken();
       if (!token) throw new Error("Not signed in.");
-      // Page size 50 covers the typical sidebar without pagination —
-      // a future scroll-to-load-more pass can use the total_pages field.
       const page = await listThreads(token, 1, 50, "active");
       setThreads(page.threads);
     } catch (err) {
@@ -140,7 +122,6 @@ const History: React.FC<HistoryProps> = ({ className }) => {
     }
   }, [getToken]);
 
-  // Initial load + listen for cross-component refresh signals.
   useEffect(() => {
     void fetchThreads();
     const handler = () => {
@@ -150,7 +131,6 @@ const History: React.FC<HistoryProps> = ({ className }) => {
     return () => window.removeEventListener(THREADS_CHANGED_EVENT, handler);
   }, [fetchThreads]);
 
-  // ── Filtering ────────────────────────────────────────────────────
   const normalizedQuery = searchQuery.trim().toLowerCase();
   const filteredThreads = React.useMemo(
     () =>
@@ -162,13 +142,11 @@ const History: React.FC<HistoryProps> = ({ className }) => {
     [threads, normalizedQuery],
   );
 
-  // ── New chat ─────────────────────────────────────────────────────
   const handleNewChat = () => {
     setRenamingId(null);
     navigate("/ai/autobot");
   };
 
-  // ── Rename ───────────────────────────────────────────────────────
   const startRename = (thread: AutobotThread) => {
     setRenamingId(thread.id);
     setRenameDraft(thread.title || "");
@@ -207,12 +185,8 @@ const History: React.FC<HistoryProps> = ({ className }) => {
     }
   };
 
-  // ── Archive (T29) ────────────────────────────────────────────────
-  // Soft-hide: PATCH is_archived=true. The active-filter list query
-  // immediately drops the row on next fetch; we also remove it locally
-  // for instant feedback. If the archived thread was the active one,
-  // route back to welcome so the user isn't stuck on a now-read-only
-  // view by accident (they can still navigate back via the Archived page).
+  // Soft-hide via is_archived=true. Active thread routes back to welcome
+  // so the user isn't stuck on a now-read-only view.
   const archiveThread = async (threadId: string) => {
     try {
       const token = await getToken();
@@ -222,7 +196,6 @@ const History: React.FC<HistoryProps> = ({ className }) => {
       if (activeId === threadId) {
         navigate("/ai/autobot");
       }
-      // Notify any sibling listeners (e.g. the Archived page if open).
       window.dispatchEvent(new Event(THREADS_CHANGED_EVENT));
       toast.success("Chat archived.");
     } catch (err) {
@@ -231,7 +204,6 @@ const History: React.FC<HistoryProps> = ({ className }) => {
     }
   };
 
-  // ── Delete ───────────────────────────────────────────────────────
   const confirmDelete = async () => {
     if (!deleteTargetId) return;
     setDeleting(true);
@@ -239,9 +211,7 @@ const History: React.FC<HistoryProps> = ({ className }) => {
       const token = await getToken();
       if (!token) throw new Error("Not signed in.");
       await deleteThread(token, deleteTargetId);
-      // Optimistic local removal. If the deleted thread was the active
-      // one, route back to welcome so the user isn't stuck on a 404'd
-      // detail view.
+      // Route the active thread back to welcome — its detail page 404s now.
       setThreads((prev) => prev.filter((t) => t.id !== deleteTargetId));
       if (activeId === deleteTargetId) {
         navigate("/ai/autobot");
@@ -256,7 +226,6 @@ const History: React.FC<HistoryProps> = ({ className }) => {
     }
   };
 
-  // ── Render ───────────────────────────────────────────────────────
   const collapsed = state === "collapsed";
 
   return (

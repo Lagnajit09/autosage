@@ -1,35 +1,16 @@
 /**
- * AI Workflow Generator (T22, part 2).
+ * Inline AI Workflow Generator panel for the WorkflowBuilder sidebar.
  *
- * Mirrors the inline Script Generator (`@/components/AIScriptGenerator`)
- * but scoped to workflow operations. Lives in the WorkflowBuilder's
- * right sidebar — NO modal, NO redirect to /ai/autobot.
+ * Mirrors AIScriptGenerator but scoped to workflow operations. Tool
+ * callbacks (`create_workflow`, `update_workflow`) wire directly back
+ * into the builder so the canvas re-hydrates without a manual reload.
  *
- * Why the same UX as the Script Generator:
- *   • The user is mid-canvas. Sending them to /ai/autobot pulls them
- *     out of the builder. They want "rebuild this with a decision
- *     branch" right next to the graph they're editing.
- *   • Tool callbacks (`create_workflow`, `update_workflow`) wire
- *     DIRECTLY back into WorkflowBuilder — the canvas re-hydrates
- *     from the server result without manual reload / re-import.
+ * Thread is lazily created (archived from the start) and persists
+ * across panel toggles because the sidebar uses `hidden` instead of
+ * unmounting.
  *
- * Thread lifecycle:
- *   - Created lazily on first prompt, archived from the start so it
- *     never appears in the main /ai/autobot history sidebar.
- *   - Component stays mounted across panel close/open (the sidebar
- *     wrapper uses `hidden` instead of unmounting) so the same thread
- *     persists across toggles — open the panel 10 times, still 1
- *     thread, not 10.
- *
- * Per-turn payload shape (LLM-only context — the chat UI shows the
- * user's typed text alone):
- *
- *     <context>
- *     open_workflow_id: 4a7e-...   (only when the canvas is on a
- *     open_workflow_name: <name>    saved workflow)
- *     </context>
- *
- *     <user's actual prompt>
+ * Each user message is prefixed with a `<context>` block (open_workflow_id
+ * when on a saved workflow) that only the LLM sees.
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";

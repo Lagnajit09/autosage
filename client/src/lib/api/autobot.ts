@@ -1,34 +1,17 @@
 /**
- * Autobot API client (T19).
+ * Autobot API client.
  *
- * Covers every Autobot-related REST surface the frontend talks to:
+ *   • `/api/ai/*`     → FastAPI proxy (thread CRUD, message reads, settings)
+ *   • `/api/autobot/*` → Django direct (LLM configs, summaries)
  *
- *   1. **Autobot proxy routes** at `/api/ai/*` — nginx forwards these to
- *      the FastAPI service, which forwards the JWT to Django and relays
- *      the envelope back. Used for thread CRUD, message reads, settings.
- *   2. **Django direct routes** at `/api/autobot/*` — go straight to
- *      Django. Used for LLM config CRUD (no chat semantics, so no need
- *      to detour through autobot) and summary reads.
- *
- * Streaming chat lives in `autobot-stream.ts` because the SSE reader
- * doesn't fit the JSON-returning shape of `apiRequest`.
- *
- * Every response Django (and the autobot proxy) sends uses the standard
- * `api_response()` envelope `{success, message, data, errors}`. The
- * `apiRequest` helper returns the parsed envelope as-is — callers here
- * unwrap `.data` and return the typed payload.
+ * Streaming chat lives in `autobot-stream.ts` (SSE reader doesn't fit
+ * `apiRequest`'s JSON-returning shape).
  */
 
 import { apiRequest } from "../api-client";
 
-// ── Path constants ───────────────────────────────────────────────────────
-// Autobot is mounted at `/api/ai/` in nginx (dev + prod). Same origin as
-// Django (`/api/*`), so we don't need a separate base URL — `apiRequest`
-// already targets `API_BASE_URL` and these paths join cleanly on top.
 const AI_BASE = "/api/ai";
 const DJANGO_BASE = "/api/autobot";
-
-// ── Shared shapes ────────────────────────────────────────────────────────
 
 export type AutobotProvider =
   | "gemini"
@@ -44,8 +27,8 @@ export type AutobotContentType = "text/plain" | "text/markdown";
 export type AutobotTone = "concise" | "balanced" | "detailed";
 export type AutobotExpertise = "beginner" | "intermediate" | "expert";
 
-/** Mirrors `autobot_api.models.LLMConfig` (without `api_key` — that field
- * is write-only and never returned by the standard serializer). */
+/** Mirrors `autobot_api.models.LLMConfig`. `api_key` is write-only and
+ * never returned by the standard serializer. */
 export interface LLMConfig {
   id: string;
   name: string;
@@ -59,8 +42,8 @@ export interface LLMConfig {
   modified_at: string;
 }
 
-/** Returned ONLY by `POST /llm-configs/<id>/reveal/`. Carries the
- * decrypted `api_key` — never store this client-side, never log it. */
+/** Returned ONLY by `POST /llm-configs/<id>/reveal/`. The decrypted
+ * `api_key` must NOT be persisted or logged client-side. */
 export interface LLMConfigRevealed {
   id: string;
   name: string;
@@ -83,12 +66,10 @@ export interface LLMConfigCreateBody {
   is_default?: boolean;
 }
 
-/** PATCH is partial — `api_key` is optional; omit it to keep the existing
- * encrypted value untouched. */
+/** Omit `api_key` to keep the existing encrypted value untouched. */
 export type LLMConfigUpdateBody = Partial<LLMConfigCreateBody>;
 
-/** Mirrors `autobot_api.models.Thread` (read shape; `message_count` is
- * annotated server-side and won't be present until after the round-trip). */
+/** Mirrors `autobot_api.models.Thread`. */
 export interface AutobotThread {
   id: string;
   title: string;
@@ -105,10 +86,8 @@ export interface ThreadCreateBody {
   title?: string;
   llm_config?: string | null;
   system_prompt_override?: string;
-  /** Set true to keep the thread out of the user's chat-history
-   * sidebar from the moment of creation. Useful for tool-internal
-   * threads (e.g. the inline Script Generator panel) where the chat is
-   * a means to an end and shouldn't pollute the main history. */
+  /** Hide from the chat-history sidebar from creation — useful for
+   * tool-internal threads (inline Script Generator panel, etc.). */
   is_archived?: boolean;
 }
 
@@ -119,9 +98,8 @@ export interface ThreadUpdateBody {
   is_archived?: boolean;
 }
 
-/** LiteLLM-compatible tool-call shape persisted on assistant Messages
- * that emitted tools on this turn. `function.arguments` is the raw JSON
- * string the LLM produced. */
+/** LiteLLM-compatible tool-call shape. `function.arguments` is the raw
+ * JSON string the LLM produced. */
 export interface AutobotToolCall {
   id: string;
   type: "function";
@@ -178,9 +156,6 @@ export type UserSettingsUpdateBody = Partial<
   >
 >;
 
-/** Paginated envelopes returned by Django list views. The autobot proxy
- * forwards these verbatim, so the client sees the same shape regardless
- * of which path it came through. */
 export interface PaginatedThreads {
   threads: AutobotThread[];
   total_count: number;
@@ -205,13 +180,8 @@ export interface PaginatedSummaries {
   page_size: number;
 }
 
-// ── Helpers ──────────────────────────────────────────────────────────────
-
-/** `is_archived` value contract on `GET /threads/`:
- *   - omitted              → only active threads
- *   - "true"               → only archived
- *   - "all"                → both
- * Modelled as a TS union so callers can't pass arbitrary strings. */
+/** `is_archived` contract on `GET /threads/`:
+ *   omitted → active only, "true" → archived only, "all" → both. */
 export type ThreadArchiveFilter = "active" | "archived" | "all";
 
 const buildThreadListQuery = (
@@ -224,11 +194,8 @@ const buildThreadListQuery = (
   params.set("page_size", String(pageSize));
   if (filter === "archived") params.set("is_archived", "true");
   else if (filter === "all") params.set("is_archived", "all");
-  // "active" → omit the param entirely (server default).
   return params.toString();
 };
-
-// ── Threads (autobot proxy) ──────────────────────────────────────────────
 
 export const listThreads = async (
   token: string,
@@ -285,8 +252,7 @@ export const deleteThread = async (
   );
 };
 
-// ── Messages (autobot proxy — READ; writes happen via the stream) ────────
-
+// Messages: READ only here — writes happen via the stream.
 export const listMessages = async (
   token: string,
   threadId: string,
@@ -304,8 +270,6 @@ export const listMessages = async (
   );
   return response.data;
 };
-
-// ── Settings (autobot proxy) ─────────────────────────────────────────────
 
 export const getSettings = async (token: string): Promise<UserSettings> => {
   // Auto-created on first GET by Django; always returns 200.
@@ -325,8 +289,6 @@ export const patchSettings = async (
   return response.data;
 };
 
-// ── LLM Configs (Django direct — no chat semantics, no proxy detour) ─────
-
 export const listLLMConfigs = async (
   token: string,
 ): Promise<LLMConfig[]> => {
@@ -335,8 +297,7 @@ export const listLLMConfigs = async (
     {},
     token,
   );
-  // DRF default list returns `data` as the array directly (no pagination
-  // class on this view).
+  // Unpaginated DRF list — `data` is the raw array.
   return response.data;
 };
 
@@ -388,11 +349,8 @@ export const deleteLLMConfig = async (
   );
 };
 
-/** Decrypts the api_key for an LLMConfig. Returns the plaintext key inline
- * with the rest of the config. The frontend rarely needs this (autobot
- * calls it server-side at chat time), but it's exposed for the Customize
- * modal's "Show key" affordance. NEVER store the returned `api_key` in
- * persistent state — fetch on demand and discard. */
+/** Returns the plaintext api_key — fetch on demand, never persist it.
+ * Used by the Customize modal's "Show key" affordance. */
 export const revealLLMConfig = async (
   token: string,
   id: string,
@@ -404,8 +362,6 @@ export const revealLLMConfig = async (
   );
   return response.data;
 };
-
-// ── Summaries (Django direct — used by debug UI / future BYO RAG) ────────
 
 export const listSummaries = async (
   token: string,
@@ -444,9 +400,7 @@ export const createSummary = async (
   return response.data;
 };
 
-// ── Dashboard analytics (T26/T27) ────────────────────────────────────────
-
-/** One bucket of dashboard stats — matches Django's `_bucket_stats` shape. */
+/** Matches Django's `_bucket_stats` shape. */
 export interface DashboardBucket {
   requests: number;
   total_tokens: number;
@@ -462,10 +416,8 @@ export interface DashboardBucket {
   }>;
 }
 
-/** Admin-pool daily quota — injected by autobot's proxy from its Redis
- *  counter. `limit === 0` means the cap is disabled (typically self-hosted
- *  or BYO-only setups); the dashboard should hide the quota tile in that
- *  case. */
+/** Admin-pool daily quota. `limit === 0` means the cap is disabled —
+ *  the dashboard should hide the quota tile in that case. */
 export interface AdminQuota {
   used: number;
   limit: number;

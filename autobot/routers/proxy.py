@@ -1,31 +1,12 @@
 """Proxy router: forwards /threads, /settings to Django.
 
-Every endpoint here is a thin pass-through:
-  1. Require auth (`Depends(require_auth)`) — returns 401 on missing/invalid JWT.
-  2. Call Django's matching `/api/autobot/*` endpoint with the user's
-     forwarded JWT (`auth.raw_jwt`).
-  3. Return Django's response (envelope + status) verbatim.
+Per-user authorization is enforced exactly once, in Django, off the
+forwarded JWT. Autobot does no authorization checks here — if Django
+says 403/404, autobot relays it as-is.
 
-Why proxy at all instead of letting the frontend hit Django directly?
-─────────────────────────────────────────────────────────────────────
-The chat endpoint needs to load the thread state, call the LLM,
-persist new messages, update cache, and stream tokens back — all in a
-single autobot request. Having a clean persistence layer inside autobot
-turns that loop into one coherent async function rather than an awkward
-cross-service dance. Also: the frontend hits one base URL (`/api/ai/`)
-for everything chat-related instead of straddling two services.
-
-Security
-────────
-• Per-user authorization is enforced exactly once, in Django, off the
-  forwarded JWT. Autobot does no authorization checks here — Django's
-  `IsAuthenticated` + per-user queryset filtering remain the source of
-  truth. If Django says 403 / 404, autobot relays it as-is.
-• The JWT is NEVER logged: the persistence client uses headers (which
-  the redactor scrubs from any DEBUG-level httpx output) and never
-  embeds it in URLs or log message bodies.
-• Django's existing rate-limits (Autobot* throttles, T04) apply at the
-  upstream — autobot doesn't double-throttle here.
+This proxy exists so the frontend hits one base URL (`/api/ai/`) for
+everything chat-related, and so the chat endpoint can load state + call
+LLM + persist messages + update cache in one coherent async function.
 """
 
 from __future__ import annotations
@@ -44,15 +25,8 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-# ── Helpers ──────────────────────────────────────────────────────────
-
-
 async def _safe_json(request: Request) -> Any | None:
-    """Read the request body as JSON. Return None on empty body.
-
-    Bubbles a 400 on malformed JSON so the client sees a clean error
-    rather than Django getting a corrupt forward.
-    """
+    """Read the request body as JSON; return None on empty body, 400 on malformed."""
     body = await request.body()
     if not body:
         return None
@@ -93,16 +67,11 @@ async def _proxy(
     return JSONResponse(content=body, status_code=upstream_status)
 
 
-# ── Threads ──────────────────────────────────────────────────────────
-
-
 @router.get("/threads/")
 async def list_threads(
     request: Request,
     auth: AuthContext = Depends(require_auth),
 ):
-    """List the caller's threads. Forwards query params (page, page_size,
-    is_archived) to Django, which handles pagination + filtering."""
     return await _proxy(
         "GET", "/api/autobot/threads/", auth,
         params=dict(request.query_params),
@@ -114,8 +83,6 @@ async def create_thread(
     request: Request,
     auth: AuthContext = Depends(require_auth),
 ):
-    """Create a new thread. Body shape: `{title?, llm_config?, ...}` —
-    Django validates fields and rejects cross-user llm_config FKs."""
     body = await _safe_json(request)
     return await _proxy(
         "POST", "/api/autobot/threads/", auth, json_body=body,
@@ -128,7 +95,6 @@ async def get_thread(
     request: Request,
     auth: AuthContext = Depends(require_auth),
 ):
-    """Retrieve a single thread. 404 from Django if not owned by caller."""
     return await _proxy(
         "GET", f"/api/autobot/threads/{thread_id}/", auth,
         params=dict(request.query_params),
@@ -141,7 +107,6 @@ async def patch_thread(
     request: Request,
     auth: AuthContext = Depends(require_auth),
 ):
-    """Update thread fields (rename, archive, change llm_config)."""
     body = await _safe_json(request)
     return await _proxy(
         "PATCH", f"/api/autobot/threads/{thread_id}/", auth, json_body=body,
@@ -153,45 +118,30 @@ async def delete_thread(
     thread_id: str,
     auth: AuthContext = Depends(require_auth),
 ):
-    """Hard-delete the thread (cascades to messages + summaries in Django)."""
     return await _proxy(
         "DELETE", f"/api/autobot/threads/{thread_id}/", auth,
     )
 
 
-# ── Messages (T13: read-only proxy) ──────────────────────────────────
-# Writes to /messages/ happen via the chat endpoints (routers/chat.py)
-# because each write is interleaved with an LLM call. This GET-only
-# proxy exists so the frontend can load existing history on thread-open
-# before subscribing to the live stream.
-
-
+# Read-only — writes happen via the chat endpoints since each write is
+# interleaved with an LLM call. This exists so the frontend can load
+# existing history on thread-open before subscribing to the live stream.
 @router.get("/threads/{thread_id}/messages/")
 async def list_messages(
     thread_id: str,
     request: Request,
     auth: AuthContext = Depends(require_auth),
 ):
-    """List messages in a thread (paginated).
-
-    Forwards query params (`page`, `page_size`) to Django, which scopes
-    by user via `thread__user=request.user` and 404s on cross-user IDs.
-    """
     return await _proxy(
         "GET", f"/api/autobot/threads/{thread_id}/messages/", auth,
         params=dict(request.query_params),
     )
 
 
-# ── Settings ─────────────────────────────────────────────────────────
-
-
 @router.get("/settings/")
 async def get_user_settings(
     auth: AuthContext = Depends(require_auth),
 ):
-    """Retrieve user's autobot settings. Django auto-creates the row
-    with defaults on first call."""
     return await _proxy("GET", "/api/autobot/settings/", auth)
 
 
@@ -200,8 +150,6 @@ async def patch_user_settings(
     request: Request,
     auth: AuthContext = Depends(require_auth),
 ):
-    """Update user's autobot settings. Django validates `default_llm_config`
-    belongs to the caller."""
     body = await _safe_json(request)
     return await _proxy(
         "PATCH", "/api/autobot/settings/", auth, json_body=body,

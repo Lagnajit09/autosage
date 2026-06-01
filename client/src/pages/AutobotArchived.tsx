@@ -1,20 +1,12 @@
 /**
- * Archived chats page (T30).
+ * Archived chats page.
  *
- * Hidden from the main LeftNav — discoverable only via the "View archived
- * chats" button on the Autobot Dashboard (T27). Lists threads with
- * `is_archived=true` and offers two terminal actions per row: Unarchive
- * (back to active) or Delete (permanent removal).
+ * Hidden from LeftNav — discoverable only via the "View archived chats"
+ * button on the Autobot Dashboard. Lists `is_archived=true` threads with
+ * per-row Unarchive / Delete actions.
  *
- * Why not just enable Delete from the active sidebar? Two reasons:
- *   1. Archive is the soft-hide; Delete is the hard-remove. Keeping them
- *      both available from both surfaces matches the locked decision.
- *   2. The Delete dialog uses the same two-step Radix dance as History.tsx
- *      to avoid the dropdown/alert overlay stacking that freezes the page.
- *
- * Refresh hook: dispatches THREADS_CHANGED_EVENT after every mutation so
- * the History sidebar (if mounted) re-fetches without us having to lift
- * state.
+ * Dispatches THREADS_CHANGED_EVENT after every mutation so the History
+ * sidebar refetches if mounted.
  */
 
 import { useCallback, useEffect, useState } from "react";
@@ -64,9 +56,6 @@ import {
   patchThread,
 } from "@/lib/api/autobot";
 
-// Shared surface class — same shape used on the Autobot Dashboard so the
-// two pages feel like one section. Explicit dark variants instead of
-// relying on the design-system `bg-card` token.
 const CARD_SURFACE =
   "bg-white dark:bg-gray-800/40 border border-gray-200 dark:border-gray-700/50";
 

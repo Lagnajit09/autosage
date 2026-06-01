@@ -34,20 +34,14 @@ import InputTypeGroup, { type ChatMode } from "./InputTypeGroup";
 
 type Props = {
   handleSubmit: (e: React.FormEvent, value: string, category: string) => void;
-  // T20: parent gates input during an in-flight stream so users can't fire
-  // a second message before the first completes (would race two SSE streams
-  // against one thread and confuse the assistant's tool-call state).
+  /** Parent gates input during an in-flight stream — sending twice would
+   * race two SSE streams against one thread. */
   disabled?: boolean;
   placeholder?: string;
-  // T+ : mode selector is now controlled from the parent (Interface)
-  // so the active mode can be forwarded to the chat-send call. Defaults
-  // to "research" if the parent doesn't care to track it.
   mode?: ChatMode;
   onModeChange?: (mode: ChatMode) => void;
 };
 
-// Per-mode placeholder text so users see what each mode is for at a
-// glance. Keeps the input affordance self-explanatory without a tutorial.
 const MODE_PLACEHOLDERS: Record<ChatMode, string> = {
   research: "Ask about your scripts, workflows, or vault…",
   generation: "Describe a script or workflow to create…",

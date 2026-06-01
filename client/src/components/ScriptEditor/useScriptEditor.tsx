@@ -753,28 +753,15 @@ export function useScriptEditor() {
     }
   };
 
-  // ── AI Script Generator callbacks (T22) ──────────────────────────────
-  //
-  // The AIScriptGenerator panel runs autobot directly — autobot owns the
-  // create_script / update_script tool calls and the Django write. These
-  // callbacks just sync local state (files list + open tabs) with what
-  // already exists on the server.
-  //
-  // Why we refetch instead of patching local state from the tool result
-  // alone: the tool returns only id/name/version, while ScriptFile needs
-  // content + pathname + blob_url. Refetching is one round-trip per
-  // create/update and gives us the full row guaranteed-fresh.
+  // Autobot owns the create_script/update_script tool calls. These
+  // callbacks just refetch and sync local state — the tool result lacks
+  // the full ScriptFile shape (content + pathname + blob_url).
 
   const handleScriptCreated = useCallback(
     async (scriptId: string, _scriptName: string) => {
-      // Unused param kept for API stability — the parent might use it
-      // for toast copy in the future.
       void _scriptName;
-      // Sonner loading toast bridges the gap between the LLM saying
-      // "done" and the editor actually showing the new script (the
-      // refetch + navigate + load takes ~500ms). We replace the same
-      // toast id on success/failure so the user sees one continuous
-      // status indicator instead of stacked toasts.
+      // Same toast id throughout — bridges the ~500ms gap between
+      // "done" and the editor actually showing the new script.
       const toastId = toast.loading("Loading new script into editor…");
       try {
         const clerkToken = await getToken();

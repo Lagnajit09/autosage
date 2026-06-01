@@ -31,18 +31,12 @@ import {
   getDashboard,
 } from "@/lib/api/autobot";
 
-// ── Helpers ──────────────────────────────────────────────────────────────
-
-// Shared surface class. Avoids relying on the design-system `bg-card` /
-// `text-card-foreground` tokens which don't carry dark contrast in this
-// project's Tailwind config — explicit dark variants match how the rest
-// of Dashboard.tsx and the Workflows/Execution pages render cards.
+// Explicit dark variants — the design-system `bg-card` tokens lack
+// dark contrast in this project's Tailwind config.
 const CARD_SURFACE =
   "bg-white dark:bg-gray-800/40 border border-gray-200 dark:border-gray-700/50";
 
 const formatNumber = (n: number): string => n.toLocaleString();
-
-// ── Quota tile ───────────────────────────────────────────────────────────
 
 const QuotaTile = ({ used, limit }: { used: number; limit: number }) => {
   if (limit <= 0) return null;
@@ -89,8 +83,6 @@ const QuotaTile = ({ used, limit }: { used: number; limit: number }) => {
   );
 };
 
-// ── Stat tile ────────────────────────────────────────────────────────────
-
 const StatTile = ({
   label,
   value,
@@ -119,12 +111,8 @@ const StatTile = ({
   </Card>
 );
 
-// ── Model-usage chart ────────────────────────────────────────────────────
-//
-// Recharts elements don't react to Tailwind classes (they render to SVG
-// with their own props). To get dark-theme support we read the active
-// theme from context and pass color props through directly.
-
+// Recharts renders to SVG and doesn't react to Tailwind classes — we
+// pass color props through directly from the theme context.
 const ModelUsageChart = ({
   data,
 }: {
@@ -148,16 +136,14 @@ const ModelUsageChart = ({
     );
   }
 
-  const axisColor = isDark ? "#9ca3af" : "#4b5563"; // gray-400 / gray-600
-  const gridColor = isDark ? "#374151" : "#e5e7eb"; // gray-700 / gray-200
-  const barColor = isDark ? "#d4b0eb" : "#7429a7"; // Autosage purple
-  const tooltipBg = isDark ? "#1f2937" : "#ffffff"; // gray-800 / white
+  const axisColor = isDark ? "#9ca3af" : "#4b5563";
+  const gridColor = isDark ? "#374151" : "#e5e7eb";
+  const barColor = isDark ? "#d4b0eb" : "#7429a7";
+  const tooltipBg = isDark ? "#1f2937" : "#ffffff";
   const tooltipBorder = isDark ? "#374151" : "#e5e7eb";
   const tooltipText = isDark ? "#f3f4f6" : "#111827";
 
-  // Narrow the YAxis label column on small screens — full provider/model
-  // strings are long ("openrouter/google/gemini-2.0-flash-exp:free") and
-  // would gobble half the viewport on mobile otherwise.
+  // Narrow YAxis label column on mobile — provider/model ids can be very long.
   const yAxisWidth = typeof window !== "undefined" && window.innerWidth < 640
     ? 110
     : 180;
@@ -196,8 +182,6 @@ const ModelUsageChart = ({
     </div>
   );
 };
-
-// ── Bucket section ───────────────────────────────────────────────────────
 
 const BucketSection = ({
   title,
@@ -257,8 +241,6 @@ const BucketSection = ({
   </section>
 );
 
-// ── Page ────────────────────────────────────────────────────────────────
-
 const AutobotDashboard = () => {
   const navigate = useNavigate();
   const { getToken } = useAuth();
@@ -297,10 +279,6 @@ const AutobotDashboard = () => {
           <AutobotDashboardHeader onConfigsChanged={() => void load(true)} />
           <main className="flex-1 overflow-y-auto p-4 sm:p-6">
             <div className="max-w-6xl mx-auto space-y-6 sm:space-y-8">
-              {/* Sub-header inside the content area: subtitle + action buttons.
-               * The main "Autobot Dashboard" title now lives in the bespoke
-               * header above; this row just holds the descriptive copy and
-               * the dashboard-scoped action buttons (View archived + Refresh). */}
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
                 <div className="min-w-0">
                   <div className="flex items-center gap-2 text-[#7429a7] dark:text-[#d4b0eb]">

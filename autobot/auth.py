@@ -1,37 +1,10 @@
 """Autobot auth: Clerk JWKS verification + log redaction.
 
-Architecture
-────────────
-• Autobot does NOT create User rows. It verifies the Clerk JWT, extracts
-  `sub`, and forwards the *original* JWT to Django when calling
-  internal APIs. Django's existing ClerkAuthMiddleware re-verifies and
-  is the one place that runs `User.objects.update_or_create(username=sub)`.
-  This keeps user-row provisioning in exactly one service.
-
-• JWKS is fetched once and cached in-process for 1 hour. On a `kid` miss
-  (key rotation) we force a single refresh; if the kid still isn't found,
-  the token is rejected. JWKS endpoint fetches use the same
-  CLERK_SECRET_KEY-bearing pattern as `server/server/middleware.py`.
-
-• `require_auth` is a FastAPI dependency. Protected routes accept it via
-  `auth: AuthContext = Depends(require_auth)`. The raw JWT is also
-  stashed on `request.state.auth` so tool dispatchers can forward it
-  without threading it through every signature.
-
-• `install_log_redaction()` attaches `AuthorizationRedactor` to the root
-  logger and every handler — any log line containing
-  `Authorization: Bearer <token>` (or common dict-repr variants) has the
-  token replaced with `[REDACTED]` before format / emit. Defense-in-depth
-  against accidental token leakage via httpx DEBUG logs etc.
-
-Security choices that match Django's middleware (intentional parity)
-────────────────────────────────────────────────────────────────────
-• Algorithm allow-list: RS256 only. No "none", no HS256-via-spoofed-kid.
-• `verify_aud=False`: Clerk's `aud` isn't reliably set; Django middleware
-  skips it too.
-• 60s clock-skew leeway: identical to Django's setting.
-• Generic 401 on every verification failure: don't leak whether the
-  token was malformed / expired / signed by an unknown key.
+Autobot verifies the Clerk JWT for its own routes but never creates User
+rows — it forwards the original JWT to Django, which is the sole source
+of user-row provisioning. JWKS is cached in-process for 1h; a `kid` miss
+triggers one forced refresh before rejecting. RS256 only, 60s leeway,
+generic 401 on every verification failure (no oracle).
 """
 
 from __future__ import annotations
@@ -56,56 +29,31 @@ logger = logging.getLogger(__name__)
 CLERK_JWKS_URL = "https://api.clerk.com/v1/jwks"
 
 
-# ── AuthContext (request-scoped result of a successful verify) ───────────────
-
-
 @dataclass(frozen=True)
 class AuthContext:
-    """Per-request authentication state, returned by `require_auth`.
-
-    Frozen so accidental mutation by a handler doesn't propagate to other
-    code paths in the same request.
-    """
-
-    user_sub: str       # Clerk user id — `sub` claim
-    raw_jwt: str        # Original bearer token, for forwarding to Django (T11+)
-    claims: dict        # Full decoded payload (for callers that need iat/exp)
-
-
-# ── Exceptions ───────────────────────────────────────────────────────────────
+    user_sub: str
+    raw_jwt: str
+    claims: dict
 
 
 class InvalidToken(Exception):
-    """JWT failed verification for any reason (mapped to 401 by require_auth)."""
+    """JWT failed verification (mapped to 401 by require_auth)."""
 
 
 class JWKSUnavailable(Exception):
     """JWKS endpoint unreachable AND no cached keys available (→ 503)."""
 
 
-# ── Verifier ─────────────────────────────────────────────────────────────────
-
-
 class ClerkJWTVerifier:
-    """Verifies Clerk-issued JWTs against the JWKS at api.clerk.com/v1/jwks.
-
-    JWKS cache lives for `jwks_ttl_seconds` (default 1h, matches Django).
-    A `kid` miss triggers a single forced refresh before rejecting the
-    token — handles Clerk's key rotation without bouncing every user.
-    """
-
     def __init__(self, secret_key: str, jwks_ttl_seconds: int = 3600):
         self._secret_key = secret_key
         self._jwks_ttl = jwks_ttl_seconds
         self._jwks_cache: dict | None = None
         self._jwks_fetched_at: float = 0.0
-        # Serializes concurrent JWKS refreshes: the first request fetches,
-        # other waiters see the fresh cache when the lock releases.
         self._refresh_lock = asyncio.Lock()
         self._client = httpx.AsyncClient(timeout=10.0)
 
     async def aclose(self) -> None:
-        """Close the httpx client. Called from the FastAPI lifespan."""
         await self._client.aclose()
 
     def _is_cache_fresh(self) -> bool:
@@ -134,7 +82,6 @@ class ClerkJWTVerifier:
         if not force_refresh and self._is_cache_fresh():
             return self._jwks_cache  # type: ignore[return-value]
         async with self._refresh_lock:
-            # Double-checked: another waiter may have refreshed already.
             if not force_refresh and self._is_cache_fresh():
                 return self._jwks_cache  # type: ignore[return-value]
             jwks = await self._fetch_jwks()
@@ -145,7 +92,6 @@ class ClerkJWTVerifier:
 
     @staticmethod
     def _find_key(jwks: dict, kid: str):
-        """Return the public key for `kid` from the JWKS, or None."""
         for key in jwks.get("keys", []):
             if key.get("kid") == kid:
                 try:
@@ -156,13 +102,6 @@ class ClerkJWTVerifier:
         return None
 
     async def verify(self, token: str) -> dict:
-        """Verify `token` and return the decoded claims.
-
-        Raises:
-          InvalidToken — header malformed, kid unknown (even after refresh),
-                          signature invalid, token expired, sub missing.
-          JWKSUnavailable — JWKS endpoint unreachable AND no cached keys.
-        """
         try:
             header = jwt.get_unverified_header(token)
         except jwt.InvalidTokenError as e:
@@ -172,8 +111,7 @@ class ClerkJWTVerifier:
         if not kid:
             raise InvalidToken("JWT missing 'kid' header")
 
-        # Try the cached JWKS first; on miss, force ONE refresh (handles
-        # Clerk's key rotation) before giving up.
+        # On a kid miss, force one refresh to handle Clerk's key rotation.
         jwks = await self._get_jwks(force_refresh=False)
         public_key = self._find_key(jwks, kid)
         if public_key is None:
@@ -188,8 +126,6 @@ class ClerkJWTVerifier:
                 token,
                 public_key,
                 algorithms=["RS256"],
-                # Matches server/server/middleware.py — Clerk's aud isn't
-                # reliably set, iat is verified to be in the past.
                 options={"verify_aud": False, "verify_iat": True},
                 leeway=60,
             )
@@ -206,22 +142,12 @@ class ClerkJWTVerifier:
 
 @lru_cache
 def get_verifier() -> ClerkJWTVerifier:
-    """Cached singleton verifier. JWKS cache + httpx client live with it."""
     settings = get_settings()
     return ClerkJWTVerifier(secret_key=settings.CLERK_SECRET_KEY)
 
 
-# ── FastAPI dependency ───────────────────────────────────────────────────────
-
-
 async def require_auth(request: Request) -> AuthContext:
-    """FastAPI dependency: validates Bearer JWT, returns AuthContext.
-
-    Usage:
-        @app.get("/protected/")
-        async def handler(auth: AuthContext = Depends(require_auth)):
-            ...
-    """
+    """FastAPI dependency: validates Bearer JWT, returns AuthContext."""
     auth_header = request.headers.get("Authorization", "")
     if not auth_header.startswith("Bearer "):
         raise HTTPException(
@@ -242,8 +168,7 @@ async def require_auth(request: Request) -> AuthContext:
     try:
         claims = await verifier.verify(token)
     except InvalidToken as e:
-        # Log internal reason but return generic 401 — don't tell an
-        # attacker whether the token is malformed / expired / unknown-kid.
+        # Generic 401 — don't leak whether the token was malformed/expired/unknown-kid.
         logger.warning("JWT verification failed: %s", e)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -262,31 +187,20 @@ async def require_auth(request: Request) -> AuthContext:
         raw_jwt=token,
         claims=claims,
     )
-    # Stash on request state so handlers / tool dispatchers can forward
-    # the JWT to Django without taking it as an explicit dependency.
+    # Stash on request state so tool dispatchers can forward the JWT
+    # without taking it as an explicit dependency.
     request.state.auth = auth
     return auth
-
-
-# ── Log redaction filter ─────────────────────────────────────────────────────
 
 
 class AuthorizationRedactor(logging.Filter):
     """Scrubs `Authorization: Bearer <token>` substrings from log records.
 
-    Catches both raw header logs and common dict-repr forms like
-    `{'Authorization': 'Bearer abc'}` that httpx / requests use when
-    they dump request headers at DEBUG.
-
-    Runs at the filter stage (before format) so the formatted line that
-    actually reaches stdout has the token replaced with `[REDACTED]`.
+    Catches raw header logs and dict-repr forms like
+    `{'Authorization': 'Bearer abc'}` that httpx dumps at DEBUG.
     """
 
     _PATTERN = re.compile(
-        # Group 1: prefix — the literal `Authorization`, an optional quote,
-        # the separator (`:` or `=`), optional whitespace, optional opening
-        # quote. Group 2: the literal `Bearer` and the token chars up to
-        # the next delimiter (space, quote, comma, semicolon, paren).
         r"(authorization['\"]?\s*[:=]\s*['\"]?)(bearer\s+[^\s'\";,)]+)",
         flags=re.IGNORECASE,
     )
@@ -299,9 +213,8 @@ class AuthorizationRedactor(logging.Filter):
 
     def filter(self, record: logging.LogRecord) -> bool:
         try:
-            # Resolve printf-style args first, then redact, then collapse
-            # back into record.msg with empty args so downstream
-            # formatters don't reintroduce the token.
+            # Resolve printf-style args, redact, then collapse back so
+            # downstream formatters don't reintroduce the token.
             msg = record.getMessage()
             redacted = self._redact(msg)
             if redacted != msg:
@@ -314,15 +227,11 @@ class AuthorizationRedactor(logging.Filter):
 
 
 def install_log_redaction() -> None:
-    """Install AuthorizationRedactor on the root logger + every handler.
+    """Install AuthorizationRedactor on the root logger and every handler.
 
-    Idempotent — safe to call from both module-import time AND the
-    FastAPI lifespan startup hook.
-
-    Belt-and-suspenders: the filter is attached to the root logger
-    (catches records emitted directly to root) AND to each handler
-    (catches records that propagated up from child loggers — Python's
-    Logger filters do NOT re-run on propagation, but Handler filters do).
+    Idempotent. Attaches to BOTH the root logger and each handler because
+    Python's Logger filters do not re-run on propagation, but Handler
+    filters do.
     """
     redactor = AuthorizationRedactor()
     root = logging.getLogger()

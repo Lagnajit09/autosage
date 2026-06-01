@@ -1,30 +1,15 @@
-"""Vault-metadata tool (T15) — `list_vault_resources`.
+"""Vault-metadata tool — `list_vault_resources`.
 
-This tool gives the LLM the inventory it needs to bind workflow action
-nodes to real Vault / Server / Credential UUIDs — WITHOUT exposing any
-secret material. The LLM should never see plaintext passwords, SSH
-private keys, key passphrases, or certificate bodies. The platform's
-`CredentialRevealView` is the only sanctioned way to reveal a secret,
-and Autobot does NOT call it from the LLM-driven path (T17 will read
-plaintext only for the LLM API key, after explicit user opt-in).
+Gives the LLM the inventory it needs to bind action nodes to real
+Vault/Server/Credential UUIDs WITHOUT exposing any secret material.
 
 Defense in depth:
-
-  1. Django's CredentialSerializer marks `password`, `ssh_key`,
-     `key_passphrase`, and `cert_pem` as `write_only` — they are never
-     serialized in responses. So a one-call pass-through would already
-     be safe.
-  2. We layer a SECOND check here: explicitly whitelist the fields
-     each resource type exposes. If a future Django refactor
-     accidentally drops `write_only` from a secret field, this wrapper
-     still won't leak it.
-  3. The system prompt also tells the LLM "never invent UUIDs; never
-     embed secrets". Defense at three layers, any of which catches a
-     leak.
-
-Endpoint shape: `GET /api/vault/vaults/` returns a list of vaults each
-with nested `servers` and `credentials` arrays — one Django round-trip
-covers everything the LLM needs.
+  1. Django's CredentialSerializer marks secret fields as write_only.
+  2. This wrapper additionally whitelists the fields each resource type
+     can expose — if a future Django refactor drops write_only, the
+     wrapper still won't leak.
+  3. The system prompt tells the LLM never to invent UUIDs or embed
+     secrets.
 """
 
 from __future__ import annotations
@@ -38,8 +23,7 @@ from llm.tools import ToolDefinition, register_tool
 logger = logging.getLogger(__name__)
 
 
-# Allowed fields per resource type. Anything outside these whitelists
-# is dropped before handing the result to the LLM.
+# Fields outside these whitelists are dropped before handing to the LLM.
 _VAULT_FIELDS = ("id", "name", "description")
 _SERVER_FIELDS = (
     "id", "name", "host", "port", "connection_method",
@@ -66,34 +50,7 @@ async def _handler_list_vault_resources(
 ) -> dict[str, Any]:
     """Return the user's vaults with nested servers + credentials.
 
-    Output shape (every field is non-secret metadata):
-      {
-        "vaults": [
-          {
-            "id": "<uuid>",
-            "name": "Production",
-            "description": "...",
-            "servers": [
-              {
-                "id": "<uuid>",
-                "name": "prod-web-01",
-                "host": "192.168.1.10",
-                "port": 22,
-                "connection_method": "ssh",
-                "credential_id": "<uuid>"  // null if unlinked
-              }
-            ],
-            "credentials": [
-              {
-                "id": "<uuid>",
-                "name": "Prod SSH Key",
-                "credential_type": "ssh_key",
-                "username": null
-              }
-            ]
-          }
-        ]
-      }
+    Output is metadata only — no secret values.
     """
     client = get_django_client()
     try:
@@ -115,10 +72,8 @@ async def _handler_list_vault_resources(
             if not isinstance(srv, dict):
                 continue
             entry = _pick(srv, _SERVER_FIELDS)
-            # Server nests credential as `credential_details` (full
-            # object) or just `credential` (id). Surface only the id —
-            # the LLM looks the credential up by id in the credentials
-            # list at the same level.
+            # Surface only the credential id; the LLM looks up the
+            # credential from the credentials list at the same level.
             cred_details = srv.get("credential_details")
             if isinstance(cred_details, dict):
                 entry["credential_id"] = cred_details.get("id")

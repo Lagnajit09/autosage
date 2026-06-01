@@ -1,19 +1,6 @@
 /**
- * Inline badge that renders one tool call inside an assistant message.
- *
- * Three visual states, all collapsed by default:
- *   - `running`  → spinner + "Working: <human_label>"
- *   - `done`     → check + "<human_label>"
- *   - `error`    → red icon + "<human_label> failed"
- *
- * Click the badge to expand and inspect raw arguments + result. Lets the
- * user verify what the LLM actually did (e.g. confirm script name +
- * content before approving downstream actions). The expanded body is
- * scrollable; tool results can be large for `list_*` tools.
- *
- * Naming convention: we humanize the tool name (`create_script` →
- * "Create script") rather than show the raw identifier. Less noise for
- * non-technical users; power users can still click through to inspect.
+ * Inline badge for one tool call. Collapsed by default; click to expand
+ * and inspect raw arguments + result.
  */
 
 import { CheckCircle2, ChevronDown, Loader2, XCircle } from "lucide-react";
@@ -31,15 +18,12 @@ interface ToolCallBadgeProps {
 }
 
 const humanLabel = (toolName: string): string => {
-  // `create_script` → "Create script"; `list_vault_resources` → "List vault resources".
   const spaced = toolName.replace(/_/g, " ");
   return spaced.charAt(0).toUpperCase() + spaced.slice(1);
 };
 
 const formatJson = (raw: string): string => {
-  // Tool arguments arrive as a JSON STRING. Pretty-print when possible
-  // for the expanded view; fall back to the raw string for partial /
-  // malformed payloads (can happen mid-stream).
+  // Fall back to the raw string for partial/malformed payloads mid-stream.
   try {
     return JSON.stringify(JSON.parse(raw), null, 2);
   } catch {

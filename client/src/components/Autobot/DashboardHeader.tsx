@@ -1,19 +1,6 @@
 /**
- * Bespoke header for the Autobot Dashboard / Archived pages.
- *
- * Replaces the generic Autosage `<TopNav />` on Autobot-section pages:
- *   • Title reads "Autobot Dashboard" — branded, not the generic "Dashboard".
- *   • No search bar (no workflows list to search from here).
- *   • Customize button opens the same `CustomizeModal` used in chat — lets
- *     users tweak personalization + BYO LLM keys without leaving the page.
- *   • A "Chat" button redirects to `/ai/autobot`.
- *   • Vault + theme toggle + user menu are kept for parity with the
- *     Autosage header (same affordances the rest of the app exposes).
- *
- * Why a separate component instead of extending TopNav: the surface area
- * is small but the differences are structural (no search input, extra
- * action buttons, different title). A flag-driven TopNav would have
- * branching state for every section.
+ * Bespoke header for the Autobot Dashboard / Archived pages — branded
+ * title, no search bar, plus Chat / Customize / Vault actions.
  */
 
 import { useState } from "react";
@@ -50,8 +37,7 @@ import { Vault } from "../vault/Vault";
 import CustomizeModal from "./Chat/CustomizeModal";
 
 interface AutobotDashboardHeaderProps {
-  /** Optional callback if the parent wants to know when LLM configs change
-   * (e.g., to re-fetch dashboard analytics after a BYO key is added). */
+  /** Fires when an LLM config is added/edited/deleted via Customize. */
   onConfigsChanged?: () => void;
 }
 
@@ -117,8 +103,6 @@ export const AutobotDashboardHeader = ({
     </div>
   );
 };
-
-// ── Local helpers ────────────────────────────────────────────────────────
 
 const ToolTipIcon = ({
   icon,

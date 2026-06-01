@@ -1,37 +1,20 @@
-"""System prompt(s) for Autobot.
+"""System prompts for Autobot.
 
-Source of truth for Autobot's persona, scope, Autosage domain grounding
-(workflows / scripts / triggers / vault), and per-mode output contracts.
-Keep in sync with:
+The composed prompt for a turn is:
 
+    AUTOBOT_CORE_PROMPT
+    + _MODE_PROMPTS[mode]                   (mode-specific rules)
+    + _PANEL_PROMPTS[panel]                 (optional, surface-scoped)
+    + "## User customizations\\n..."         (per-thread override, optional)
+
+Keep domain facts in sync with:
   • server/execution_engine/helpers/{graph.py, params.py}
   • server/execution_engine/tasks.py
   • server/triggers/models.py, server/vault/models.py
   • server/seed/*.json
-
-Architecture
-────────────
-The composed prompt for a turn is:
-
-    AUTOBOT_CORE_PROMPT
-    + _MODE_PROMPTS[mode]                  (mode-specific output / tool rules)
-    + "## User customizations\\n..."        (per-thread override, if any)
-
-`get_system_prompt` is the single composer. Default mode is "research"
-(conservative: model won't create / mutate things unless the user has
-explicitly opted into Generation). The router (see
-`routers/chat.py::_build_llm_messages`) is the canonical caller.
-
-The chat UI passes one of: "research" | "generation" | "execution". Any
-unknown value falls back to the research mode (safe default).
 """
 
 from __future__ import annotations
-
-
-# ──────────────────────────────────────────────────────────────────────
-# Shared core — facts every mode needs
-# ──────────────────────────────────────────────────────────────────────
 
 AUTOBOT_CORE_PROMPT = """\
 You are **Autobot**, the AI assistant inside the **Autosage** automation
@@ -515,19 +498,8 @@ Universal tool rules (apply in any mode that allows tool use):
 """
 
 
-# ──────────────────────────────────────────────────────────────────────
-# Per-mode layers
-# ──────────────────────────────────────────────────────────────────────
-#
-# Each layer is appended to AUTOBOT_CORE_PROMPT and OVERRIDES the
-# "default" tool / output posture for the current turn. Modes do NOT
-# repeat the Autosage facts above — those are shared.
-#
-# Conservative defaults are intentional: the worst failure mode is the
-# assistant unilaterally writing to the user's workflows/scripts when
-# they only wanted to explore. Research mode forbids writes; Generation
-# unlocks them; Execution refuses entirely (run-from-chat is parking-lot
-# until a real `run_workflow` tool ships).
+# Per-mode layers. Conservative defaults: Research forbids writes,
+# Generation unlocks them, Execution refuses (no run tool exists yet).
 
 
 _RESEARCH_MODE_PROMPT = """\
@@ -658,33 +630,14 @@ _MODE_PROMPTS: dict[str, str] = {
     "execution":  _EXECUTION_MODE_PROMPT,
 }
 
-# Conservative default: an unauthenticated / legacy / mode-less turn
-# gets Research mode (read-only). Picking Generation would let the
-# model write to the user's library without an explicit opt-in.
+# Read-only default — picking Generation would let the model write to
+# the user's library without explicit opt-in.
 _DEFAULT_MODE = "research"
 
 
-# ──────────────────────────────────────────────────────────────────────
-# Panel addendum — surface-specific scoping
-# ──────────────────────────────────────────────────────────────────────
-# The frontend has several inline "AI panels" attached to specific
-# surfaces (ScriptEditor's right sidebar, WorkflowBuilder's right
-# sidebar, etc.). Each one wants the LLM scoped to a narrow tool subset
-# AND wants the system prompt to reflect that scope.
-#
-# Sending the `panel` field on a chat request causes:
-#   1. The matching addendum below is appended to the system prompt
-#      (after the mode, before user customizations).
-#   2. `routers/chat.py` filters `tool_schemas` to the allowed names
-#      below via `get_tool_schemas(allowed_names=...)`. That's the REAL
-#      enforcement — even if a model ignores the negative text rules
-#      ("don't call create_script"), the tool simply isn't advertised.
-#
-# Keep the prompt copy short and STRICTLY scoped. Use absolute words
-# ("NEVER", "STOP", "do NOT") for the things the panel must not do —
-# the base AUTOBOT_CORE_PROMPT has positive guidance for many of those
-# (e.g. "create_script when needed for action nodes") and a permissive
-# wording would let it win.
+# Panel addenda — surface-specific scoping for inline AI panels.
+# Tool filtering is enforced at the LLM API layer via _PANEL_ALLOWED_TOOLS
+# below; the prompt text is only a soft reinforcement.
 
 _SCRIPT_EDITOR_PANEL_PROMPT = """\
 You are running inside Autosage's inline **Script Generator** panel — a focused sidebar in the Script Editor page. Your job is STRICTLY script-related work:
@@ -784,9 +737,7 @@ _PANEL_PROMPTS: dict[str, str] = {
     "workflow_builder": _WORKFLOW_BUILDER_PANEL_PROMPT,
 }
 
-# Allowed tools per panel. The chat router uses this to filter the
-# `tools=` payload — real enforcement beyond the prompt text. A panel
-# with no entry here gets ALL tools (current main-chat behavior).
+# Panels with no entry here get ALL tools (main-chat behavior).
 _PANEL_ALLOWED_TOOLS: dict[str, frozenset[str]] = {
     "script_editor": frozenset({
         "list_scripts",
@@ -795,34 +746,22 @@ _PANEL_ALLOWED_TOOLS: dict[str, frozenset[str]] = {
         "update_script",
     }),
     "workflow_builder": frozenset({
-        # Workflow tools (read + write).
         "list_workflows",
         "read_workflow",
         "create_workflow",
         "update_workflow",
-        # Script tools — READ-ONLY. The panel binds action nodes to
-        # EXISTING scripts; it cannot create new ones (the Script
-        # Editor's panel is the only place for that).
+        # Script tools are READ-ONLY here — new scripts must come from
+        # the Script Editor panel.
         "list_scripts",
         "read_script",
-        # Vault metadata — for resolving servers / credentials when
-        # building action nodes.
         "list_vault_resources",
     }),
 }
 
 
 def get_panel_allowed_tools(panel: str) -> frozenset[str] | None:
-    """Return the set of tool names allowed for `panel`, or None to
-    signal "no filter — all registered tools allowed" (the default
-    behavior for the main /ai/autobot chat).
-    """
+    """Return the allowed tool names for `panel`, or None for no filter."""
     return _PANEL_ALLOWED_TOOLS.get((panel or "").strip().lower())
-
-
-# ──────────────────────────────────────────────────────────────────────
-# Public composer
-# ──────────────────────────────────────────────────────────────────────
 
 
 def get_system_prompt(
@@ -831,31 +770,11 @@ def get_system_prompt(
     mode: str = "",
     panel: str = "",
 ) -> str:
-    """Return the composed system prompt for a chat turn.
+    """Compose the system prompt: core + mode + panel + user customizations.
 
-    Layers (in order):
-      1. Core facts             — AUTOBOT_CORE_PROMPT (always).
-      2. Active mode            — research / generation / execution.
-      3. Active panel (optional) — script_editor / workflow_builder.
-                                   Surface-specific scoping for inline
-                                   AI panels. Empty means "no panel
-                                   addendum" (main /ai/autobot chat).
-      4. Per-thread override    — user_customizations.
-
-    `mode` is the chat UI's mode selector. Empty / unknown values fall
-    back to "research" (read-only, conservative).
-
-    `panel` is the inline-AI surface the message came from. Known
-    values: "script_editor", "workflow_builder". Unknown values are
-    treated as no-panel (the addendum is skipped). The chat router
-    ALSO filters tool_schemas based on this — see
-    `get_panel_allowed_tools` above.
-
-    `user_customizations` is the per-thread `system_prompt_override`
-    field. It is APPENDED under a `## User customizations` heading; it
-    never replaces the core.
-
-    Canonical caller: `routers/chat.py::_build_llm_messages`.
+    `mode` defaults to "research" (read-only) on empty/unknown values.
+    `user_customizations` is APPENDED under a `## User customizations`
+    heading — it never replaces the core.
     """
     resolved_mode = (mode or "").strip().lower()
     if resolved_mode not in _MODE_PROMPTS:
@@ -874,23 +793,13 @@ def get_system_prompt(
     return "\n\n".join(parts)
 
 
-# Back-compat alias: some callers (and earlier prompt history persisted
-# in Django) referenced `AUTOBOT_SYSTEM_PROMPT`. Point it at the core
-# so reading the symbol still works; new callers should compose via
-# `get_system_prompt(mode=...)`.
+# Back-compat alias: some persisted prompt history references this symbol.
+# New callers should use `get_system_prompt(mode=...)`.
 AUTOBOT_SYSTEM_PROMPT = AUTOBOT_CORE_PROMPT
 
 
-# ──────────────────────────────────────────────────────────────────────
-# Summarizer prompt (T16)
-# ──────────────────────────────────────────────────────────────────────
-# Used by `conversation/summarizer.py` for the separate non-streaming
-# LLM call that compresses old chat history into a paragraph. Kept here
-# so all LLM prompts live in one place — easier to audit and tune.
-#
-# Low temperature on the call (0.2) plus this prompt's emphasis on
-# preserving ids/names verbatim keeps summaries deterministic: we don't
-# want creative paraphrasing of UUIDs or counts.
+# Used by `conversation/summarizer.py`. Low temperature + emphasis on
+# preserving ids/names verbatim keeps summaries deterministic.
 
 SUMMARIZER_SYSTEM_PROMPT = """\
 You are summarizing a conversation between a user and Autobot — an AI \

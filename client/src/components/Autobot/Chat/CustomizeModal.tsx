@@ -1,24 +1,9 @@
 /**
- * Customize modal (T21).
+ * Customize modal — two tabs:
+ *   • Personalization → maps 1:1 to `UserSettings`.
+ *   • LLM Keys → CRUD for `LLMConfig` rows (BYO provider keys).
  *
- * Two tabs:
- *   • Personalization — tone (verbosity), expertise, language, custom
- *     instructions, and the user's default LLM. All map 1:1 to
- *     `UserSettings` fields on the backend.
- *   • LLM Keys — full CRUD for `LLMConfig` rows. Lets the user bring
- *     their own provider keys (Gemini / Groq / OpenRouter / Anthropic /
- *     OpenAI / Azure / custom OpenAI-compatible endpoint).
- *
- * The personalization fields use backend semantics directly:
- *   - `tone`     → 'concise' | 'balanced' | 'detailed'  (verbosity)
- *   - `expertise`→ 'beginner' | 'intermediate' | 'expert'
- *   - `language` → ISO-639 string, free-form
- *   - `custom_instructions` → free text appended to the system prompt
- *
- * Loading strategy: settings + configs are fetched in parallel when the
- * modal opens (not on app mount) so a closed Customize doesn't burn API
- * calls. The modal stays open until the user explicitly closes it; in-
- * flight saves block UI but don't auto-close.
+ * Settings + configs are fetched in parallel on open (not on app mount).
  */
 
 import { useCallback, useEffect, useState } from "react";

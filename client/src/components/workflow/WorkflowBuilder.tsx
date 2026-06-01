@@ -157,28 +157,18 @@ const WorkflowBuilderContent = ({
     }
   };
 
-  // ── AI Workflow Generator callbacks (T22 part 2) ────────────────────
-  //
-  // The AI panel runs autobot's `create_workflow` / `update_workflow`
-  // tools directly. These callbacks fire AFTER the stream closes —
-  // they just sync the canvas with whatever the server now holds.
+  // Autobot owns the create_workflow/update_workflow tool calls; these
+  // callbacks fire after the stream closes and sync the canvas.
 
   const handleAIWorkflowCreated = useCallback(
     async (newWorkflowId: string, newWorkflowName: string) => {
-      // Sonner loading toast covers the gap between the LLM's "done"
-      // and the canvas actually showing the new graph (navigate →
-      // Workflow.tsx refetch → setNodes/setEdges takes ~500ms).
-      // Replace the same toast id on success/failure so the user sees
-      // one continuous status indicator.
+      // Single toast id throughout — bridges the ~500ms gap until the
+      // canvas shows the new graph.
       const toastId = toast2.loading(
         `Loading "${newWorkflowName}" onto canvas…`,
       );
       try {
-        // Navigate so the URL reflects the persisted workflow. Workflow.tsx
-        // re-fetches on `id` change and feeds fresh `initialData` to
-        // WorkflowBuilder, which re-imports onto the canvas via the
-        // existing useEffect. We use `replace` so the user's back button
-        // doesn't return them to a stale `/workflow/new`.
+        // replace: true so back-button doesn't return to /workflow/new.
         navigate(`/workflow/${newWorkflowId}`, { replace: true });
         toast2.success(`Created "${newWorkflowName}"`, { id: toastId });
       } catch (err) {

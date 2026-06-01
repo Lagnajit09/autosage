@@ -1,16 +1,10 @@
 /**
- * Slim model picker for the chat input (T21).
+ * Slim model picker for the chat input.
  *
- * Two contexts:
- *   • Existing thread → selecting a config PATCHes `Thread.llm_config`
- *     so the override sticks for this conversation.
- *   • Welcome screen → the chosen config is held by the parent and
- *     passed to `createThread({ llm_config })` on first send.
+ * Existing thread → PATCHes `Thread.llm_config`.
+ * Welcome screen → held by parent, passed to `createThread`.
  *
- * "Default" represents fall-through to the user's global default
- * (UserSettings.default_llm_config) or admin keys when no global is set.
- * It maps to `null` on the wire — the backend treats null as "no thread-
- * level override; resolve via user settings then admin."
+ * "Default" maps to `null` — backend falls through to user settings, then admin.
  */
 
 import { ChevronDown, Sparkles } from "lucide-react";

@@ -1,22 +1,14 @@
-"""Redis hot-context cache for autobot conversations (T11).
+"""Redis hot-context cache for autobot conversations.
 
-Lives on Redis DB index `/2` (Celery owns `/0`; `/1` is unused). Keys
-carry an explicit TTL, refreshed on read, so:
+Lives on Redis DB index `/2` (Celery owns `/0`). Keys carry an explicit
+TTL refreshed on read, so active threads stay warm and idle threads age
+out naturally. Under memory pressure, `volatile-lru` can only evict
+TTL-bearing keys — Celery's broker items (no TTL) are protected.
 
-  • Active threads stay in cache as long as users keep chatting.
-  • Idle threads age out on their own — no manual cleanup needed.
-  • Under memory pressure, Redis's `volatile-lru` policy can only
-    evict TTL-bearing keys (us). Celery's broker queue items have
-    no TTL and are protected. See docker-compose.{dev,oci}.yml.
-
-This module is infrastructure for T13+ (the chat loop uses it to avoid
-re-fetching message history from Django on every turn). T11 just lands
-the helpers; nothing actively reads/writes yet.
-
-Key namespace
-─────────────
+Key namespace:
   autobot:thread:<id>:ctx       — JSON-encoded recent-messages window
   autobot:thread:<id>:summary   — plain text rolling summary
+  autobot:admin_quota:<sub>:<yyyymmdd> — per-user admin-key counter
 """
 
 from __future__ import annotations
@@ -45,48 +37,36 @@ def _thread_summary_key(thread_id: str) -> str:
 class ConversationCache:
     """Async Redis-backed cache for hot conversation state.
 
-    All entries TTL-out after ``default_ttl`` seconds (default 7200,
-    configurable via AUTOBOT_CTX_TTL_SECONDS). Reads refresh the TTL,
-    so an active conversation stays warm indefinitely.
+    Entries TTL out after `default_ttl` seconds (default 7200, see
+    AUTOBOT_CTX_TTL_SECONDS). Reads refresh the TTL.
     """
 
     def __init__(self, redis_url: str, default_ttl: int = 7200):
         self._redis_url = redis_url
         self._default_ttl = default_ttl
-        # decode_responses=True so .get() returns str instead of bytes —
-        # cleaner JSON parsing and matches how the rest of the autobot
-        # code expects to handle text.
         self._client: Redis = aioredis.from_url(
             redis_url, decode_responses=True,
         )
 
     async def aclose(self) -> None:
-        """Close the connection pool. Called from FastAPI lifespan."""
         await self._client.aclose()
 
     async def ping(self) -> bool:
-        """Lightweight liveness probe — used by future /readyz/ endpoint."""
         try:
             return bool(await self._client.ping())
         except Exception as e:
             logger.warning("Redis ping failed: %s", e)
             return False
 
-    # ── Thread context ────────────────────────────────────────────────
-
     async def get_thread_ctx(self, thread_id: str) -> Any | None:
-        """Return cached thread context (parsed JSON) or None on miss."""
         key = _thread_ctx_key(thread_id)
         raw = await self._client.get(key)
         if raw is None:
             return None
-        # Refresh TTL on read so active threads stay warm.
         await self._client.expire(key, self._default_ttl)
         try:
             return json.loads(raw)
         except json.JSONDecodeError:
-            # Corrupt entry — log and drop. The next chat turn will
-            # re-hydrate from Django.
             logger.warning("Corrupt cache entry at %s; deleting", key)
             await self._client.delete(key)
             return None
@@ -97,7 +77,6 @@ class ConversationCache:
         data: Any,
         ttl: int | None = None,
     ) -> None:
-        """Write/overwrite the cached context with an explicit TTL."""
         await self._client.set(
             _thread_ctx_key(thread_id),
             json.dumps(data, default=str),
@@ -105,13 +84,9 @@ class ConversationCache:
         )
 
     async def invalidate_thread_ctx(self, thread_id: str) -> None:
-        """Delete the cached context — used after write-tool calls (T18)."""
         await self._client.delete(_thread_ctx_key(thread_id))
 
-    # ── Thread summary ────────────────────────────────────────────────
-
     async def get_thread_summary(self, thread_id: str) -> str | None:
-        """Return the cached rolling summary (plain text) or None."""
         key = _thread_summary_key(thread_id)
         raw = await self._client.get(key)
         if raw is not None:
@@ -133,39 +108,24 @@ class ConversationCache:
     async def invalidate_thread_summary(self, thread_id: str) -> None:
         await self._client.delete(_thread_summary_key(thread_id))
 
-    # ── Admin-key quota (T18a) ────────────────────────────────────────
-
     async def incr_admin_quota_for_today(
         self,
         user_sub: str,
         daily_limit: int,
     ) -> tuple[bool, int]:
-        """Increment a user's daily admin-key counter and check the cap.
+        """Increment the user's daily admin-key counter and check the cap.
 
-        Returns ``(allowed, count)``:
-          • ``allowed=True``  if ``count <= daily_limit`` (or limit is 0)
-          • ``allowed=False`` if ``count >  daily_limit`` — caller
-            should refuse the chat turn and prompt the user to add a
-            personal LLM key.
+        Returns ``(allowed, count)``. Ticks once per chat turn (not per
+        tool-call round). Keyed by UTC date; 26h TTL covers DST + clock
+        skew. ``daily_limit=0`` disables the cap.
 
-        The counter ticks ONCE per chat turn (not per tool-call round).
-        Keyed by UTC date so it resets at 00:00 UTC. 26h TTL gives DST /
-        clock-skew margin without growing the keyspace unboundedly.
-
-        ``daily_limit=0`` disables the cap entirely — useful for dev
-        and for self-hosted deployments where the admin key is the
-        operator's own paid key.
-
-        Redis errors fail-OPEN (return ``(True, 0)``). If Redis is
-        down, we'd rather let the chat through than block every user;
-        the per-user slowapi throttle still protects against runaway
-        request volume.
+        Redis errors fail-OPEN — better to let chat through than block
+        every user when Redis is down. slowapi still protects against
+        runaway request volume.
         """
         if daily_limit <= 0:
             return True, 0
 
-        # Compute the UTC date string. Imported locally to keep the
-        # cache module's top-level imports tight.
         from datetime import datetime, timezone
         today = datetime.now(timezone.utc).strftime("%Y%m%d")
         key = f"autobot:admin_quota:{user_sub}:{today}"
@@ -173,9 +133,6 @@ class ConversationCache:
         try:
             count = await self._client.incr(key)
             if count == 1:
-                # First request of the day for this user. Set a TTL so
-                # the counter falls off on its own; 26h covers DST +
-                # any clock skew between containers.
                 await self._client.expire(key, 60 * 60 * 26)
         except Exception as e:
             logger.warning(
@@ -194,13 +151,10 @@ class ConversationCache:
         return allowed, int(count)
 
     async def get_admin_quota_for_today(self, user_sub: str) -> int:
-        """Return today's admin-key usage count for a user.
+        """Read-only sibling of :meth:`incr_admin_quota_for_today`.
 
-        Read-only sibling of :meth:`incr_admin_quota_for_today` — used by
-        the dashboard endpoint (T26) to surface "default requests remaining"
-        without touching the counter. Returns 0 on cache miss or any Redis
-        error; the caller treats missing data as "no usage yet today" rather
-        than 5xx-ing the whole dashboard.
+        Returns 0 on cache miss or any Redis error — the dashboard
+        treats missing data as "no usage yet today" rather than 5xx'ing.
         """
         from datetime import datetime, timezone
         today = datetime.now(timezone.utc).strftime("%Y%m%d")

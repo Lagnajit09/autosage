@@ -64,15 +64,8 @@ export const AutobotBanner = () => {
   );
 };
 
-// ── Autobot — today (T28) ─────────────────────────────────────────────────
-//
-// Compact KPI tile that lives on the main Autosage dashboard alongside the
-// banners. Surfaces just enough usage info ("am I about to hit my quota?")
-// to be useful without duplicating the full Autobot Dashboard page.
-//
-// Failure mode: if the dashboard endpoint is unreachable, render a one-line
-// "Stats unavailable" notice — never break the parent Dashboard page.
-
+// Compact "am I about to hit my quota?" tile. Renders "Stats unavailable"
+// on endpoint failure — never breaks the parent Dashboard page.
 export const AutobotTodayCard = () => {
   const navigate = useNavigate();
   const { getToken } = useAuth();
@@ -110,11 +103,6 @@ export const AutobotTodayCard = () => {
     };
   }, [getToken]);
 
-  // Compact KPI tile slotted into the main dashboard's right sidebar
-  // (or, on mobile/narrow screens, into the card grid). Explicit
-  // bg + border so it sits cleanly next to ProBanner / AutobotBanner
-  // in both themes. Numbers are truncation-safe — large totals fall back
-  // to compact notation rather than wrapping.
   const compactNumber = (n: number): string => {
     if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
     if (n >= 10_000) return `${(n / 1_000).toFixed(0)}k`;
