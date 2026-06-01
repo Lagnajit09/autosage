@@ -188,22 +188,21 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
-  # ── Autobot (FastAPI LLM assistant — scaffold only until T23 ships CI) ───
-  # Profile-gated so `docker compose pull` / `up -d` (no profile) skips this
-  # service entirely. The GHCR image won't exist until the deploy-autobot CI
-  # workflow lands; until then this entry is documentation + future-readiness.
+  # ── Autobot (FastAPI LLM assistant) ──────────────────────────────────────
+  # Independent FastAPI service on the same A1 host. nginx proxies
+  # /api/ai/* → autobot:8030 (prefix stripped — see nginx/autosage.conf).
+  # Uses Redis DB /2 for hot conversation context (TTL'd, evictable under
+  # volatile-lru — never pressures Celery on /0). Calls Django at
+  # /api/autobot/* for thread persistence and /api/scripts, /api/workflows
+  # for tool execution, forwarding the user's Clerk JWT.
   #
-  # To start autobot in prod once the image is available:
-  #   docker compose --profile autobot up -d autobot
-  # At T23, drop the `profiles:` line so the default `up -d` brings it up.
-  #
-  # Depends on redis (Autobot uses DB /2 for hot conversation context) and
-  # django (Autobot calls /api/autobot/* for thread persistence + /api/scripts
-  # /api/workflows for tool calls).
+  # The image is built and pushed by .github/workflows/deploy-autobot.yml
+  # (path filter: autobot/**). First-time bootstrap requires running that
+  # workflow manually via workflow_dispatch so the GHCR image exists before
+  # `docker compose pull` is invoked here.
   autobot:
     image: ghcr.io/lagnajit09/autosage/autosage-autobot:latest
     container_name: autosage-autobot
-    profiles: ["autobot"]
     env_file:
       - /home/ubuntu/autosage-server/autobot.env
     environment:
@@ -219,12 +218,14 @@ services:
         condition: service_healthy
     restart: unless-stopped
     healthcheck:
+      # /health/ is the public liveness endpoint defined in autobot/main.py.
+      # The bare path `/` would 404 — FastAPI doesn't auto-mount a root route.
       test:
         [
           "CMD",
           "python",
           "-c",
-          "import urllib.request; urllib.request.urlopen('http://localhost:8030/')",
+          "import urllib.request; urllib.request.urlopen('http://localhost:8030/health/')",
         ]
       interval: 20s
       timeout: 5s
