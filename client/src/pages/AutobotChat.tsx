@@ -1,5 +1,5 @@
-import Interface from "@/components/Chat/Interface";
-import History from "@/components/Chat/History";
+import Interface from "@/components/Autobot/Chat/Interface";
+import History from "@/components/Autobot/Chat/History";
 import LeftNav from "@/components/LeftNav";
 import { SidebarProvider } from "@/components/ui/sidebar";
 

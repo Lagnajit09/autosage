@@ -443,3 +443,45 @@ export const createSummary = async (
   );
   return response.data;
 };
+
+// ── Dashboard analytics (T26/T27) ────────────────────────────────────────
+
+/** One bucket of dashboard stats — matches Django's `_bucket_stats` shape. */
+export interface DashboardBucket {
+  requests: number;
+  total_tokens: number;
+  prompt_tokens: number;
+  completion_tokens: number;
+  avg_tokens_per_request: number;
+  admin_tokens: number;
+  byo_tokens: number;
+  model_usage: Array<{
+    provider: string;
+    model: string;
+    count: number;
+  }>;
+}
+
+/** Admin-pool daily quota — injected by autobot's proxy from its Redis
+ *  counter. `limit === 0` means the cap is disabled (typically self-hosted
+ *  or BYO-only setups); the dashboard should hide the quota tile in that
+ *  case. */
+export interface AdminQuota {
+  used: number;
+  limit: number;
+  remaining: number;
+}
+
+export interface AutobotDashboardData {
+  today: DashboardBucket;
+  last_7d: DashboardBucket;
+  all_time: DashboardBucket;
+  admin_quota: AdminQuota;
+}
+
+export const getDashboard = async (
+  token: string,
+): Promise<AutobotDashboardData> => {
+  const response = await apiRequest(`${AI_BASE}/dashboard/`, {}, token);
+  return response.data;
+};

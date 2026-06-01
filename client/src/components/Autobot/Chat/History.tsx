@@ -20,6 +20,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { useAuth } from "@clerk/clerk-react";
 import { toast } from "sonner";
 import {
+  Archive,
   Loader2,
   MoreHorizontal,
   PlusCircle,
@@ -203,6 +204,30 @@ const History: React.FC<HistoryProps> = ({ className }) => {
       toast.error(msg);
     } finally {
       setRenaming(false);
+    }
+  };
+
+  // ── Archive (T29) ────────────────────────────────────────────────
+  // Soft-hide: PATCH is_archived=true. The active-filter list query
+  // immediately drops the row on next fetch; we also remove it locally
+  // for instant feedback. If the archived thread was the active one,
+  // route back to welcome so the user isn't stuck on a now-read-only
+  // view by accident (they can still navigate back via the Archived page).
+  const archiveThread = async (threadId: string) => {
+    try {
+      const token = await getToken();
+      if (!token) throw new Error("Not signed in.");
+      await patchThread(token, threadId, { is_archived: true });
+      setThreads((prev) => prev.filter((t) => t.id !== threadId));
+      if (activeId === threadId) {
+        navigate("/ai/autobot");
+      }
+      // Notify any sibling listeners (e.g. the Archived page if open).
+      window.dispatchEvent(new Event(THREADS_CHANGED_EVENT));
+      toast.success("Chat archived.");
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Archive failed.";
+      toast.error(msg);
     }
   };
 
@@ -438,6 +463,13 @@ const History: React.FC<HistoryProps> = ({ className }) => {
                                 >
                                   <Pencil className="mr-2 h-4 w-4" />
                                   <span>Rename</span>
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                  onClick={() => void archiveThread(thread.id)}
+                                  className="text-gray-800 dark:text-gray-200 dark:hover:bg-[#383838] cursor-pointer"
+                                >
+                                  <Archive className="mr-2 h-4 w-4" />
+                                  <span>Archive</span>
                                 </DropdownMenuItem>
                                 <DropdownMenuItem
                                   onClick={() => openDeleteModal(thread.id)}

@@ -53,10 +53,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { CodeBlock } from "@/components/Chat/CodeBlock";
+import { CodeBlock } from "@/components/Autobot/Chat/CodeBlock";
 import ToolCallBadge, {
   type ToolCallStatus,
-} from "@/components/Chat/ToolCallBadge";
+} from "@/components/Autobot/Chat/ToolCallBadge";
 import {
   createThread,
   getSettings,
@@ -72,7 +72,7 @@ import {
 } from "@/lib/api/autobot-stream";
 import type { ScriptLanguage } from "@/utils/types";
 import { AutobotIcon } from "../AutobotIcon";
-import ModelPicker from "@/components/Chat/ModelPicker";
+import ModelPicker from "@/components/Autobot/Chat/ModelPicker";
 
 // Languages that map to real Autosage runtime targets. JavaScript is
 // excluded because the runtime can't execute it — it's an editor-only

@@ -52,7 +52,9 @@ export const NavItems = ({ mobile = false }: { mobile?: boolean }) => {
       onClick: () => navigate("/script-editor"),
     },
     {
-      icon: <FileClock className={cn("w-6 h-6", mobile ? "w-5 h-5 mr-2" : "")} />,
+      icon: (
+        <FileClock className={cn("w-6 h-6", mobile ? "w-5 h-5 mr-2" : "")} />
+      ),
       label: "Execution Logs",
       onClick: () => navigate("/execution-logs"),
     },

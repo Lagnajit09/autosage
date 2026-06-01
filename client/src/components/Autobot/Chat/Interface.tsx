@@ -41,10 +41,10 @@ import { type ChatMode } from "./InputTypeGroup";
 import ModelPicker from "./ModelPicker";
 import ShareModal from "./ShareModal";
 import ToolCallBadge, { type ToolCallStatus } from "./ToolCallBadge";
-import { AutobotIcon } from "../AutobotIcon";
-import { Vault } from "../vault/Vault";
-import { NavItems } from "../LeftNav";
-import { SidebarTrigger } from "../ui/sidebar";
+import { AutobotIcon } from "../../AutobotIcon";
+import { Vault } from "../../vault/Vault";
+import { NavItems } from "../../LeftNav";
+import { SidebarTrigger } from "../../ui/sidebar";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import {
@@ -52,7 +52,13 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { DatabaseZap, Menu, Settings2, ShareIcon } from "lucide-react";
+import {
+  BarChart3,
+  DatabaseZap,
+  Menu,
+  Settings2,
+  ShareIcon,
+} from "lucide-react";
 
 import {
   createThread,
@@ -113,6 +119,30 @@ const newClientId = (): string => {
     return `msg_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
   }
 };
+
+// T29: archived-thread banner. Non-dismissible — the input is the affordance
+// for re-engaging with the chat, so dismissing the banner without unarchiving
+// would leave the user staring at a disabled input with no explanation.
+const ArchivedBanner = ({
+  onUnarchive,
+  busy,
+}: {
+  onUnarchive: () => void;
+  busy: boolean;
+}) => (
+  <div className="flex items-center justify-between gap-3 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:border-amber-800/60 dark:bg-amber-950/40 dark:text-amber-200">
+    <span>This chat is archived. Unarchive to send new messages.</span>
+    <Button
+      size="sm"
+      variant="outline"
+      disabled={busy}
+      onClick={onUnarchive}
+      className="bg-transparent border-amber-400 text-amber-800 hover:bg-amber-100 dark:border-amber-700 dark:text-amber-200 dark:hover:bg-amber-900/40"
+    >
+      {busy ? "Unarchiving…" : "Unarchive"}
+    </Button>
+  </div>
+);
 
 const Interface = () => {
   const { id: threadId } = useParams<{ id: string }>();
@@ -432,6 +462,14 @@ const Interface = () => {
     async (content: string) => {
       const trimmed = content.trim();
       if (!trimmed || isStreaming) return;
+      // T29: hard-block sends on archived threads — UI disables the input
+      // and shows a banner, but a stale instance or race could still reach
+      // this handler. Refuse silently here as belt-and-braces; the banner
+      // already explains why the input is locked.
+      if (thread?.is_archived) {
+        toast.error("This chat is archived. Unarchive to send messages.");
+        return;
+      }
 
       setStreamError(null);
 
@@ -488,8 +526,34 @@ const Interface = () => {
       runStream,
       selectedConfigId,
       mode,
+      thread?.is_archived,
     ],
   );
+
+  // T29: unarchive handler — used by the archived banner inline button.
+  // Mirrors the History sidebar archive flow but in reverse: PATCH
+  // is_archived=false, swap the local thread, notify listeners so the
+  // sidebar re-fetches and the row reappears.
+  const [unarchiving, setUnarchiving] = useState(false);
+  const unarchiveCurrentThread = useCallback(async () => {
+    if (!thread || unarchiving) return;
+    setUnarchiving(true);
+    try {
+      const token = await getToken();
+      if (!token) throw new Error("Not signed in.");
+      const updated = await patchThread(token, thread.id, {
+        is_archived: false,
+      });
+      setThread(updated);
+      window.dispatchEvent(new CustomEvent(THREADS_CHANGED_EVENT));
+      toast.success("Chat unarchived.");
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Unarchive failed.";
+      toast.error(msg);
+    } finally {
+      setUnarchiving(false);
+    }
+  }, [thread, unarchiving, getToken]);
 
   // Adapter for ChatInput's (e, value, category) signature. The category
   // arg is legacy ServiceNow-flow plumbing that autobot doesn't use.
@@ -562,12 +626,6 @@ const Interface = () => {
             />
           );
         },
-        // ReactMarkdown wraps fenced code in `<pre><code>...</code></pre>`
-        // by default. The prose plugin then styles the <pre> with its own
-        // background + padding, which surrounds our CodeBlock in a second
-        // visible "frame" (the user-reported outer gray box). Render the
-        // pre as a transparent passthrough so only our CodeBlock surface
-        // is visible.
         pre(props: React.ComponentPropsWithoutRef<"pre">) {
           return <>{props.children}</>;
         },
@@ -587,9 +645,6 @@ const Interface = () => {
     </ReactMarkdown>
   );
 
-  // Suppress system + tool messages from the visible thread. System
-  // prompts are server-injected (not user-authored); tool messages are
-  // already represented as badges under their preceding assistant turn.
   const visibleMessages = messages.filter(
     (m) => m.role === "user" || m.role === "assistant",
   );
@@ -644,15 +699,7 @@ const Interface = () => {
 
         <SidebarTrigger className="lg:hidden" />
       </div>
-
-      {/* Desktop top navbar — true glass effect.
-       *
-       * `absolute` (not flex-flow) so it OVERLAYS the scrolling
-       * messages area. As messages scroll inside their container they
-       * pass behind the navbar and `backdrop-blur-md` catches them —
-       * the actual frosted-glass look. The messages + welcome state
-       * compensate with `pt-16` so the first row clears the navbar. */}
-      <div className="hidden lg:flex items-center justify-between absolute top-0 left-0 right-0 px-6 py-3 z-30 backdrop-blur-md bg-white/40 dark:bg-gray-900/40 border-b border-gray-200/30 dark:border-gray-800/30 shadow-sm">
+      <div className="hidden lg:flex items-center justify-between absolute top-0 left-0 right-0 px-6 py-3 z-30 backdrop-blur-md bg-transparent border-b border-gray-200/30 dark:border-gray-800/30 shadow-sm">
         <div className="flex items-center gap-2">
           <AutobotIcon size={24} />
           <span className="font-semibold text-gray-900 dark:text-gray-100 tracking-tight text-lg">
@@ -661,6 +708,20 @@ const Interface = () => {
         </div>
 
         <div className="flex items-center gap-1">
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                onClick={() => navigate("/ai/autobot/dashboard")}
+                className="flex items-center gap-2 cursor-pointer bg-transparent hover:bg-gray-100/70 dark:hover:bg-gray-800/70 py-2 px-3 rounded-full transition-colors"
+              >
+                <BarChart3 className="w-4 h-4 text-gray-800 dark:text-gray-200" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>
+              <p>Dashboard</p>
+            </TooltipContent>
+          </Tooltip>
+
           <Tooltip>
             <TooltipTrigger asChild>
               <Button
@@ -714,9 +775,6 @@ const Interface = () => {
       <Vault isOpen={vaultModalOpen} setIsOpen={setVaultModalOpen} />
 
       {!hasAnyContent ? (
-        // Welcome state padded `lg:pt-16` to clear the absolute-positioned
-        // navbar (only present on lg+). Mobile uses the in-flow header
-        // above, so no extra padding needed there.
         <div className="flex-1 flex flex-col items-center justify-center p-4 lg:pt-16">
           <div className="text-center mb-8 max-w-lg mx-auto">
             <p className="text-2xl font-medium text-gray-600 dark:text-gray-400">
@@ -738,9 +796,15 @@ const Interface = () => {
                 onChange={(id) => void handleModelChange(id)}
               />
             </div>
+            {thread?.is_archived && (
+              <ArchivedBanner
+                onUnarchive={() => void unarchiveCurrentThread()}
+                busy={unarchiving}
+              />
+            )}
             <ChatInput
               handleSubmit={onChatInputSubmit}
-              disabled={isStreaming}
+              disabled={isStreaming || !!thread?.is_archived}
               mode={mode}
               onModeChange={setMode}
             />
@@ -753,13 +817,6 @@ const Interface = () => {
             ref={messagesContainerRef}
             className="flex-1 w-full overflow-y-auto scroll-smooth"
           >
-            {/* Responsive: tight on mobile so bubbles use the full
-             * width, capped on larger screens so very long lines stay
-             * comfortably readable. `lg:pt-20` clears the absolute
-             * glass navbar overhead so the first message isn't tucked
-             * underneath it on page load — once the user scrolls,
-             * subsequent messages pass behind the navbar (which is
-             * exactly what produces the frosted-glass effect). */}
             <div className="w-full max-w-3xl xl:max-w-[70%] mx-auto flex flex-col gap-6 px-4 py-6 pb-4 lg:pt-20">
               {historyLoading && visibleMessages.length === 0 && (
                 <p className="text-center text-sm text-gray-500 dark:text-gray-400">
@@ -789,9 +846,7 @@ const Interface = () => {
                 <AssistantBubble
                   toolCalls={pendingAssistant.toolCalls}
                   // While streaming, render plain text — markdown parse
-                  // on every token is wasteful and visually jumpy. Theme-
-                  // aware text color so dark-mode users can actually
-                  // read the incremental tokens.
+                  // on every token is wasteful and visually jumpy.
                   body={
                     pendingAssistant.content ? (
                       <p className="whitespace-pre-wrap leading-relaxed text-sm text-gray-900 dark:text-gray-200">
@@ -827,9 +882,17 @@ const Interface = () => {
                   onChange={(id) => void handleModelChange(id)}
                 />
               </div>
+              {thread?.is_archived && (
+                <ArchivedBanner
+                  onUnarchive={() => void unarchiveCurrentThread()}
+                  busy={unarchiving}
+                />
+              )}
               <ChatInput
                 handleSubmit={onChatInputSubmit}
-                disabled={isStreaming}
+                disabled={isStreaming || !!thread?.is_archived}
+                mode={mode}
+                onModeChange={setMode}
               />
             </div>
           </div>

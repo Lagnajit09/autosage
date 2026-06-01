@@ -6,7 +6,11 @@ import { DashboardSidebar } from "@/components/Dashboard/Sidebar";
 import TopNav from "@/components/Dashboard/TopNav";
 import { SidebarProvider } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
-import { ProBanner, AutobotBanner } from "@/components/Dashboard/Banners";
+import {
+  ProBanner,
+  AutobotBanner,
+  AutobotTodayCard,
+} from "@/components/Dashboard/Banners";
 import { StatsOverview } from "@/components/Dashboard/StatsOverview";
 import {
   ExecutionRow,
@@ -383,6 +387,7 @@ const Dashboard = () => {
 
                   {/* Right Sidebar / Banners */}
                   <div className="lg:col-span-1 space-y-6">
+                    <AutobotTodayCard />
                     <ProBanner />
                     <AutobotBanner />
                   </div>

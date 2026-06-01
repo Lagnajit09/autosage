@@ -27,7 +27,9 @@ export const RecentItemCard = ({ item }: { item: RecentItemProps }) => {
           </div>
           <div>
             <h4 className="font-medium text-gray-900 dark:text-gray-100 group-hover:text-blue-500 transition-colors">
-              {item.title}
+              {item.title.length > 28
+                ? item.title.slice(0, 28) + "..."
+                : item.title}
             </h4>
             <p className="text-xs text-gray-500 dark:text-gray-400">
               Edited {item.date}

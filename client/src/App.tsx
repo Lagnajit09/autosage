@@ -18,6 +18,8 @@ import ProtectedRoute from "./components/auth/ProtectedRoute";
 import "./App.css";
 import { ThemeProvider } from "./contexts/theme/theme-context";
 import AutobotChat from "./pages/AutobotChat";
+import AutobotDashboard from "./pages/AutobotDashboard";
+import AutobotArchived from "./pages/AutobotArchived";
 import Workflows from "./pages/Workflows";
 import Templates from "./pages/Templates";
 import Settings from "./pages/Settings";
@@ -92,6 +94,14 @@ const App = () => {
                     <Route path="/raw/:id" element={<ScriptViewer />} />
                     <Route path="/execution-logs" element={<ExecutionLogs />} />
                     <Route path="/ai/autobot" element={<AutobotChat />} />
+                    <Route
+                      path="/ai/autobot/dashboard"
+                      element={<AutobotDashboard />}
+                    />
+                    <Route
+                      path="/ai/autobot/archived"
+                      element={<AutobotArchived />}
+                    />
                     <Route path="/ai/autobot/:id" element={<AutobotChat />} />
                     <Route path="/settings" element={<Settings />} />
                     <Route path="/profile" element={<Profile />} />

@@ -40,11 +40,11 @@ import { Loader2, RotateCcw, Send, Sparkles, Wand2, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { CodeBlock } from "@/components/Chat/CodeBlock";
+import { CodeBlock } from "@/components/Autobot/Chat/CodeBlock";
 import ToolCallBadge, {
   type ToolCallStatus,
-} from "@/components/Chat/ToolCallBadge";
-import ModelPicker from "@/components/Chat/ModelPicker";
+} from "@/components/Autobot/Chat/ToolCallBadge";
+import ModelPicker from "@/components/Autobot/Chat/ModelPicker";
 import {
   createThread,
   getSettings,
