@@ -1,0 +1,190 @@
+name: Build and Deploy Autobot
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Sibling of deploy-server.yml — same OCI A1 host, separate image.
+#
+# Why a dedicated workflow:
+#   • Autobot is an independent FastAPI service (image
+#     ghcr.io/lagnajit09/autosage/autosage-autobot:latest), so its build is
+#     decoupled from the Django image. We don't want every server-only change
+#     to rebuild Autobot or vice-versa.
+#   • The deploy step is surgical (`--no-deps autobot`) so we never touch
+#     nginx / django / celery / beat from this pipeline. nginx config and
+#     compose-file changes are owned by deploy-server.yml; this workflow only
+#     pulls a new autobot image and restarts the autobot container.
+#
+# First-time bootstrap (one-time, manual via workflow_dispatch):
+#   1. Upload autobot.env to the VM at /home/ubuntu/autosage-server/autobot.env
+#      (chmod 600) — see autobot.env.example for the required keys.
+#   2. Trigger this workflow manually (Actions → Build and Deploy Autobot →
+#      Run workflow). That seeds the GHCR image so the next deploy-server.yml
+#      run won't fail its `docker compose pull` step on a missing image.
+#   3. After confirming `curl https://<duckdns>/api/ai/health/` returns 200,
+#      merge the docker-compose.oci.yml change that drops the autobot
+#      `profiles:` gate, and from then on regular path-triggered pushes work.
+# ─────────────────────────────────────────────────────────────────────────────
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "autobot/**"
+      - ".github/workflows/deploy-autobot.yml"
+
+  workflow_dispatch:
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: lagnajit09/autosage/autosage-autobot
+  CONTAINER_NAME: autosage-autobot
+  SERVICE_NAME: autobot
+  COMPOSE_FILE: docker-compose.oci.yml
+  HOST_DIR: /home/ubuntu/autosage-server
+
+jobs:
+  build-and-push:
+    name: Build & Push Docker Image (linux/arm64)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    outputs:
+      image_digest: ${{ steps.build.outputs.digest }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GHCR_PAT }}
+
+      - name: Extract Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=raw,value=latest
+
+      # OCI Ampere A1 is aarch64; the host runner is amd64.
+      # QEMU lets buildx emulate arm64 during the build.
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push Docker image
+        id: build
+        uses: docker/build-push-action@v5
+        with:
+          context: ./autobot
+          platforms: linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  deploy:
+    name: Deploy to OCI Ampere A1
+    runs-on: ubuntu-latest
+    needs: build-and-push
+
+    steps:
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VM_HOST }}
+          username: ${{ secrets.VM_USER }}
+          key: ${{ secrets.VM_SSH_KEY }}
+          port: ${{ secrets.VM_SSH_PORT }}
+          script_stop: true
+          script: |
+            set -e
+            cd ${{ env.HOST_DIR }}
+
+            echo ">>> Verifying autobot.env exists (required for first-time bootstrap)..."
+            if [ ! -f autobot.env ]; then
+              echo "FATAL: /home/ubuntu/autosage-server/autobot.env is missing."
+              echo "       Copy autobot.env.example to the VM, fill in real values,"
+              echo "       chmod 600, then re-run this workflow."
+              exit 1
+            fi
+
+            echo ">>> Logging into GHCR..."
+            echo "${{ secrets.GHCR_PAT }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+
+            echo ">>> Pulling latest autobot image (linux/arm64)..."
+            # Explicit service name so the pull works even if docker-compose.oci.yml
+            # still has the `profiles: ["autobot"]` gate from the T02 scaffold phase
+            # (compose ignores profile filtering when you pass an explicit service).
+            docker compose -f ${{ env.COMPOSE_FILE }} pull ${{ env.SERVICE_NAME }}
+
+            echo ">>> Restarting autobot service (no other services touched)..."
+            # --no-deps so we don't accidentally restart redis/django.
+            # Explicit service name overrides profile-gating for the same reason
+            # as above (works whether or not the compose has been updated yet).
+            docker compose -f ${{ env.COMPOSE_FILE }} up -d --no-deps --pull always ${{ env.SERVICE_NAME }}
+
+            echo ">>> Pruning dangling images..."
+            docker image prune -f
+
+            echo ">>> Autobot deploy finished."
+
+  health-check:
+    name: Health Check
+    runs-on: ubuntu-latest
+    needs: deploy
+
+    steps:
+      - name: External health check over HTTPS
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VM_HOST }}
+          username: ${{ secrets.VM_USER }}
+          key: ${{ secrets.VM_SSH_KEY }}
+          port: ${{ secrets.VM_SSH_PORT }}
+          script: |
+            set -e
+            cd ${{ env.HOST_DIR }}
+
+            echo ">>> Waiting 20s for the autobot container to warm up..."
+            sleep 20
+
+            echo ">>> Internal autobot health check (via docker exec, bypasses nginx)..."
+            docker compose -f ${{ env.COMPOSE_FILE }} exec -T ${{ env.SERVICE_NAME }} \
+              python -c "import urllib.request; urllib.request.urlopen('http://localhost:8030/health/').read()" \
+              || { echo "Internal autobot health check FAILED"; exit 1; }
+            echo "Internal autobot health check PASSED."
+
+            echo ">>> Public HTTPS health check via https://${{ secrets.DUCKDNS_DOMAIN }}/api/ai/health/ ..."
+            RESPONSE=$(curl --silent --max-time 15 --write-out "\n%{http_code}" "https://${{ secrets.DUCKDNS_DOMAIN }}/api/ai/health/")
+            HTTP_BODY=$(echo "$RESPONSE" | head -n -1)
+            HTTP_CODE=$(echo "$RESPONSE" | tail -n 1)
+
+            echo "Response body : $HTTP_BODY"
+            echo "HTTP status   : $HTTP_CODE"
+
+            if [ "$HTTP_CODE" -eq 502 ] || [ "$HTTP_CODE" -eq 503 ]; then
+              echo "Got $HTTP_CODE — autobot likely not yet routed by nginx."
+              echo "If this is the very first autobot deploy, the nginx config on"
+              echo "the VM may not yet include the /api/ai/ block. Run the"
+              echo "deploy-server workflow once to refresh nginx, then re-run this one."
+              exit 1
+            fi
+
+            if [ "$HTTP_CODE" -ne 200 ]; then
+              echo "Public health check FAILED — expected 200, got $HTTP_CODE"
+              exit 1
+            fi
+
+            echo "Public HTTPS health check PASSED."
