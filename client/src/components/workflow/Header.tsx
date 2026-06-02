@@ -45,12 +45,6 @@ const Header = ({
   onClearCanvas?: () => void;
   onDeleteWorkflow?: () => void;
   workflowId?: string;
-  /** True when the AI Workflow Generator side panel is open. The Header
-   * is absolute-positioned against the viewport, so without this flag
-   * its rightmost ~300px sits visually on top of the AI panel (Run +
-   * toolbar overlap the panel header). Shifting left by the panel's
-   * full width (320px) + the panel's left border + our original 16px
-   * margin = 336px keeps both fully visible side-by-side. */
   aiPanelOpen?: boolean;
 }) => {
   const { isDark, toggleTheme } = useTheme();
@@ -78,7 +72,7 @@ const Header = ({
                 {nodes} nodes
               </div>
               <div className="text-sm text-[#9631e9] dark:text-text-secondary">
-                {edges} connections
+                {edges} edges
               </div>
             </div>
           </div>

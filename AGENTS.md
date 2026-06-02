@@ -31,7 +31,7 @@ Autosage splits into three independently-deployed planes:
 | **Control plane** | OCI Ampere A1 VM, in `docker compose` | `server/` + `nginx/` | API, auth, orchestration, SSE relay |
 | **Execution plane** | GCP Cloud Run | `exec-worker/` | SSH/WinRM/SMTP execution, NDJSON streaming |
 
-Plus the brand-new **Autobot service** at `autobot/` (FastAPI) — currently a Hello-World scaffold; client-side routes (`/ai/autobot`) already exist but are not wired to a backend yet.
+Plus the **Autobot service** at `autobot/` (FastAPI) — live on the same OCI A1 host as Django, routed by nginx at `/api/ai/*`. Chat surface (SSE streaming, tool-using script + workflow generation, conversation summarization, BYO LLM keys via `LLMConfig`, usage dashboard, archived chats) is shipped end-to-end. See Section 16 for the full Autobot reference.
 
 External managed services:
 
@@ -570,14 +570,191 @@ DRF exceptions are reshaped by `server/server/exceptions.py::custom_exception_ha
 
 ---
 
-## 16. Autobot (Work In Progress)
+## 16. Autobot (Live Service)
 
-Status: **scaffolding only**.
+Status: **shipped (Phase 1–5 of `autobot_implementation_v1.md`)**. Autobot is a live FastAPI service on the same OCI A1 host as Django, routed by nginx at `/api/ai/*`. The chat surface is fully wired end-to-end (SSE streaming, tool calls, conversation summarization, BYO LLM keys, usage dashboard, archived chats). v1 scope: chat + script/workflow tool calls. Workflow execution and cloud-infra tools remain explicitly out of scope.
 
-- `autobot/main.py` is a fresh FastAPI app with a single `GET /` returning `{"message": "Hello World"}`.
-- The frontend already has the routes `/ai/autobot` and `/ai/autobot/:id`, the chat UI shell (`components/Chat/Interface.tsx`), share/customize/vault modals, and a left-nav entry. The chat UI currently renders a hard-coded `messages` array, and `ChatInput`'s `handleSubmit` is a no-op.
-- No HTTP client to autobot exists yet on the frontend, and the autobot service has no business endpoints, models, auth, or DB integration.
-- When wired up, autobot should follow the same conventions: **JWT verification** (Clerk JWKS), **per-user data isolation**, **GCS for any large artifacts**, **no execution work on the autobot host** (delegate to exec-worker if remote execution is needed).
+### 16.1 Service topology
+
+```
+Browser ──HTTPS──▶ nginx ──HTTP──▶ autobot (FastAPI, :8030)
+                       │                │
+                       │                ├─▶ Clerk JWKS  (JWT verify, 1h LocMem cache)
+                       │                ├─▶ django:8000  (/api/autobot/*, /api/scripts/, /api/workflows/, /api/vault/* metadata)
+                       │                ├─▶ redis:6379/2  (hot ctx, TTL 7200s; admin-quota counter)
+                       │                └─▶ litellm  (Gemini / Groq / OpenRouter; or BYO LLMConfig)
+                       │
+                       └──▶ django:8000  (everything else)
+```
+
+Key invariants:
+- nginx **strips the `/api/ai/` prefix** before forwarding, so FastAPI routes are bare (`/health/`, `/threads/`, `/chat/messages/stream/`). `X-Forwarded-Prefix: /api/ai` tells autobot what prefix it's mounted under for self-URL building. `app = FastAPI(root_path="/api/ai", ...)` in `autobot/main.py`.
+- Autobot **never writes directly to Postgres**. All persistence flows through Django's `/api/autobot/*` REST surface with the **user's Clerk JWT forwarded** as Bearer — Django remains the single source of truth for per-user authorization. Per memory `[[project_autobot_persistence_model]]`.
+- Autobot uses **Redis DB `/2`** (`redis://redis:6379/2`); Celery is on `/0`. Volatile-lru eviction on a 1 GB cap means autobot's TTL'd keys can pressure-eject each other but Celery's untimed queue items are never evictable. See the Redis comment block in `docker-compose.oci.yml`.
+
+### 16.2 Repo layout
+
+```
+autobot/
+├── Dockerfile               # arm64-compatible, slim Python 3.12, non-root, uvicorn --workers 2
+├── requirements.txt
+├── main.py                  # FastAPI app + CORS + lifespan + /health/ + /whoami/
+├── settings.py              # pydantic-settings env loader
+├── auth.py                  # Clerk JWKS verify dependency + log-redaction filter
+├── throttling.py            # slowapi limiter keyed on user_sub (falls back to remote_addr)
+├── conversation/
+│   ├── cache.py             # aioredis client on DB /2; admin-quota helpers
+│   ├── persistence.py       # httpx client wrapping Django /api/autobot/*
+│   └── summarizer.py        # tiktoken counts, pre-compaction, summarization
+├── llm/
+│   ├── client.py            # LiteLLM wrapper; LLMError(retryable); admin chain + BYO resolution
+│   ├── tools.py             # JSON-Schema tool registry + dispatcher (with timeout + error normalization)
+│   └── prompts.py           # base system prompt + tool-use guidance
+├── streaming/
+│   └── sse.py               # event:/data: SSE frame formatting
+├── routers/
+│   ├── proxy.py             # thread / settings / llm-config CRUD passthroughs to Django
+│   ├── chat.py              # POST /chat/messages/stream/  ← the SSE chat endpoint
+│   └── analytics.py         # GET /dashboard/ (Django aggregation + Redis quota merge)
+└── tools/                   # side-effect imports register into llm/tools.py registry
+    ├── scripts.py           # list/read/create/update script
+    ├── workflows.py         # list/read/create/update workflow
+    └── vault.py             # list_vault_resources (metadata only, never returns secrets)
+```
+
+### 16.3 Endpoint surface
+
+All routes are auth-required via `Depends(require_auth)` except `/health/`. Throttles applied via `app.state.limiter` (slowapi, keyed on `user_sub`).
+
+| Method | Path (external) | Purpose |
+|---|---|---|
+| GET | `/api/ai/health/` | Public liveness — service, version, uptime. **No auth.** |
+| GET | `/api/ai/whoami/` | Authenticated canary — returns `user_sub`. |
+| GET/POST | `/api/ai/threads/` | List user threads / create thread (proxy to Django). |
+| GET/PATCH/DELETE | `/api/ai/threads/<id>/` | Thread detail / rename + archive / delete. |
+| GET | `/api/ai/threads/<id>/messages/` | Paginated message history (proxy — used by SPA on thread-open). |
+| POST | `/api/ai/chat/messages/stream/` | **The chat endpoint.** SSE response, emits `token`, `tool_call_start`, `tool_result`, `done`, `error`. |
+| POST | `/api/ai/threads/<id>/token-refresh/` | Mid-stream Clerk JWT refresh; remaps Bearer for in-flight tool dispatch. |
+| GET/PATCH | `/api/ai/settings/` | User-level autobot settings (default LLM config, tone, etc.). |
+| GET/POST | `/api/ai/llm-configs/` | List / create user BYO LLM configs (api key write-only). |
+| GET/PATCH/DELETE | `/api/ai/llm-configs/<id>/` | BYO LLM config detail. |
+| GET | `/api/ai/dashboard/` | Today / Last 7d / All-time usage buckets + Redis admin-quota counter. |
+
+The `root_path="/api/ai"` setting on the FastAPI app means **internally** these are `/health/`, `/threads/`, etc. — nginx strips the prefix on the way in.
+
+### 16.4 Auth + JWT forwarding
+
+`autobot/auth.py::require_auth`:
+- Verifies the incoming Clerk JWT against JWKS (RS256, in-process 1 h LocMem-style cache).
+- Returns an `AuthContext(user_sub, raw_jwt)`.
+- The **raw JWT is forwarded** to every Django call (`httpx.AsyncClient` with `Authorization: Bearer <raw_jwt>`). Autobot itself never elevates privileges — every Django request runs under the **user's own** identity, so per-user query scoping in Django enforces tenant isolation automatically. No second `IsInternalCaller` permission was added; Django treats autobot as just another Clerk-authed client.
+- `install_log_redaction()` installs a `logging.Filter` that strips any `Authorization:` substring before formatter emit. Applied in both `lifespan` startup and `basicConfig` time to cover early-startup logs. `httpx` logger is bumped to WARNING because it echoes headers on errors.
+
+### 16.5 Chat flow (`routers/chat.py`)
+
+1. Verify JWT → `auth.user_sub` + `raw_jwt`.
+2. POST the user message to Django (`/api/autobot/threads/<id>/messages/`). This **also serves as the authorization check** — Django's `_get_thread_or_404` 404s on a thread the caller doesn't own, no separate pre-fetch needed.
+3. `asyncio.gather(get_thread, get_history)` — parallel round-trip. Thread payload carries `system_prompt_override` + optional `llm_config_id`. History page size = 20.
+4. Hydrate hot context from Redis (`autobot:thread:<id>:ctx`); on miss, build from the history just fetched + latest Summary row.
+5. **Pre-compaction** of any `tool` messages > 2 KB to one-line digests in-context (raw payloads stay in Postgres). Defers summarization 5–10 turns.
+6. Tiktoken count. If `tokens > AUTOBOT_CONTEXT_TARGET_RATIO × context_window`, run `conversation/summarizer.py` to collapse all-but-the-last-N messages into a `system`-role summary, persist a `Summary` row via Django, replace those messages in-context.
+7. Resolve the LLM client (`llm/client.py::resolve_for_thread`) — returns a list:
+   - If `UserSettings.default_llm_config_id` or `Thread.llm_config_id` is set → BYO: `POST /api/autobot/llm-configs/<id>/reveal/` once per request to get the plaintext api key, never cache it.
+   - Else → admin chain: `[primary, *AUTOBOT_ADMIN_FALLBACKS]`. `LLMResolution.is_admin = True` enables the per-user daily quota.
+8. **Round-1 fallback** (T18a): try each `LLMResolution` in order on retryable errors (`RateLimitError`, `ServiceUnavailableError`, `Timeout`, `APIConnectionError`). Once any `event: token` has been written to the client, fallback is **suppressed** — mid-turn provider swaps would interleave deltas.
+9. **OpenRouter cascade** (T18b): when `resolution.provider == "openrouter"` and `OPENROUTER_FALLBACK_MODELS` is set, inject `extra_body={"models": [...], "route": "fallback"}` so OpenRouter tries multiple free models server-side in one round-trip.
+10. Stream deltas as `event: token`. On `tool_call`, emit `event: tool_call_start`, dispatch via `llm/tools.py::dispatch` (timeout, error normalization to `{"error": "..."}`), emit `event: tool_result`, append the tool message to context, loop. Hard cap `AUTOBOT_MAX_TOOL_ROUNDS=10`.
+11. On final assistant message: persist via Django with `prompt_tokens / completion_tokens / total_tokens / provider / model_name / is_byo`, refresh Redis cache + TTL, emit `event: done`. After any **write tool**, invalidate `autobot:thread:<id>:ctx`.
+
+### 16.6 Tools (v1)
+
+JSON-Schema definitions in `autobot/llm/tools.py`; implementations in `autobot/tools/*.py` (side-effect imports register into the global registry via `import tools as _tools` in `main.py`).
+
+| Tool | Module | Calls Django at | Notes |
+|---|---|---|---|
+| `list_scripts`, `read_script`, `create_script`, `update_script` | `tools/scripts.py` | `/api/scripts/*` | Same surface the SPA Script Editor uses. |
+| `list_workflows`, `read_workflow`, `create_workflow`, `update_workflow` | `tools/workflows.py` | `/api/workflows/*` | Node/edge JSON shape documented in `llm/prompts.py`. |
+| `list_vault_resources` | `tools/vault.py` | `/api/vault/*` | **Metadata only** — returns `{vaults, servers, credentials}` with ids/names, never secret values. The LLM references resources by id. |
+
+Each tool wrapper:
+1. Validates inputs against its JSON Schema (LiteLLM also enforces — belt-and-braces).
+2. Calls Django with the **forwarded user JWT**.
+3. Catches non-2xx → `{"error": "<flattened field msg>"}` so the LLM can self-correct on the next round. Django 400 `errors: {field: msg}` payloads get flattened to a single string.
+4. Per-tool timeout default = 30s (set via `ToolDefinition.timeout_seconds`). 30s ceiling exists for slow GCS uploads on large script content; sub-second is normal.
+
+**Workflow execution is NOT a tool in v1.** That's a higher-trust surface — ship after the chat surface has been observed in prod. If v2 adds a `run_workflow` tool, register it with `timeout_seconds=600` and leave CRUD tools at 30s.
+
+### 16.7 Admin pool resilience (T18a / T18b)
+
+Two-tier fallback:
+
+**Tier 1 — inside OpenRouter (free):** `OPENROUTER_FALLBACK_MODELS` (comma-sep ids like `google/gemini-2.0-flash-exp:free,meta-llama/llama-3.3-70b-instruct:free`). OpenRouter tries the listed free models server-side in a single request. Only include tool-capable models — non-tool models silently fail tool-using turns.
+
+**Tier 2 — autobot's own chain:** `AUTOBOT_ADMIN_FALLBACKS` (comma-sep `provider/model`). If OpenRouter (or whichever primary) errors retryably, autobot moves to the next provider — round-1 only, before any tokens are streamed. BYO requests never fall back; the user's choice is final.
+
+**Per-user daily quota:** `AUTOBOT_ADMIN_DAILY_LIMIT` (default 30) tracked in Redis at `autobot:admin_quota:<user_sub>:<yyyymmdd>` with 26-hour TTL (DST + skew margin). Counter ticks **once per chat turn**, not per tool-call round. BYO turns don't tick. At cap, the streaming endpoint emits `event: error code=admin_quota_exhausted` pointing at the Customize modal. Redis errors **fail-open** — better to let chat through than block everyone if Redis is down; slowapi still caps request volume.
+
+### 16.8 Persistence model — Django owns the schema
+
+The `server/autobot_api/` Django app owns all autobot tables. Models:
+
+| Model | Notes |
+|---|---|
+| `LLMConfig` | User BYO config. Structured fields (`provider`, `model_name`, `api_version`, `base_url`, `system_instruction`) + Fernet-encrypted `api_key` via `vault.fields.EncryptedCharField`. **NOT in Vault** — Vault is for workflow-target auth material; LLMConfig is dedicated to the chat brain. `is_default` validated max-one-per-user. Reveal endpoint mirrors the Vault `/reveal/` pattern. |
+| `Thread` | `user`, `title`, `model_slug`, `system_prompt_override` (APPENDS to base prompt under a `## User customizations` heading — never replaces; losing the Autosage grounding would let the LLM hallucinate), `llm_config_id (FK NULL)`, `is_archived`, `last_message_at`. |
+| `Message` | `thread`, `role (user|assistant|system|tool)`, `content`, `content_type` (MIME — `text/plain` default for user, `text/markdown` for assistant), `prompt_tokens`, `completion_tokens`, `total_tokens`, `provider`, `model_name`, `is_byo`, `tool_calls (JSON)`, `tool_call_id`. |
+| `Summary` | `thread`, `up_to_message`, `summary_text`, `summary_tokens`. |
+| `UserSettings` | `user (OneToOne)`, `default_llm_config_id (FK NULL → LLMConfig)`, `tone`, `expertise`, `language`, `custom_instructions`. Same APPENDS rule as `system_prompt_override`. |
+
+REST surface mounted at `path('api/autobot/', include('autobot_api.urls'))`. All endpoints use `ClerkAuthMiddleware` + `MiddlewareAuthentication` + `IsAuthenticated`; querysets filter by `user=request.user`. Throttle scopes added to `server/server/rate_limiters.py`: `autobot_burst` (30/min), `autobot_sustained` (500/day), `autobot_message_create` (60/min).
+
+### 16.9 Frontend surface (`client/`)
+
+- `client/src/lib/api/autobot.ts` — thread / settings / llm-config / dashboard helpers + `streamMessage()` (manual fetch + SSE frame parsing, mirrors `WorkflowExecution::streamLogs` — `EventSource` can't carry the Bearer token).
+- Routes (in `App.tsx`, all under `<ProtectedRoute>`):
+  - `/ai/autobot` → thread list landing
+  - `/ai/autobot/:id` → chat surface (`Chat/Interface.tsx` + `Chat/ChatInput.tsx`)
+  - `/ai/autobot/dashboard` → analytics page (Today / Last 7d / All-time + quota + model-usage chart via recharts)
+  - `/ai/autobot/archived` → archived chats list (intentionally **NOT** in LeftNav; reached via "View archived chats" button on the dashboard)
+- LeftNav has two entries: "Autobot" (chat) and "Autobot Dashboard" (analytics).
+- `Chat/History.tsx` row menu: **active threads** → Rename / Archive / Delete; **archived threads** → Unarchive / Delete. Archived threads render a read-only banner with an inline Unarchive button and a disabled `ChatInput`.
+- `Dashboard/Banners.tsx::AutobotTodayCard` — compact quota tile on the main Autosage Dashboard. `AutobotBanner` (older invite card) is intentionally retained alongside it.
+- AI generator modals (`AIScriptGenerator.tsx`, `workflow/AIWorkflowGenerator.tsx`) now open a pre-filled Autobot thread with the relevant tool restricted, instead of hitting the dead `localhost:3001` legacy backend.
+
+### 16.10 CI/CD & deployment
+
+- `.github/workflows/deploy-autobot.yml` mirrors `deploy-server.yml`. Path filter: `autobot/**` and the workflow file itself. arm64 buildx → `ghcr.io/lagnajit09/autosage/autosage-autobot:latest`. Deploy is **surgical**: `docker compose pull autobot && docker compose up -d --no-deps autobot` — never touches nginx / django / celery.
+- Compose service `autobot` lives in `docker-compose.oci.yml` alongside django. Healthcheck hits `/health/` (the bare `/` 404s — FastAPI doesn't auto-mount a root route).
+- Host bind mount: `/home/ubuntu/autosage-server/autobot.env` (chmod 600). Required keys documented in `autobot.env.example`.
+- First-time bootstrap: manually trigger `deploy-autobot.yml` via `workflow_dispatch` to seed the GHCR image **before** any `docker-compose.oci.yml` change that requires `docker compose pull` to succeed on the autobot service.
+- `ALLOWED_HOSTS` on Django **must include `django`** — autobot calls `http://django:8000/...` and Django checks the `Host` header. CORS does not need an autobot entry (server-to-server httpx calls carry no `Origin`).
+
+### 16.11 Architectural rules for autobot changes
+
+When touching autobot code, preserve:
+
+1. **JWT forwarding everywhere.** Every Django call must carry the user's raw Bearer. No service-account elevation, no `IsInternalCaller` bypass.
+2. **Django is the single source of truth.** Don't add an autobot-side cache that becomes authoritative. Redis on `/2` is hot context only — Postgres is the system of record.
+3. **Tool error contract.** A tool that fails returns `{"error": "..."}` so the LLM can self-correct. Don't raise exceptions across the dispatcher boundary — they end the turn.
+4. **Cap tool rounds and per-turn quota.** Don't bypass `AUTOBOT_MAX_TOOL_ROUNDS` or the admin quota. Both exist to bound the worst-case cost of a single user turn.
+5. **Never log Authorization values.** Use `install_log_redaction()` — don't add a new logger that bypasses the filter. Don't `print()` request headers.
+6. **Never inline vault secrets into prompts.** The LLM references vault resources by **id** only; `list_vault_resources` returns metadata.
+7. **SSE event vocabulary is fixed.** Reuse `token` / `tool_call_start` / `tool_result` / `done` / `error`. New event types require a coordinated client+server change.
+8. **`/api/ai/` prefix stripping is in nginx.** Don't bake the prefix into application URLs. `X-Forwarded-Prefix` tells autobot what it's mounted under for self-URL building.
+
+### Do NOT
+- Add a route that bypasses `Depends(require_auth)` (other than `/health/`).
+- Write directly to Postgres from autobot. Go through Django.
+- Cache plaintext BYO api keys beyond the request lifecycle.
+- Mix autobot keys onto Redis DB `/0` — that's Celery's namespace.
+- Add tool calls for workflow execution in v1.
+- Change the `is_byo` flag's meaning — the dashboard depends on it to split admin vs BYO tokens after the fact (provider names overlap).
+
+### Do
+- Add new tools by creating a module under `autobot/tools/`, registering via `tool_registry.register(...)`, and importing it (side-effect) in `tools/__init__.py`.
+- Use the existing JSON-Schema validation + 30 s default timeout in `ToolDefinition`.
+- Extend the system prompt in `llm/prompts.py` (not inline in `routers/chat.py`).
+- For new providers, prefer LiteLLM's existing wrappers over a custom client. If a provider exposes server-side fallback (like OpenRouter), use it before falling back at the autobot layer.
 
 ---
 

@@ -110,11 +110,11 @@ export const AutobotTodayCard = () => {
   };
 
   return (
-    <Card className="bg-white dark:bg-gray-800/40 border border-gray-200 dark:border-gray-700/50">
+    <Card className="bg-white dark:bg-gray-800/40 border border-gray-200 dark:border-gray-700/50 overflow-hidden">
       <CardHeader className="pb-3">
         <CardTitle className="flex items-center gap-2 text-base text-gray-900 dark:text-white">
-          <BarChart3 size={18} className="text-[#7429a7] dark:text-[#d4b0eb]" />
-          Autobot — today
+          <BarChart3 size={18} className="text-[#7429a7] dark:text-[#d4b0eb] flex-shrink-0" />
+          <span className="truncate">Autobot — today</span>
         </CardTitle>
         <CardDescription className="text-gray-500 dark:text-gray-400">
           Usage since 00:00 UTC.
@@ -130,7 +130,7 @@ export const AutobotTodayCard = () => {
         ) : (
           <div className="grid grid-cols-3 gap-2 text-center">
             <div className="min-w-0">
-              <p className="text-[11px] text-gray-500 dark:text-gray-400">
+              <p className="text-[11px] text-gray-500 dark:text-gray-400 truncate">
                 Requests
               </p>
               <p className="text-base sm:text-lg font-bold text-gray-900 dark:text-white truncate">
@@ -138,7 +138,7 @@ export const AutobotTodayCard = () => {
               </p>
             </div>
             <div className="min-w-0">
-              <p className="text-[11px] text-gray-500 dark:text-gray-400">
+              <p className="text-[11px] text-gray-500 dark:text-gray-400 truncate">
                 Tokens
               </p>
               <p className="text-base sm:text-lg font-bold text-gray-900 dark:text-white truncate">
@@ -146,7 +146,7 @@ export const AutobotTodayCard = () => {
               </p>
             </div>
             <div className="min-w-0">
-              <p className="text-[11px] text-gray-500 dark:text-gray-400">
+              <p className="text-[11px] text-gray-500 dark:text-gray-400 truncate">
                 Quota
               </p>
               <p className="text-base sm:text-lg font-bold text-gray-900 dark:text-white truncate">
@@ -157,13 +157,20 @@ export const AutobotTodayCard = () => {
             </div>
           </div>
         )}
+        {/* w-full + justify-between pins the arrow to the right edge while the
+            label truncates with an ellipsis inside its min-w-0 wrapper. Without
+            min-w-0 the flex item refuses to shrink below its content width and
+            shadcn Button's default whitespace-nowrap causes the text to push
+            past the card edge at the lg sidebar width (~280-300px). */}
         <Button
           variant="link"
-          className="w-full text-blue-600 dark:text-blue-400 p-0 h-auto justify-end text-xs sm:text-sm"
+          className="w-full text-blue-600 dark:text-blue-400 p-0 h-auto justify-between text-xs sm:text-sm gap-1"
           onClick={() => navigate("/ai/autobot/dashboard")}
         >
-          View full Autobot Dashboard
-          <ArrowRight className="w-4 h-4 ml-1" />
+          <span className="min-w-0 flex-1 truncate text-left">
+            View full Dashboard
+          </span>
+          <ArrowRight className="w-4 h-4 flex-shrink-0" />
         </Button>
       </CardContent>
     </Card>
