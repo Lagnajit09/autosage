@@ -1,9 +1,18 @@
-import React from "react";
 import { Monitor, ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useNavigate } from "react-router-dom";
 
-export const MobileRestrictedMessage = () => {
+interface MobileRestrictedMessageProps {
+  /** Headline title (defaults to "Desktop Experience Recommended"). */
+  title?: string;
+  /** Body copy explaining which surface is desktop-only. */
+  description?: string;
+}
+
+export const MobileRestrictedMessage = ({
+  title = "Desktop Experience Recommended",
+  description = "The Workflow Builder is designed for larger screens to provide the best possible experience. Please stick to a desktop or tablet device to build and manage your workflows.",
+}: MobileRestrictedMessageProps = {}) => {
   const navigate = useNavigate();
 
   return (
@@ -18,12 +27,10 @@ export const MobileRestrictedMessage = () => {
 
         <div className="space-y-2">
           <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100">
-            Desktop Experience Recommended
+            {title}
           </h2>
           <p className="text-gray-500 dark:text-gray-400 leading-relaxed">
-            The Workflow Builder is designed for larger screens to provide the
-            best possible experience. Please stick to a desktop or tablet device
-            to build and manage your workflows.
+            {description}
           </p>
         </div>
 

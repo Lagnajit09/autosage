@@ -24,6 +24,7 @@ import { THREADS_CHANGED_EVENT } from "./History";
 import { type ChatMode } from "./InputTypeGroup";
 import ModelPicker from "./ModelPicker";
 import ShareModal from "./ShareModal";
+import ThreadSettingsModal from "./ThreadSettingsModal";
 import ToolCallBadge, { type ToolCallStatus } from "./ToolCallBadge";
 import { AutobotIcon } from "../../AutobotIcon";
 import { Vault } from "../../vault/Vault";
@@ -42,6 +43,7 @@ import {
   Menu,
   Settings2,
   ShareIcon,
+  SlidersHorizontal,
 } from "lucide-react";
 
 import {
@@ -178,6 +180,7 @@ const Interface = () => {
   const [shareModalOpen, setShareModalOpen] = useState(false);
   const [customizeModalOpen, setCustomizeModalOpen] = useState(false);
   const [vaultModalOpen, setVaultModalOpen] = useState(false);
+  const [threadSettingsOpen, setThreadSettingsOpen] = useState(false);
 
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
@@ -665,6 +668,22 @@ const Interface = () => {
             </TooltipContent>
           </Tooltip>
 
+          {thread && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  onClick={() => setThreadSettingsOpen(true)}
+                  className="flex items-center gap-2 cursor-pointer bg-transparent hover:bg-gray-100/70 dark:hover:bg-gray-800/70 py-2 px-3 rounded-full transition-colors"
+                >
+                  <SlidersHorizontal className="w-4 h-4 text-gray-800 dark:text-gray-200" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>Thread settings</p>
+              </TooltipContent>
+            </Tooltip>
+          )}
+
           <Tooltip>
             <TooltipTrigger asChild>
               <Button
@@ -686,6 +705,19 @@ const Interface = () => {
         open={customizeModalOpen}
         onOpenChange={setCustomizeModalOpen}
         onConfigsChanged={() => void refreshConfigs()}
+      />
+      <ThreadSettingsModal
+        open={threadSettingsOpen}
+        onOpenChange={setThreadSettingsOpen}
+        thread={thread}
+        configs={configs}
+        userDefaultId={userDefaultId}
+        onSaved={(updated) => {
+          // Keep the ModelPicker pill in sync — it reads from
+          // `selectedConfigId`, not `thread.llm_config`.
+          setThread(updated);
+          setSelectedConfigId(updated.llm_config);
+        }}
       />
       <Vault isOpen={vaultModalOpen} setIsOpen={setVaultModalOpen} />
 
@@ -788,7 +820,25 @@ const Interface = () => {
           {/* Fixed Input Area */}
           <div className="w-full shrink-0 z-20 pb-4 pt-2 px-4 bg-transparent">
             <div className="w-full max-w-3xl xl:max-w-[75%] mx-auto flex flex-col gap-2">
-              <div className="flex justify-end px-2">
+              <div className="flex justify-end items-center gap-1.5 px-2">
+                {thread && (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <button
+                        type="button"
+                        onClick={() => setThreadSettingsOpen(true)}
+                        disabled={isStreaming}
+                        aria-label="Thread settings"
+                        className="lg:hidden inline-flex items-center justify-center rounded-full border border-gray-300 dark:border-gray-700 bg-white/60 dark:bg-gray-800/40 px-2 py-1 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700/60 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        <SlidersHorizontal className="h-3 w-3" />
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>Thread settings</p>
+                    </TooltipContent>
+                  </Tooltip>
+                )}
                 <ModelPicker
                   selectedConfigId={selectedConfigId}
                   configs={configs}

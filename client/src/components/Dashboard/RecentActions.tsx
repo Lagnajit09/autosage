@@ -1,8 +1,12 @@
 import { ArrowRight, FileText, Zap } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 
 // --- Recent Items (Workflows/Scripts) ---
 interface RecentItemProps {
+  /** Workflow UUID. Required for workflows, ignored for scripts (scripts
+   * are routed by name — see /script-editor/:name in App.tsx). */
+  id?: string;
   title: string;
   type: "workflow" | "script";
   date: string;
@@ -12,8 +16,32 @@ interface RecentItemProps {
 }
 
 export const RecentItemCard = ({ item }: { item: RecentItemProps }) => {
+  const navigate = useNavigate();
+
+  // Workflows are routed by id (/workflow/:id), scripts by name
+  // (/script-editor/:name) — see App.tsx route table.
+  const handleOpen = () => {
+    if (item.type === "workflow") {
+      if (!item.id) return; // legacy payload — backend now sends id
+      navigate(`/workflow/${item.id}`);
+    } else {
+      navigate(`/script-editor/${encodeURIComponent(item.title)}`);
+    }
+  };
+
   return (
-    <div className="flex items-center justify-between p-4 bg-white dark:bg-gray-800/40 rounded-lg border border-gray-200 dark:border-gray-700/50 hover:border-blue-500/50 transition-colors cursor-pointer group">
+    <div
+      role="button"
+      tabIndex={0}
+      onClick={handleOpen}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          handleOpen();
+        }
+      }}
+      className="flex items-center justify-between p-4 bg-white dark:bg-gray-800/40 rounded-lg border border-gray-200 dark:border-gray-700/50 hover:border-blue-500/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 transition-colors cursor-pointer group"
+    >
       <div className="w-full flex items-center justify-between gap-3">
         <div className="flex items-center gap-2">
           <div

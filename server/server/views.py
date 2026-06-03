@@ -109,6 +109,7 @@ def dashboard_summary(request):
     recent_workflows = []
     for wf in recent_workflows_qs:
         recent_workflows.append({
+            'id': str(wf.id),
             'title': wf.name,
             'type': 'workflow',
             'date': wf.modified_at.isoformat(),

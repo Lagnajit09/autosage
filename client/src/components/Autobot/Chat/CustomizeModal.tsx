@@ -431,10 +431,12 @@ const CustomizeModal = ({
                   <p>
                     Add your own provider keys (Gemini, Groq, OpenAI,
                     Anthropic, etc.) and Autobot will use them instead of
-                    the system's free models. The one marked <em>Default</em>{" "}
-                    above is used for every new chat. You can override the
-                    model on a per-chat basis with the picker above the
-                    message input.
+                    the system&apos;s free models. The one marked{" "}
+                    <em>Default</em> above is used for every new chat. You
+                    can override the model on a per-chat basis with the
+                    picker above the message input — and tweak the system
+                    prompt for a single chat from{" "}
+                    <em>Thread settings</em> in the chat header.
                   </p>
                 </div>
               )}

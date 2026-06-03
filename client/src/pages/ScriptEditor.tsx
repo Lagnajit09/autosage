@@ -4,6 +4,8 @@ import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar";
 import { FileExplorerSidebar } from "@/components/ScriptEditor/FileExplorerSidebar";
 import { AIScriptGeneratorSidebar } from "@/components/ScriptEditor/AIScriptGeneratorSidebar";
 import { DeleteConfirmationModal } from "@/components/DeleteConfirmationModal";
+import { MobileRestrictedMessage } from "@/components/workflow/MobileRestrictedMessage";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { useNavigate } from "react-router-dom";
 
 import { useScriptEditor } from "../components/ScriptEditor/useScriptEditor";
@@ -15,7 +17,22 @@ import { ScriptExecutionDrawer } from "../components/ScriptEditor/ScriptExecutio
 import { ExecutionHistoryModal } from "../components/ScriptEditor/ExecutionHistoryModal";
 import { useState, useEffect } from "react";
 
+// Mobile gate lives in this thin wrapper so the inner component's
+// hooks (useScriptEditor, useScriptExecution, Monaco mount) never run on
+// small screens. Same shape as WorkflowBuilder / WorkflowBuilderContent.
 const ScriptEditor = () => {
+  const isMobile = useIsMobile();
+  if (isMobile) {
+    return (
+      <MobileRestrictedMessage
+        description="The Script Editor uses a code editor that's hard to use on small screens. Please open this page on a desktop or tablet to create, edit, and run scripts."
+      />
+    );
+  }
+  return <ScriptEditorContent />;
+};
+
+const ScriptEditorContent = () => {
   const navigate = useNavigate();
   const { isDark } = useTheme();
 
