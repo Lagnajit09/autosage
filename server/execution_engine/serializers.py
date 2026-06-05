@@ -85,6 +85,12 @@ class WorkflowRunRequestSerializer(serializers.Serializer):
     inputs = serializers.DictField(required=False, default=dict)
     send_email = serializers.BooleanField(required=False, default=False)
     user_email = serializers.EmailField(required=False, allow_blank=True, default="")
+    # Only "autobot" is an accepted client-supplied source; any other value
+    # (incl. "http"/"schedule") is ignored by the view and coerced to "manual"
+    # so a Clerk-authed client can't impersonate a webhook or scheduled run.
+    trigger_source = serializers.ChoiceField(
+        choices=["manual", "autobot"], required=False, default="manual"
+    )
 
     def validate(self, attrs):
         if attrs.get("send_email") and not attrs.get("user_email"):

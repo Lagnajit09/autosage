@@ -17,7 +17,11 @@ from server.rate_limiters import (
     HttpTriggerThrottle,
 )
 from workflows.models import Workflow
-from execution_engine.models import WorkflowRun, WorkflowNodeRun
+from execution_engine.models import (
+    WorkflowRun,
+    WorkflowNodeRun,
+    WorkflowRunIdempotencyKey,
+)
 from scripts.models import Script
 from vault.models import Vault, Server, Credential
 from execution_engine.serializers import (
@@ -64,6 +68,42 @@ def trigger_workflow_run(request, workflow_id):
     inputs = serializer.validated_data.get("inputs", {})
     send_email = serializer.validated_data.get("send_email", False)
     user_email = serializer.validated_data.get("user_email", "") or ""
+    # Restricted to {"manual", "autobot"} by the serializer — a client can't
+    # forge "http"/"schedule" to disguise a chat-initiated run as a webhook/cron.
+    trigger_source = serializer.validated_data.get("trigger_source", "manual")
+
+    # Optional idempotency. The builder Run button sends no key and behaves as
+    # before (every click enqueues). Autobot's run/rerun tools always send the
+    # per-tool-call id, so a double-call in one LLM turn collapses to one run.
+    # Keyed on (user, workflow, key) — see WorkflowRunIdempotencyKey. Webhook /
+    # schedule paths keep their own dedup; this only covers manual + autobot.
+    idempotency_key = (request.headers.get("Idempotency-Key") or "").strip()
+    if len(idempotency_key) > 255:
+        return api_response(
+            success=False,
+            message="Idempotency-Key header exceeds 255 characters.",
+            status_code=status.HTTP_400_BAD_REQUEST,
+        )
+
+    if idempotency_key:
+        # Fast-path replay check.
+        existing = (
+            WorkflowRunIdempotencyKey.objects
+            .select_related("workflow_run")
+            .filter(user=request.user, workflow=workflow, key=idempotency_key)
+            .first()
+        )
+        if existing is not None:
+            return api_response(
+                success=True,
+                message="Duplicate request — returning prior workflow run.",
+                data={
+                    "workflow_run_id": str(existing.workflow_run_id),
+                    "status": existing.workflow_run.status,
+                    "idempotent": True,
+                },
+                status_code=status.HTTP_200_OK,
+            )
 
     try:
         workflow_run = enqueue_workflow_run(
@@ -72,6 +112,7 @@ def trigger_workflow_run(request, workflow_id):
             inputs=inputs,
             send_email=send_email,
             user_email=user_email,
+            trigger_source=trigger_source,
         )
     except RunBuildError as exc:
         return api_response(
@@ -80,10 +121,46 @@ def trigger_workflow_run(request, workflow_id):
             status_code=status.HTTP_400_BAD_REQUEST,
         )
 
+    if idempotency_key:
+        # Race-safe insert. If a concurrent request beat us to the same key,
+        # surface their run id and accept the orphan we just queued — the unique
+        # constraint is the source of truth (mirrors the webhook flow).
+        try:
+            WorkflowRunIdempotencyKey.objects.create(
+                user=request.user,
+                workflow=workflow,
+                key=idempotency_key,
+                workflow_run=workflow_run,
+            )
+        except IntegrityError:
+            existing = (
+                WorkflowRunIdempotencyKey.objects
+                .select_related("workflow_run")
+                .get(user=request.user, workflow=workflow, key=idempotency_key)
+            )
+            logger.warning(
+                "Workflow %s idempotency race: orphan run %s replaced by %s",
+                workflow.id, workflow_run.id, existing.workflow_run_id,
+            )
+            return api_response(
+                success=True,
+                message="Duplicate request — returning prior workflow run.",
+                data={
+                    "workflow_run_id": str(existing.workflow_run_id),
+                    "status": existing.workflow_run.status,
+                    "idempotent": True,
+                },
+                status_code=status.HTTP_200_OK,
+            )
+
     return api_response(
         success=True,
         message="Workflow execution queued successfully.",
-        data={"workflow_run_id": str(workflow_run.id), "status": "queued"},
+        data={
+            "workflow_run_id": str(workflow_run.id),
+            "status": "queued",
+            "idempotent": False,
+        },
         status_code=status.HTTP_202_ACCEPTED,
     )
 

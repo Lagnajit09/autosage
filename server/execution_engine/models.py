@@ -56,6 +56,7 @@ class WorkflowRun(models.Model):
         ('manual', 'Manual'),
         ('http', 'HTTP'),
         ('schedule', 'Schedule'),
+        ('autobot', 'Autobot'),
     ]
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -158,4 +159,50 @@ class WorkflowNodeRun(models.Model):
 
     def __str__(self) -> str:
         return f"NodeRun {self.node_label or self.node_id} ({self.status}) — Run {self.workflow_run_id}"
+
+
+class WorkflowRunIdempotencyKey(models.Model):
+    """Maps a client-supplied idempotency key to the run it produced, for the
+    manual + autobot trigger paths.
+
+    The public webhook path has its own ``triggers.HttpTriggerIdempotencyKey``
+    (FK'd to an ``HttpTrigger`` row). Manual/autobot runs have no trigger row,
+    so this table is keyed on ``(user, workflow, key)`` instead. A repeat POST
+    with the same key collapses to the original run rather than queueing a
+    duplicate — race-safe via the unique constraint, the same way the webhook
+    flow handles concurrent retries. Postgres is the source of truth here; no
+    Redis lock is used (it would be weaker and add a round-trip on cost-billed
+    Upstash).
+    """
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='workflow_run_idempotency_keys',
+    )
+    workflow = models.ForeignKey(
+        'workflows.Workflow',
+        on_delete=models.CASCADE,
+        related_name='run_idempotency_keys',
+    )
+    key = models.CharField(max_length=255)
+    workflow_run = models.ForeignKey(
+        WorkflowRun,
+        on_delete=models.CASCADE,
+        related_name='+',
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = [('user', 'workflow', 'key')]
+        indexes = [
+            models.Index(fields=['created_at'], name='wf_run_idem_created_idx'),
+        ]
+        db_table = "workflow_run_idempotency_keys"
+        verbose_name = "Workflow Run Idempotency Key"
+        verbose_name_plural = "Workflow Run Idempotency Keys"
+
+    def __str__(self) -> str:
+        return f"IdempotencyKey {self.key} (workflow {self.workflow_id})"
 

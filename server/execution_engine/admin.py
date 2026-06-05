@@ -1,5 +1,10 @@
 from django.contrib import admin
-from .models import ScriptExecution, WorkflowNodeRun, WorkflowRun
+from .models import (
+    ScriptExecution,
+    WorkflowNodeRun,
+    WorkflowRun,
+    WorkflowRunIdempotencyKey,
+)
 
 @admin.register(ScriptExecution)
 class ScriptExecutionAdmin(admin.ModelAdmin):
@@ -32,11 +37,25 @@ class ScriptExecutionAdmin(admin.ModelAdmin):
 
 @admin.register(WorkflowRun)
 class WorkflowRunAdmin(admin.ModelAdmin):
-    list_display = ("id", "workflow", "user", "status", "created_at", "started_at", "finished_at")
-    list_filter = ("status",)
+    list_display = ("id", "workflow", "user", "status", "trigger_source", "created_at", "started_at", "finished_at")
+    list_filter = ("status", "trigger_source")
     search_fields = ("id", "workflow__name", "celery_task_id")
     readonly_fields = ("id", "created_at", "started_at", "finished_at")
     ordering = ("-created_at",)
+
+
+@admin.register(WorkflowRunIdempotencyKey)
+class WorkflowRunIdempotencyKeyAdmin(admin.ModelAdmin):
+    list_display = ("id", "user", "workflow", "key", "workflow_run", "created_at")
+    search_fields = ("key", "workflow__name", "user__username", "workflow_run__id")
+    readonly_fields = ("id", "created_at")
+    ordering = ("-created_at",)
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
 
 
 @admin.register(WorkflowNodeRun)
