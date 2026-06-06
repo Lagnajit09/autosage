@@ -45,7 +45,11 @@ from llm.client import (
     friendly_llm_message,
     resolve_for_thread,
 )
-from llm.prompts import get_panel_allowed_tools, get_system_prompt
+from llm.prompts import (
+    get_mode_allowed_tools,
+    get_panel_allowed_tools,
+    get_system_prompt,
+)
 from llm.tools import dispatch_tool, get_tool_schemas
 from settings import get_settings
 from streaming.sse import (
@@ -76,6 +80,33 @@ _WRITE_TOOL_NAMES = {
 }
 
 _CHAT_RATE_LIMIT = "30/minute"
+
+# Display label for an empty `mode` in logs — the mode floor treats empty
+# as research (see `get_mode_allowed_tools`), so log it as such.
+_DEFAULT_MODE_LABEL = "research"
+
+
+def _effective_allowed_tools(
+    mode: str, panel: str
+) -> frozenset[str] | set[str] | None:
+    """Intersect the mode hard-floor with the panel floor.
+
+    The effective allow-list is the INTERSECTION of two independent axes:
+      • mode floor  — always present (no unrestricted mode); research /
+        generation / execution gate read / write / run tools respectively.
+      • panel floor — only for inline AI panels (ScriptEditor, etc.);
+        `None` for main chat = no panel restriction.
+
+    Returns a set to pass to `get_tool_schemas`/`dispatch_tool`. `None` is
+    never returned — the mode axis always imposes at least the read floor,
+    so a tool absent from the active mode can never be advertised or
+    dispatched, even in main chat with no panel.
+    """
+    mode_floor = get_mode_allowed_tools(mode)
+    panel_floor = get_panel_allowed_tools(panel)
+    if panel_floor is None:
+        return mode_floor
+    return mode_floor & panel_floor
 
 
 def _envelope(
@@ -665,14 +696,14 @@ async def post_message_stream(
             mode=mode,
             panel=panel,
         )
+        allowed_tools = _effective_allowed_tools(mode, panel)
         tool_schemas = get_tool_schemas(
-            allowed_names=get_panel_allowed_tools(panel),
+            allowed_names=allowed_tools,
         )
-        if panel:
-            logger.info(
-                "Panel=%s: advertising %d tool(s)",
-                panel, len(tool_schemas),
-            )
+        logger.info(
+            "mode=%s panel=%s: advertising %d tool(s)",
+            mode or _DEFAULT_MODE_LABEL, panel or "-", len(tool_schemas),
+        )
         max_rounds = settings.AUTOBOT_MAX_TOOL_ROUNDS
 
         # Round 1 tries the candidate chain; rounds 2+ stay pinned to
@@ -915,13 +946,15 @@ async def post_message_stream(
                 fn_args = (tc.get("function") or {}).get("arguments") or ""
 
                 yield sse_tool_call_start(tc_id, fn_name, fn_args)
-                # Re-check the panel allow-list here so a hallucinated
-                # tool name (not in the advertised set) is refused.
+                # Re-check the mode∩panel allow-list here so a hallucinated
+                # tool name (not in the advertised set) is refused — the
+                # hard floor against a model calling a tool it was never
+                # offered (e.g. a run tool in research mode).
                 result = await dispatch_tool(
                     fn_name,
                     fn_args,
                     auth_handle.raw_jwt,
-                    allowed_names=get_panel_allowed_tools(panel),
+                    allowed_names=allowed_tools,
                 )
                 yield sse_tool_result(tc_id, fn_name, result)
 

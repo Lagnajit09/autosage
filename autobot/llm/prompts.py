@@ -635,6 +635,71 @@ _MODE_PROMPTS: dict[str, str] = {
 _DEFAULT_MODE = "research"
 
 
+# Mode hard-floor — the real guard for what each mode can do, enforced at
+# the LLM API layer (advertise + dispatch in routers/chat.py), NOT via
+# prompt text. Mirrors `_PANEL_ALLOWED_TOOLS`/`get_panel_allowed_tools`
+# below. A tool absent from a mode's set is neither advertised nor
+# dispatchable in that mode, regardless of what the system prompt says.
+#
+# Layering with the panel floor: the effective allow-list is the
+# INTERSECTION of this mode floor and the panel floor (see
+# `_effective_allowed_tools` in routers/chat.py). `None` on either axis
+# means "no restriction on that axis".
+#
+# Read tools are safe in every mode. Generation adds CRUD writes.
+# Execution adds the run/preview/rerun tools AND keeps the CRUD writes —
+# the fix-and-rerun loop needs `update_script`/`update_workflow` to apply
+# a fix before re-running. Unknown modes fall back to the research floor.
+_READ_TOOLS: frozenset[str] = frozenset({
+    "list_workflows",
+    "read_workflow",
+    "list_scripts",
+    "read_script",
+    "list_vault_resources",
+    # Read-only execution-investigation tools (Phase X2). Safe in research
+    # AND execution: they only READ run history / logs, never mutate.
+    "get_execution_histories",
+    "get_workflow_run",
+    "get_script_run",
+    "read_run_logs",
+})
+
+_WRITE_TOOLS: frozenset[str] = frozenset({
+    "create_workflow",
+    "update_workflow",
+    "create_script",
+    "update_script",
+})
+
+# Side-effecting execution tools (Phase X3). `preview_workflow_run` is
+# read-only but lives here because it's only meaningful in execution mode
+# (it's the mandatory pre-run confirmation step).
+_EXEC_TOOLS: frozenset[str] = frozenset({
+    "preview_workflow_run",
+    "run_workflow",
+    "run_script",
+    "rerun_workflow",
+})
+
+_MODE_ALLOWED_TOOLS: dict[str, frozenset[str]] = {
+    "research":   _READ_TOOLS,
+    "generation": _READ_TOOLS | _WRITE_TOOLS,
+    "execution":  _READ_TOOLS | _WRITE_TOOLS | _EXEC_TOOLS,
+}
+
+
+def get_mode_allowed_tools(mode: str) -> frozenset[str]:
+    """Return the allowed tool names for `mode`.
+
+    Unlike `get_panel_allowed_tools` (which returns None for "no filter"),
+    a mode ALWAYS imposes a floor — there is no unrestricted mode. Unknown
+    or empty modes fall back to the read-only research floor.
+    """
+    return _MODE_ALLOWED_TOOLS.get(
+        (mode or "").strip().lower(), _MODE_ALLOWED_TOOLS[_DEFAULT_MODE]
+    )
+
+
 # Panel addenda — surface-specific scoping for inline AI panels.
 # Tool filtering is enforced at the LLM API layer via _PANEL_ALLOWED_TOOLS
 # below; the prompt text is only a soft reinforcement.
