@@ -536,6 +536,130 @@ def cancel_workflow_run(request, run_id):
     )
 
 
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+@throttle_classes([ExecutionBurstThrottle, ExecutionSustainedThrottle])
+def rerun_workflow_run(request, run_id):
+    """POST /api/execution-engine/workflows/runs/<run_id>/rerun/
+
+    Re-enqueue a prior run's workflow as a fresh run (whole-workflow only —
+    there is no resume-from-failed-node). Used by Autobot's investigate →
+    fix → rerun loop, but available to any owner. Goes through the single
+    ``enqueue_workflow_run`` convergence point with ``trigger_source="autobot"``.
+
+    Body (optional): ``{"inputs": {...}}`` to override the prior run's inputs;
+    omitted → reuse the prior run's inputs.
+    Header (optional): ``Idempotency-Key`` — same guard as the manual-run view,
+    so a double rerun collapses to one new run.
+    """
+    try:
+        prior = WorkflowRun.objects.select_related("workflow").get(
+            id=run_id, user=request.user
+        )
+    except WorkflowRun.DoesNotExist:
+        return api_response(
+            success=False,
+            message="Workflow run not found.",
+            status_code=status.HTTP_404_NOT_FOUND,
+        )
+
+    workflow = prior.workflow
+
+    # Inputs: explicit override wins, else reuse the prior run's inputs.
+    override = request.data.get("inputs") if isinstance(request.data, dict) else None
+    if override is not None and not isinstance(override, dict):
+        return api_response(
+            success=False,
+            message="Request body 'inputs' must be a JSON object.",
+            status_code=status.HTTP_400_BAD_REQUEST,
+        )
+    inputs = override if override is not None else (prior.inputs or {})
+
+    # Optional idempotency — shared guard with trigger_workflow_run (X01b).
+    idempotency_key = (request.headers.get("Idempotency-Key") or "").strip()
+    if len(idempotency_key) > 255:
+        return api_response(
+            success=False,
+            message="Idempotency-Key header exceeds 255 characters.",
+            status_code=status.HTTP_400_BAD_REQUEST,
+        )
+
+    if idempotency_key:
+        existing = (
+            WorkflowRunIdempotencyKey.objects
+            .select_related("workflow_run")
+            .filter(user=request.user, workflow=workflow, key=idempotency_key)
+            .first()
+        )
+        if existing is not None:
+            return api_response(
+                success=True,
+                message="Duplicate request — returning prior workflow run.",
+                data={
+                    "workflow_run_id": str(existing.workflow_run_id),
+                    "status": existing.workflow_run.status,
+                    "idempotent": True,
+                },
+                status_code=status.HTTP_200_OK,
+            )
+
+    try:
+        workflow_run = enqueue_workflow_run(
+            workflow=workflow,
+            user=request.user,
+            inputs=inputs,
+            send_email=prior.send_email,
+            user_email=prior.notification_email or "",
+            trigger_source="autobot",
+        )
+    except RunBuildError as exc:
+        return api_response(
+            success=False,
+            message=exc.message,
+            status_code=status.HTTP_400_BAD_REQUEST,
+        )
+
+    if idempotency_key:
+        try:
+            WorkflowRunIdempotencyKey.objects.create(
+                user=request.user,
+                workflow=workflow,
+                key=idempotency_key,
+                workflow_run=workflow_run,
+            )
+        except IntegrityError:
+            existing = (
+                WorkflowRunIdempotencyKey.objects
+                .select_related("workflow_run")
+                .get(user=request.user, workflow=workflow, key=idempotency_key)
+            )
+            logger.warning(
+                "Workflow %s rerun idempotency race: orphan run %s replaced by %s",
+                workflow.id, workflow_run.id, existing.workflow_run_id,
+            )
+            return api_response(
+                success=True,
+                message="Duplicate request — returning prior workflow run.",
+                data={
+                    "workflow_run_id": str(existing.workflow_run_id),
+                    "status": existing.workflow_run.status,
+                    "idempotent": True,
+                },
+                status_code=status.HTTP_200_OK,
+            )
+
+    return api_response(
+        success=True,
+        message="Workflow re-run queued successfully.",
+        data={
+            "workflow_run_id": str(workflow_run.id),
+            "status": "queued",
+            "idempotent": False,
+        },
+        status_code=status.HTTP_202_ACCEPTED,
+    )
+
+
 # ── Real-time SSE streaming endpoint ─────────────────────────────────────────
 
 @csrf_exempt

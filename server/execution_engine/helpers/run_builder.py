@@ -57,6 +57,29 @@ def enqueue_workflow_run(
     """
     inputs = inputs or {}
 
+    # AD-B9 Layer 3 — Autobot must NEVER transport a password/secret. On the
+    # "autobot" trigger path, drop any password-typed parameter value from the
+    # inputs BEFORE it reaches the worker (raw_inputs) or the persisted record.
+    # Layers 1 (mask in read/preview) and 2 (tool can't set passwords) live in
+    # autobot; this is the hard server-side backstop against a jailbroken or
+    # buggy caller. A present password here is never legitimate for this source,
+    # so we strip + log rather than execute it. Manual/HTTP/schedule paths are
+    # untouched — their secrets come from the browser/executor, not from an LLM.
+    if trigger_source == "autobot" and inputs:
+        password_param_ids: set[str] = set()
+        for node in workflow.nodes:
+            for p in (node.get("data", {}).get("parameters") or []):
+                if p.get("type") == "password" and p.get("id"):
+                    password_param_ids.add(p["id"])
+        dropped = [pid for pid in password_param_ids if inputs.get(pid)]
+        if dropped:
+            inputs = {k: v for k, v in inputs.items() if k not in password_param_ids}
+            logger.warning(
+                "Dropped %d password-typed input(s) from autobot-triggered run "
+                "of workflow %s (Autobot must never supply secrets): %s",
+                len(dropped), workflow.id, sorted(dropped),
+            )
+
     try:
         G = build_dag(workflow.nodes, workflow.edges)
         topo_order = topological_order(G)

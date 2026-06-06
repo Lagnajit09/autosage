@@ -29,6 +29,7 @@ urlpatterns = [
     path("workflows/runs/<uuid:run_id>/", views_workflow.get_workflow_run, name="workflow-run-detail"),
     path("workflows/runs/<uuid:run_id>/nodes/", views_workflow.get_workflow_node_runs, name="workflow-run-nodes"),
     path("workflows/runs/<uuid:run_id>/cancel/", views_workflow.cancel_workflow_run, name="workflow-run-cancel"),
+    path("workflows/runs/<uuid:run_id>/rerun/", views_workflow.rerun_workflow_run, name="workflow-run-rerun"),
     path("workflows/runs/<uuid:run_id>/stream/", views_workflow.stream_workflow_run, name="workflow-run-stream"),
 
     # Public HTTP trigger entry point (no Clerk auth — secret in X-Trigger-Secret header)
