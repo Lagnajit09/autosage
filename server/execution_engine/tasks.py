@@ -928,3 +928,33 @@ def execute_workflow(self, workflow_run_id: str, raw_inputs: dict = None):
             logger.exception(
                 "Workflow completion email failed for run %s", workflow_run_id,
             )
+
+
+@shared_task(bind=True, name='execution_engine.run_script_async')
+def run_script_async(self, execution_id: str, worker_payload: dict):
+    """Fire-and-forget one-shot script run for callers that can't consume the
+    SSE stream (e.g. Autobot's run_script tool).
+
+    Reuses the streaming ``stream_execution`` generator verbatim — its final
+    act persists status / logs / exit_code onto the ScriptExecution row and
+    uploads logs to GCS. We just drain it to completion and discard the SSE
+    frames; the caller watches progress via ``GET /<id>/status/`` and the
+    signed log URLs. Single-sourcing the worker contract this way means the
+    async path can never drift from the streaming path.
+    """
+    import asyncio
+    from execution_engine.helpers.script_execution.executor import stream_execution
+
+    async def _drain():
+        async for _frame in stream_execution(execution_id, worker_payload):
+            # Discard SSE frames — persistence happens inside the generator.
+            pass
+
+    try:
+        asyncio.run(_drain())
+    except Exception:
+        # The generator already persists a 'failed' status on worker errors;
+        # this guards only against an unexpected drain-level crash.
+        logger.exception("run_script_async drain failed for execution %s", execution_id)
+
+    logger.info("run_script_async finished for execution %s", execution_id)

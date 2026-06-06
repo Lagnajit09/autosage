@@ -8,6 +8,9 @@ urlpatterns = [
     # Main execution endpoint – streams SSE updates
     path("run/", views_script.execute_script, name="execute-script"),
 
+    # Non-streaming sibling – enqueues + returns 202 (used by Autobot run_script)
+    path("run/async/", views_script.run_script_async_view, name="execute-script-async"),
+
     # Polling fallback – returns current execution state as JSON
     path("<uuid:execution_id>/status/", views_script.execution_status, name="execution-status"),
 

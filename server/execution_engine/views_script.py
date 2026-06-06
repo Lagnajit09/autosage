@@ -6,8 +6,6 @@ from django.views.decorators.csrf import csrf_exempt
 from rest_framework import status
 from asgiref.sync import sync_to_async
 
-from vault.models import Vault, Server, Credential
-from scripts.models import Script
 from execution_engine.models import ScriptExecution
 from execution_engine.serializers import (
     ScriptExecutionRequestSerializer, 
@@ -24,10 +22,12 @@ from rest_framework.permissions import IsAuthenticated, AllowAny
 # Modular helpers
 from execution_engine.helpers.script_execution.worker import EXEC_WORKER_URL, build_worker_headers
 from execution_engine.helpers.script_execution.utils import (
-    json_response, 
-    sse_event, 
-    uuid_to_str, 
-    check_throttle
+    json_response,
+    sse_event,
+    check_throttle,
+    resolve_run_targets,
+    build_worker_payload,
+    RunTargetError,
 )
 from execution_engine.helpers.script_execution.executor import stream_execution
 
@@ -78,39 +78,17 @@ async def execute_script(request):
         )
 
     data = serializer.validated_data
-    script_details = data["script_details"]
-    vault_details = data["vault_details"]
-    # Convert UUIDs in inputs to strings to avoid JSON serialization errors in DB/Worker
-    inputs = uuid_to_str(data)
 
-    # ── Fetch and validate ownership (sync ORM via sync_to_async) ────────
-    get_vault = sync_to_async(Vault.objects.get)
-    get_server = sync_to_async(Server.objects.get)
-    get_credential = sync_to_async(Credential.objects.get)
-    get_script = sync_to_async(Script.objects.get)
-    create_execution = sync_to_async(ScriptExecution.objects.create)
-
+    # ── Fetch and validate ownership (shared with run_script_async) ──────
     try:
-        vault = await get_vault(id=vault_details["vault_id"], owner=user)
-    except Vault.DoesNotExist:
-        return json_response(False, "Vault not found or access denied.", status_code=404)
-
-    try:
-        server = await get_server(id=vault_details["server_id"], vault=vault)
-    except Server.DoesNotExist:
-        return json_response(False, "Server not found in vault.", status_code=404)
-
-    try:
-        credential = await get_credential(id=vault_details["credential_id"], vault=vault)
-    except Credential.DoesNotExist:
-        return json_response(False, "Credential not found in vault.", status_code=404)
-
-    try:
-        script = await get_script(id=script_details["script_id"], owner=user)
-    except Script.DoesNotExist:
-        return json_response(False, "Script not found or access denied.", status_code=404)
+        script, vault, server, credential, inputs = await sync_to_async(
+            resolve_run_targets
+        )(user, data)
+    except RunTargetError as exc:
+        return json_response(False, exc.message, status_code=exc.status_code)
 
     # ── Create execution record ───────────────────────────────────────────
+    create_execution = sync_to_async(ScriptExecution.objects.create)
     execution = await create_execution(
         script=script,
         vault=vault,
@@ -121,37 +99,8 @@ async def execute_script(request):
         status="pending",
     )
 
-    server_host = server.host.strip()
-    if server_host.startswith(('http://', 'https://')):
-        server_host = server_host.split('://', 1)[1]
-
-    # ── Build payload for exec-worker ─────────────────────────────────────
-    worker_payload = {
-        "execution_id": str(execution.id),
-        "script": {
-            "id": str(script.id),
-            "name": script.name,
-            "pathname": script.pathname,
-            "blob_url": script.blob_url,
-        },
-        "server": {
-            "id": str(server.id),
-            "host": server_host,
-            "port": server.port or 22,
-            "connection_method": server.connection_method,
-            "os_type": "windows" if server.connection_method == "winrm" else "linux",
-            "winrm_port": server.port or 5985,
-            "winrm_use_ssl": False,
-            "winrm_transport": "ntlm",
-        },
-        "credentials": {
-            "username": credential.username or "",
-            "password": credential.password or "",
-            "ssh_key": credential.ssh_key or "",
-            "key_passphrase": credential.key_passphrase or "",
-        },
-        "inputs": inputs,
-    }
+    # ── Build payload for exec-worker (shared with run_script_async) ──────
+    worker_payload = build_worker_payload(execution.id, script, server, credential, inputs)
 
     # ── Validate exec-worker URL is configured ────────────────────────────
     if not EXEC_WORKER_URL:
@@ -174,6 +123,72 @@ async def execute_script(request):
     streaming_response["X-Accel-Buffering"] = "no"
     streaming_response["X-Execution-Id"] = str(execution.id)
     return streaming_response
+
+
+# ── Async (fire-and-forget) execute view – non-streaming ──────────────────────
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def run_script_async_view(request):
+    """
+    POST /api/execution-engine/run/async/
+
+    Non-streaming sibling of ``execute_script`` for server-to-server callers
+    that can't consume the SSE stream (e.g. Autobot's run_script tool). Same
+    request body + same ownership validation, but instead of streaming it
+    enqueues a Celery task and returns 202 immediately. The caller watches
+    progress via ``GET /<execution_id>/status/`` and the signed log URLs.
+    """
+    if not EXEC_WORKER_URL:
+        return api_response(
+            success=False,
+            message="Execution worker URL is not configured.",
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        )
+
+    serializer = ScriptExecutionRequestSerializer(data=request.data)
+    if not serializer.is_valid():
+        return api_response(
+            success=False,
+            message="Invalid request data.",
+            errors=serializer.errors,
+            status_code=status.HTTP_400_BAD_REQUEST,
+        )
+
+    # Shared with the streaming view — never drifts on authorization.
+    try:
+        script, vault, server, credential, inputs = resolve_run_targets(
+            request.user, serializer.validated_data
+        )
+    except RunTargetError as exc:
+        return api_response(
+            success=False,
+            message=exc.message,
+            status_code=exc.status_code,
+        )
+
+    execution = ScriptExecution.objects.create(
+        script=script,
+        vault=vault,
+        server=server,
+        credential=credential,
+        user=request.user,
+        inputs=inputs,
+        status="pending",
+    )
+
+    worker_payload = build_worker_payload(execution.id, script, server, credential, inputs)
+
+    # Fire-and-forget on the default Celery queue (same queue as workflow runs).
+    from execution_engine.tasks import run_script_async
+    run_script_async.delay(str(execution.id), worker_payload)
+
+    return api_response(
+        success=True,
+        message="Script execution queued successfully.",
+        data={"execution_id": str(execution.id), "status": "pending"},
+        status_code=status.HTTP_202_ACCEPTED,
+    )
 
 
 # ── Status endpoint – lightweight poll fallback ────────────────────────────
