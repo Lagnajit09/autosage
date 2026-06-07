@@ -17,6 +17,7 @@ from typing import Any
 
 from conversation.persistence import DjangoUnavailable, get_django_client
 from llm.tools import ToolDefinition, register_tool
+from tools._security import mask_password_params
 
 logger = logging.getLogger(__name__)
 
@@ -129,7 +130,10 @@ async def _handler_read_workflow(args: dict[str, Any], jwt: str) -> dict[str, An
         return {"error": f"Storage unreachable: {e}"}
     if s != 200:
         return _django_error(s, body, "Failed to read workflow")
-    return (body or {}).get("data") or {}
+    # AD-B9 Layer 1 — strip password-param values before the JSON reaches
+    # the model. A node can bake a default password into the workflow; the
+    # model must see the param exists but never its value.
+    return mask_password_params((body or {}).get("data") or {})
 
 
 async def _handler_create_workflow(args: dict[str, Any], jwt: str) -> dict[str, Any]:
