@@ -62,6 +62,13 @@ class AutobotSettings(BaseSettings):
     # `autobot:admin_quota:<sub>:<yyyymmdd>`. Ticks once per chat turn (not
     # per tool-call round). BYO turns don't count. Set to 0 to disable.
     AUTOBOT_ADMIN_DAILY_LIMIT: int = 10
+
+    # Per-user daily quota on chat-initiated executions (run_workflow /
+    # run_script / rerun_workflow). Tracked in Redis at
+    # `autobot:exec_quota:<sub>:<yyyymmdd>`. Distinct from the admin-LLM
+    # quota so BYO users (uncapped LLM) are still bounded on real compute.
+    # Set to 0 to disable. Django Execution throttles are the backstop.
+    AUTOBOT_EXEC_DAILY_LIMIT: int = 25
     AUTOBOT_CTX_TTL_SECONDS: int = 7200
     AUTOBOT_CONTEXT_TARGET_RATIO: float = 0.6
     AUTOBOT_KEEP_LAST_N: int = 8

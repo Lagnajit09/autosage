@@ -9,6 +9,7 @@ Key namespace:
   autobot:thread:<id>:ctx       — JSON-encoded recent-messages window
   autobot:thread:<id>:summary   — plain text rolling summary
   autobot:admin_quota:<sub>:<yyyymmdd> — per-user admin-key counter
+  autobot:exec_quota:<sub>:<yyyymmdd>  — per-user chat-execution counter
 """
 
 from __future__ import annotations
@@ -164,6 +165,75 @@ class ConversationCache:
         except Exception as e:
             logger.warning(
                 "Admin-quota read failed for user_sub=%s (%s); fail-open",
+                user_sub, e,
+            )
+            return 0
+        if raw is None:
+            return 0
+        try:
+            return int(raw)
+        except (TypeError, ValueError):
+            return 0
+
+    async def incr_exec_quota_for_today(
+        self,
+        user_sub: str,
+        daily_limit: int,
+    ) -> tuple[bool, int]:
+        """Increment the user's daily chat-initiated-execution counter.
+
+        Distinct from the admin-LLM quota (:meth:`incr_admin_quota_for_today`)
+        so BYO users — uncapped on LLM turns — are still bounded on real
+        compute. Ticks once per run tool-call (``run_workflow``/``run_script``/
+        ``rerun_workflow``), keyed by UTC date at
+        ``autobot:exec_quota:<sub>:<yyyymmdd>`` with a 26h TTL covering DST +
+        clock skew. ``daily_limit=0`` disables the cap.
+
+        Returns ``(allowed, count)``. Redis errors fail-OPEN — Django's
+        ExecutionBurst/SustainedThrottle is the real backstop, so a Redis
+        outage shouldn't block runs entirely.
+        """
+        if daily_limit <= 0:
+            return True, 0
+
+        from datetime import datetime, timezone
+        today = datetime.now(timezone.utc).strftime("%Y%m%d")
+        key = f"autobot:exec_quota:{user_sub}:{today}"
+
+        try:
+            count = await self._client.incr(key)
+            if count == 1:
+                await self._client.expire(key, 60 * 60 * 26)
+        except Exception as e:
+            logger.warning(
+                "Exec-quota counter unavailable for user_sub=%s (%s); "
+                "fail-open",
+                user_sub, e,
+            )
+            return True, 0
+
+        allowed = count <= daily_limit
+        if not allowed:
+            logger.info(
+                "Exec-quota exceeded: user_sub=%s count=%d limit=%d",
+                user_sub, count, daily_limit,
+            )
+        return allowed, int(count)
+
+    async def get_exec_quota_for_today(self, user_sub: str) -> int:
+        """Read-only sibling of :meth:`incr_exec_quota_for_today`.
+
+        Returns 0 on cache miss or any Redis error — callers treat missing
+        data as "no executions yet today" rather than surfacing a 5xx.
+        """
+        from datetime import datetime, timezone
+        today = datetime.now(timezone.utc).strftime("%Y%m%d")
+        key = f"autobot:exec_quota:{user_sub}:{today}"
+        try:
+            raw = await self._client.get(key)
+        except Exception as e:
+            logger.warning(
+                "Exec-quota read failed for user_sub=%s (%s); fail-open",
                 user_sub, e,
             )
             return 0

@@ -109,6 +109,27 @@ def _effective_allowed_tools(
     return mode_floor & panel_floor
 
 
+# Execution mode runs real workflows/scripts on the platform's compute, so
+# it's gated to BYO users only — a user on the shared/default admin key
+# (whose LLM turns are subsidized) cannot execute anything. They keep
+# research + generation. The refusal is surfaced upfront (see the chat
+# handlers); this predicate is the single source of truth for the rule.
+def _execution_mode_blocked(mode: str, is_admin: bool) -> bool:
+    """True when `mode` is execution but the user is NOT BYO.
+
+    `is_admin` means the turn runs on the shared admin LLM key (not the
+    user's own). Execution mode requires a personal key, so an admin-key
+    turn requesting execution is blocked.
+    """
+    return (mode or "").strip().lower() == "execution" and is_admin
+
+
+_EXECUTION_REQUIRES_BYO_MSG = (
+    "Execution mode requires your own LLM key. Add one in Customize to "
+    "run workflows and scripts, or switch to Research or Generation mode."
+)
+
+
 def _envelope(
     success: bool,
     message: str,
@@ -391,6 +412,18 @@ async def post_message(
         )
     resolution = resolutions[0]
 
+    # Execution mode is BYO-only — shared-key users can't run real compute.
+    if _execution_mode_blocked(mode, resolution.is_admin):
+        logger.info(
+            "Execution mode refused (shared key): user_sub=%s",
+            auth.user_sub,
+        )
+        return _envelope(
+            success=False,
+            message=_EXECUTION_REQUIRES_BYO_MSG,
+            status_code=status.HTTP_403_FORBIDDEN,
+        )
+
     llm_messages = _build_llm_messages(
         thread, history_list, content, mode=mode, panel=panel,
     )
@@ -585,6 +618,19 @@ async def post_message_stream(
         # Primary drives context-window math and summarization; fallback
         # candidates have comparable budgets at the 60% trigger level.
         resolution = resolutions[0]
+
+        # Execution mode is BYO-only — shared-key users can't run real
+        # compute. Refuse upfront before any LLM call / quota tick.
+        if _execution_mode_blocked(mode, resolution.is_admin):
+            logger.info(
+                "Execution mode refused (shared key): user_sub=%s",
+                auth_handle.user_sub,
+            )
+            yield sse_error(
+                _EXECUTION_REQUIRES_BYO_MSG,
+                code="execution_requires_byo",
+            )
+            return
 
         # Per-user daily quota — admin only. BYO turns don't count.
         # Ticks once per chat turn regardless of tool-call rounds.
