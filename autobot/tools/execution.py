@@ -1,4 +1,4 @@
-"""Execution tools — investigation (X06, X07) + preview (X09) + run (X10).
+"""Execution tools — investigate (X06,X07) + preview (X09) + run (X10–X12).
 
 Async wrappers around Django's execution-engine endpoints. The JWT is
 forwarded; Django scopes every queryset to the calling user, so a
@@ -21,6 +21,13 @@ sends an Idempotency-Key = the per-tool-call id (X01b) so a double-call in
 one turn collapses to one run. `trigger_source` is fixed to `"autobot"`.
 Both gating signals (user_sub, tool-call id) arrive via
 `current_tool_context()`, not the handler args.
+
+`run_script` (X11) is the script sibling: it resolves the four bindings
+(script + vault/server/credential), ticks the same exec quota, and POSTs
+the nested ScriptExecutionRequest to the X02 `run/async/` endpoint. There
+is no SSE stream for scripts (AD-B4) — `watch_url` is the status-poll URL.
+Scripts have no password-type param schema, so its `inputs_preview` masks
+secret-looking keys by name heuristic (`_security.mask_inputs_by_keyname`).
 
 Two response hygiene rules enforced here, before anything reaches the LLM:
   • **Signed GCS URLs never leave the tool.** Django returns short-lived
@@ -45,7 +52,7 @@ from conversation.cache import get_cache
 from conversation.persistence import DjangoUnavailable, get_django_client
 from llm.tools import ToolDefinition, current_tool_context, register_tool
 from settings import get_settings
-from tools._security import _PASSWORD_MASK
+from tools._security import _PASSWORD_MASK, mask_inputs_by_keyname
 
 logger = logging.getLogger(__name__)
 
@@ -665,6 +672,195 @@ async def _handler_run_workflow(args: dict[str, Any], jwt: str) -> dict[str, Any
     return out
 
 
+# ── X11 — run_script (gated write; fire-and-forget script run) ───────
+
+
+def _status_poll_url(execution_id: str) -> str:
+    """Where the client polls a script run (no SSE stream for scripts — AD-B4)."""
+    return f"/api/execution-engine/{execution_id}/status/"
+
+
+async def _resolve_script_meta(
+    script_id: int, jwt: str
+) -> tuple[dict[str, Any] | None, dict[str, Any] | None]:
+    """Look up a script's name + pathname (required by the run serializer).
+
+    Returns ({name, pathname}, None) or (None, error). Uses the list
+    endpoint (which carries `pathname`; the /content/ endpoint does not).
+    `resolve_run_targets` re-fetches the script by id server-side, so these
+    values only satisfy serializer validation — but they must be the real
+    ones, and the name doubles as the chat's "Executing <script>…" label.
+    """
+    client = get_django_client()
+    try:
+        s, body = await client.request(
+            method="GET", path="/api/scripts/", jwt=jwt,
+        )
+    except DjangoUnavailable as e:
+        return None, {"error": f"Storage unreachable: {e}"}
+    if s != 200:
+        return None, _django_error(s, body, "Failed to look up script")
+    rows = (body or {}).get("data") or []
+    if isinstance(rows, list):
+        for r in rows:
+            if isinstance(r, dict) and str(r.get("id")) == str(script_id):
+                return {
+                    "name": r.get("name") or f"script {script_id}",
+                    "pathname": r.get("pathname") or "",
+                }, None
+    return None, {
+        "error": (
+            f"Script {script_id} not found in your library. Call list_scripts "
+            "to get a valid script id."
+        )
+    }
+
+
+async def _handler_run_script(args: dict[str, Any], jwt: str) -> dict[str, Any]:
+    """Enqueue a fire-and-forget script run via the X02 async endpoint.
+
+    Validates the four bindings (script + vault/server/credential ids),
+    ticks the exec quota (X08), then POSTs the nested ScriptExecutionRequest
+    body. No live token stream (AD-B4) — the client polls watch_url. Returns
+    `inputs_preview` with secret-looking keys masked (key-name heuristic, as
+    scripts have no password-type schema).
+    """
+    # script_id is numeric; the vault triplet are UUID strings.
+    script_id = args.get("script_id")
+    if isinstance(script_id, str) and script_id.strip().isdigit():
+        script_id = int(script_id.strip())
+    if not isinstance(script_id, int):
+        return {"error": "Missing or invalid 'script_id' (numeric script id)."}
+
+    missing = [
+        f for f in ("vault_id", "server_id", "credential_id")
+        if not (isinstance(args.get(f), str) and args[f].strip())
+    ]
+    if missing:
+        return {
+            "error": (
+                f"Missing required id(s): {', '.join(missing)}. Call "
+                "list_vault_resources to resolve the vault, server, and "
+                "credential UUIDs for this script — never invent them."
+            )
+        }
+
+    meta, err = await _resolve_script_meta(script_id, jwt)
+    if err:
+        return err
+
+    raw_inputs = args.get("inputs")
+    inputs = raw_inputs if isinstance(raw_inputs, dict) else {}
+
+    quota_err = await _check_exec_quota()
+    if quota_err:
+        return quota_err
+
+    body_payload = {
+        "script_details": {
+            "script_id": script_id,
+            "script_name": meta["name"],
+            "pathname": meta["pathname"],
+        },
+        "vault_details": {
+            "vault_id": args["vault_id"].strip(),
+            "server_id": args["server_id"].strip(),
+            "credential_id": args["credential_id"].strip(),
+        },
+        "inputs": inputs,
+    }
+
+    client = get_django_client()
+    try:
+        s, body = await client.request(
+            method="POST",
+            path="/api/execution-engine/run/async/",
+            jwt=jwt,
+            json_body=body_payload,
+        )
+    except DjangoUnavailable as e:
+        return {"error": f"Storage unreachable: {e}"}
+    if s not in (200, 202):
+        return _django_error(s, body, "Failed to start script run")
+
+    data = (body or {}).get("data") or {}
+    run_id = data.get("execution_id")
+    if not run_id:
+        return {"error": "Script run started but no execution id was returned."}
+    return {
+        "run_id": run_id,
+        "kind": "script",
+        "status": data.get("status") or "pending",
+        "watch_url": _status_poll_url(str(run_id)),
+        "script_name": meta["name"],
+        "server_id": args["server_id"].strip(),
+        # Secret-looking keys masked (key-name heuristic — scripts have no
+        # password-type schema). Powers the chat's "Executing <script> on
+        # <server> with parameters: (…)" line without echoing secrets.
+        "inputs_preview": mask_inputs_by_keyname(inputs),
+    }
+
+
+# ── X12 — rerun_workflow (gated write; re-enqueues a prior run) ──────
+
+
+async def _handler_rerun_workflow(args: dict[str, Any], jwt: str) -> dict[str, Any]:
+    """Re-enqueue a prior workflow run as a fresh run (whole-workflow only).
+
+    The investigate→fix→rerun endpoint of the failure loop. Ticks the exec
+    quota (X08) and sends an Idempotency-Key = this tool call's id (X01b) so
+    a double-call collapses to one new run. The server fixes
+    `trigger_source="autobot"`, so the Layer-3 backstop drops any password
+    that sneaks into an `inputs` override; omit `inputs` to reuse the prior
+    run's (already-masked) inputs. There is NO resume-from-failed-node.
+    """
+    run_id, err = _require_run_id(args)
+    if err:
+        return err
+
+    body_payload: dict[str, Any] = {}
+    override = args.get("inputs")
+    if isinstance(override, dict):
+        body_payload["inputs"] = override
+
+    quota_err = await _check_exec_quota()
+    if quota_err:
+        return quota_err
+
+    req_headers: dict[str, str] = {}
+    tc_id = current_tool_context().tool_call_id
+    if tc_id:
+        req_headers["Idempotency-Key"] = tc_id
+
+    client = get_django_client()
+    try:
+        s, body = await client.request(
+            method="POST",
+            path=f"/api/execution-engine/workflows/runs/{run_id}/rerun/",
+            jwt=jwt,
+            json_body=body_payload,
+            headers=req_headers or None,
+        )
+    except DjangoUnavailable as e:
+        return {"error": f"Storage unreachable: {e}"}
+    if s not in (200, 202):
+        return _django_error(s, body, "Failed to rerun workflow")
+
+    data = (body or {}).get("data") or {}
+    new_run_id = data.get("workflow_run_id")
+    if not new_run_id:
+        return {"error": "Rerun started but no run id was returned."}
+    out: dict[str, Any] = {
+        "run_id": new_run_id,
+        "kind": "workflow",
+        "status": data.get("status") or "queued",
+        "watch_url": _watch_url(str(new_run_id)),
+    }
+    if data.get("idempotent"):
+        out["idempotent"] = True
+    return out
+
+
 # ── Registration ─────────────────────────────────────────────────────
 
 
@@ -866,5 +1062,95 @@ register_tool(ToolDefinition(
         "additionalProperties": False,
     },
     handler=_handler_run_workflow,
+    timeout_seconds=600.0,
+))
+
+
+register_tool(ToolDefinition(
+    name="run_script",
+    description=(
+        "Run a single script NOW on a target server (fire-and-forget). You "
+        "MUST supply the script id plus the vault, server, and credential "
+        "UUIDs — call list_vault_resources first to resolve them; never "
+        "invent ids. There is NO live log stream for script runs: poll "
+        "get_script_run with the returned run_id for status, then "
+        "read_run_logs(kind='script') for output. Returns {run_id, "
+        "kind:'script', status, watch_url, script_name, server_id, "
+        "inputs_preview}. Do NOT put secrets in inputs — secret-looking "
+        "values are masked in the preview and logs. Counts against the "
+        "user's daily execution limit."
+    ),
+    parameters_schema={
+        "type": "object",
+        "properties": {
+            "script_id": {
+                "type": "integer",
+                "description": "Numeric id of the script to run (from list_scripts).",
+            },
+            "vault_id": {
+                "type": "string",
+                "description": "UUID of the vault (from list_vault_resources).",
+            },
+            "server_id": {
+                "type": "string",
+                "description": "UUID of the target server within the vault.",
+            },
+            "credential_id": {
+                "type": "string",
+                "description": "UUID of the credential within the vault.",
+            },
+            "inputs": {
+                "type": "object",
+                "description": (
+                    "Optional {{PLACEHOLDER}} substitution values for the "
+                    "script. Do not include passwords/secrets."
+                ),
+                "additionalProperties": True,
+            },
+        },
+        "required": ["script_id", "vault_id", "server_id", "credential_id"],
+        "additionalProperties": False,
+    },
+    handler=_handler_run_script,
+    timeout_seconds=600.0,
+))
+
+
+register_tool(ToolDefinition(
+    name="rerun_workflow",
+    description=(
+        "Re-run a prior workflow run as a fresh, whole-workflow run (there is "
+        "NO resume-from-failed-node). Use this to close the investigate→fix→"
+        "rerun loop: after you've diagnosed a failure and the user approved a "
+        "fix (e.g. update_script/update_workflow), call this with the FAILED "
+        "run's id to try again. Pass `inputs` only to override the prior run's "
+        "inputs; omit it to reuse them. You cannot supply password values. "
+        "Returns {run_id, kind:'workflow', status:'queued', watch_url} for the "
+        "NEW run. Counts against the user's daily execution limit. Propose ONE "
+        "fix and rerun ONCE, then ask the user before iterating again."
+    ),
+    parameters_schema={
+        "type": "object",
+        "properties": {
+            "run_id": {
+                "type": "string",
+                "description": (
+                    "UUID of the PRIOR workflow run to re-run (e.g. the failed "
+                    "run from get_workflow_run / get_execution_histories)."
+                ),
+            },
+            "inputs": {
+                "type": "object",
+                "description": (
+                    "Optional inputs override for the new run. Omit to reuse "
+                    "the prior run's inputs. Password params are not accepted."
+                ),
+                "additionalProperties": True,
+            },
+        },
+        "required": ["run_id"],
+        "additionalProperties": False,
+    },
+    handler=_handler_rerun_workflow,
     timeout_seconds=600.0,
 ))

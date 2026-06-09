@@ -77,9 +77,11 @@ _WRITE_TOOL_NAMES = {
     "update_script",
     "create_workflow",
     "update_workflow",
-    # Execution write tools (X10/X12) — a real run mutates run history, so
-    # invalidate the hot-context cache after a successful enqueue too.
+    # Execution write tools (X10/X11/X12) — a real run mutates run history,
+    # so invalidate the hot-context cache after a successful enqueue too.
     "run_workflow",
+    "run_script",
+    "rerun_workflow",
 }
 
 _CHAT_RATE_LIMIT = "30/minute"

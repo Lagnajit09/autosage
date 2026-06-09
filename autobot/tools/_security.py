@@ -25,6 +25,40 @@ from typing import Any
 
 _PASSWORD_MASK = "*****"
 
+# Scripts (unlike workflow nodes) have NO password-typed param schema —
+# their `inputs` are a free-form {{PLACEHOLDER}} dict, so there is no `type`
+# field to identify a secret. For run_script's returned `inputs_preview` we
+# fall back to a conservative KEY-NAME heuristic: any input whose key looks
+# secret is masked before the dict reaches the model/client. This is
+# best-effort hygiene only — the authoritative secret handling is still
+# Django/worker log masking + TLS transport of the real value to Django.
+_SECRET_KEY_HINTS = (
+    "password", "passwd", "pwd", "secret", "token",
+    "api_key", "apikey", "access_key", "private_key", "passphrase",
+)
+
+
+def looks_secret(key: Any) -> bool:
+    """True if a dict key name suggests it holds a secret (case-insensitive)."""
+    if not isinstance(key, str):
+        return False
+    k = key.lower()
+    return any(hint in k for hint in _SECRET_KEY_HINTS)
+
+
+def mask_inputs_by_keyname(inputs: Any) -> dict[str, Any]:
+    """Return a copy of `inputs` with secret-looking keys masked to ``*****``.
+
+    Only masks keys with a non-empty value (an empty value can't leak). Used
+    by run_script where no param-type schema exists. Non-dict input → {}.
+    """
+    if not isinstance(inputs, dict):
+        return {}
+    return {
+        k: (_PASSWORD_MASK if looks_secret(k) and v else v)
+        for k, v in inputs.items()
+    }
+
 
 def mask_password_params(workflow: Any) -> Any:
     """Return a deep copy of `workflow` with every password-typed parameter
