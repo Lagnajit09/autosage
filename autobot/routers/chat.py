@@ -50,7 +50,7 @@ from llm.prompts import (
     get_panel_allowed_tools,
     get_system_prompt,
 )
-from llm.tools import dispatch_tool, get_tool_schemas
+from llm.tools import ToolContext, dispatch_tool, get_tool_schemas
 from settings import get_settings
 from streaming.sse import (
     sse_done,
@@ -77,6 +77,9 @@ _WRITE_TOOL_NAMES = {
     "update_script",
     "create_workflow",
     "update_workflow",
+    # Execution write tools (X10/X12) — a real run mutates run history, so
+    # invalidate the hot-context cache after a successful enqueue too.
+    "run_workflow",
 }
 
 _CHAT_RATE_LIMIT = "30/minute"
@@ -1001,6 +1004,10 @@ async def post_message_stream(
                     fn_args,
                     auth_handle.raw_jwt,
                     allowed_names=allowed_tools,
+                    context=ToolContext(
+                        user_sub=auth_handle.user_sub,
+                        tool_call_id=tc_id,
+                    ),
                 )
                 yield sse_tool_result(tc_id, fn_name, result)
 

@@ -11,6 +11,7 @@ Django enforces per-user scoping. Autobot does no authorization checks.
 from __future__ import annotations
 
 import asyncio
+import contextvars
 import json
 import logging
 from collections.abc import Awaitable, Callable
@@ -20,6 +21,33 @@ from typing import Any
 logger = logging.getLogger(__name__)
 
 ToolHandler = Callable[[dict[str, Any], str], Awaitable[Any]]
+
+
+@dataclass(frozen=True)
+class ToolContext:
+    """Per-call context a handler may need beyond its args + JWT.
+
+    Threaded through a ContextVar (not the handler signature) so the
+    `handler(args, jwt)` contract stays unchanged for the ~all tools that
+    don't need it. Only the execution write tools (X10+) read it: they
+    need `user_sub` for the exec quota and `tool_call_id` as the
+    Idempotency-Key so a double-call in one LLM turn collapses to one run.
+    """
+    user_sub: str = ""
+    tool_call_id: str = ""
+
+
+# Set inside `dispatch_tool` for the duration of one handler invocation.
+# Dispatch is serial (see routers/chat.py), and a ContextVar is per-task
+# anyway, so reads inside the handler always see this call's context.
+_TOOL_CONTEXT: contextvars.ContextVar[ToolContext] = contextvars.ContextVar(
+    "autobot_tool_context", default=ToolContext(),
+)
+
+
+def current_tool_context() -> ToolContext:
+    """The context for the in-flight tool call (empty default off-dispatch)."""
+    return _TOOL_CONTEXT.get()
 
 
 @dataclass(frozen=True)
@@ -74,12 +102,17 @@ async def dispatch_tool(
     jwt: str,
     *,
     allowed_names: frozenset[str] | set[str] | None = None,
+    context: ToolContext | None = None,
 ) -> dict[str, Any]:
     """Execute one tool call. Always returns a dict — never raises.
 
     `allowed_names` re-checks the panel allow-list as a hard floor: even
     if the LLM hallucinates a tool name not in the advertised set, we
     refuse to execute.
+
+    `context` (user_sub, per-tool-call id) is exposed to the handler via
+    `current_tool_context()` for the duration of this call — see
+    `ToolContext`. Handlers that don't need it simply ignore it.
     """
     if allowed_names is not None and name not in allowed_names:
         logger.warning(
@@ -105,6 +138,7 @@ async def dispatch_tool(
     if not isinstance(args, dict):
         return {"error": "Tool arguments must be a JSON object."}
 
+    ctx_token = _TOOL_CONTEXT.set(context or ToolContext())
     try:
         result = await asyncio.wait_for(
             tool.handler(args, jwt),
@@ -124,6 +158,8 @@ async def dispatch_tool(
         # Don't leak stack traces to the LLM — log fully so operator can grep.
         logger.exception("Tool '%s' raised", name)
         return {"error": f"Tool '{name}' failed: {type(e).__name__}: {e}"}
+    finally:
+        _TOOL_CONTEXT.reset(ctx_token)
 
     try:
         json.dumps(result, default=str)

@@ -48,22 +48,32 @@ class DjangoClient:
         jwt: str,
         json_body: Any | None = None,
         params: dict[str, Any] | None = None,
+        headers: dict[str, str] | None = None,
     ) -> tuple[int, Any]:
         """Authenticated request to Django; returns (status, parsed_body).
 
         Proxy endpoints pass the result through verbatim so Django's
         envelope ({success, message, data, errors}) reaches the client.
 
+        `headers` adds request-specific headers (e.g. `Idempotency-Key`)
+        on top of the Bearer auth — it can never override Authorization.
+
         Raises DjangoUnavailable on network failure / timeout.
         """
-        headers = {
+        req_headers = {
             "Authorization": f"Bearer {jwt}",
         }
+        if headers:
+            # Bearer auth is non-overridable — merge extras under it.
+            for k, v in headers.items():
+                if k.lower() == "authorization":
+                    continue
+                req_headers[k] = v
         try:
             resp = await self._client.request(
                 method,
                 path,
-                headers=headers,
+                headers=req_headers,
                 json=json_body,
                 params=params,
             )
