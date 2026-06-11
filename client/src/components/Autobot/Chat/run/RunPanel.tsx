@@ -10,7 +10,7 @@
  *     stream (AD-B4).
  */
 
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Activity,
   AlertTriangle,
@@ -22,6 +22,7 @@ import {
   Workflow,
   X,
 } from "lucide-react";
+import { useAuth } from "@clerk/clerk-react";
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -33,6 +34,48 @@ import { RunGraph } from "./RunGraph";
 import { ParamGrid } from "./RunFields";
 import { ElapsedBadge, StatusPill, useElapsed } from "./runUi";
 import { formatDuration, isTerminalStatus, type RunSnapshot } from "./runTypes";
+import {
+  effectiveWorkflowParams,
+  fetchWorkflowDef,
+  getCachedWorkflowDef,
+  type EffectiveParams,
+} from "./workflowDef";
+
+/**
+ * Resolve the parameters a workflow run ACTUALLY used: the def's baked-in
+ * node params overlaid with the run's `inputs` override. Autobot runs usually
+ * pass no override, so the persisted `inputs` is empty — this fills the gap.
+ */
+const useEffectiveParams = (
+  workflowId: string | null,
+  runInputs: Record<string, unknown> | null | undefined,
+): EffectiveParams | null => {
+  const { getToken } = useAuth();
+  const [def, setDef] = useState(() =>
+    workflowId ? getCachedWorkflowDef(workflowId) : null,
+  );
+  useEffect(() => {
+    if (!workflowId) return;
+    const cached = getCachedWorkflowDef(workflowId);
+    if (cached) {
+      setDef(cached);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      const token = await getToken();
+      const d = await fetchWorkflowDef(workflowId, token);
+      if (!cancelled) setDef(d);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [workflowId, getToken]);
+  return useMemo(
+    () => (def ? effectiveWorkflowParams(def, runInputs) : null),
+    [def, runInputs],
+  );
+};
 
 const fmtTime = (ms: number | null): string =>
   ms == null ? "—" : new Date(ms).toLocaleString();
@@ -110,7 +153,12 @@ const NodeBreakdown = ({ snap }: { snap: RunSnapshot }) => {
   );
 };
 
-const WorkflowResponse = ({ snap, elapsed }: { snap: RunSnapshot; elapsed: number }) => (
+const WorkflowResponse = ({ snap, elapsed }: { snap: RunSnapshot; elapsed: number }) => {
+  const eff = useEffectiveParams(
+    snap.workflowId,
+    snap.workflowRun?.inputs as Record<string, unknown> | undefined,
+  );
+  return (
   <ScrollArea className="h-full">
     <div className="space-y-5 p-4">
       <section>
@@ -136,9 +184,15 @@ const WorkflowResponse = ({ snap, elapsed }: { snap: RunSnapshot; elapsed: numbe
 
       <section>
         <SectionTitle>
-          <ListTree className="h-3.5 w-3.5" /> Inputs
+          <ListTree className="h-3.5 w-3.5" /> Parameters
         </SectionTitle>
-        <ParamGrid values={snap.workflowRun?.inputs as Record<string, unknown>} />
+        {/* Effective params (def defaults + any run override). Falls back to
+         * the raw persisted inputs until the workflow def loads. */}
+        {eff ? (
+          <ParamGrid values={eff.values} secretKeys={eff.secretKeys} />
+        ) : (
+          <ParamGrid values={snap.workflowRun?.inputs as Record<string, unknown>} />
+        )}
       </section>
 
       {snap.nodeRuns.length > 0 && (
@@ -151,7 +205,8 @@ const WorkflowResponse = ({ snap, elapsed }: { snap: RunSnapshot; elapsed: numbe
       )}
     </div>
   </ScrollArea>
-);
+  );
+};
 
 const ScriptDetails = ({ snap, elapsed }: { snap: RunSnapshot; elapsed: number }) => {
   const sr = snap.scriptRun;

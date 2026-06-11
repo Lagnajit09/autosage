@@ -109,12 +109,26 @@ export class RunStore {
       this.runs.set(d.runId, entry);
     } else {
       // A later tool result (or history rehydrate) may carry richer metadata.
-      this.update(d.runId, (s) => ({
-        ...s,
-        name: s.name ?? d.scriptName ?? null,
-        serverId: s.serverId ?? d.serverId ?? null,
-        inputsPreview: s.inputsPreview ?? d.inputsPreview ?? null,
-      }));
+      // CRITICAL: only update when something ACTUALLY changes. `register` is
+      // called during render by `useEnsureRun`, so an unconditional update
+      // (which always builds a new snapshot object) would notify subscribers
+      // on every render → infinite re-render loop → frozen page.
+      const s = entry.snap;
+      const name = s.name ?? d.scriptName ?? null;
+      const serverId = s.serverId ?? d.serverId ?? null;
+      const inputsPreview = s.inputsPreview ?? d.inputsPreview ?? null;
+      if (
+        name !== s.name ||
+        serverId !== s.serverId ||
+        inputsPreview !== s.inputsPreview
+      ) {
+        this.update(d.runId, (cur) => ({
+          ...cur,
+          name,
+          serverId,
+          inputsPreview,
+        }));
+      }
     }
     if (!entry.started) {
       entry.started = true;

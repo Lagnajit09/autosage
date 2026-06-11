@@ -35,7 +35,6 @@ import {
 } from "lucide-react";
 import { useAuth } from "@clerk/clerk-react";
 
-import { apiRequest } from "@/lib/api-client";
 import { useTheme } from "@/contexts/theme/theme-context";
 import { cn } from "@/lib/utils";
 import type { WorkflowData } from "@/utils/types";
@@ -46,8 +45,7 @@ import {
   toVisualStatus,
   type RunVisual,
 } from "./runTypes";
-
-const graphCache = new Map<string, WorkflowData>();
+import { fetchWorkflowDef, getCachedWorkflowDef } from "./workflowDef";
 
 interface RunNodeData {
   label: string;
@@ -166,14 +164,14 @@ const RunGraphInner = ({
   const { isDark } = useTheme();
   const { getToken } = useAuth();
   const [graph, setGraph] = useState<WorkflowData | null>(
-    () => graphCache.get(workflowId) ?? null,
+    () => getCachedWorkflowDef(workflowId),
   );
-  const [loading, setLoading] = useState(!graphCache.has(workflowId));
+  const [loading, setLoading] = useState(() => !getCachedWorkflowDef(workflowId));
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
-    const cached = graphCache.get(workflowId);
+    const cached = getCachedWorkflowDef(workflowId);
     if (cached) {
       setGraph(cached);
       setLoading(false);
@@ -181,21 +179,12 @@ const RunGraphInner = ({
     }
     (async () => {
       setLoading(true);
-      try {
-        const token = await getToken();
-        const res = await apiRequest(`/api/workflows/${workflowId}/`, {}, token);
-        const data: WorkflowData | undefined = res?.data ?? res;
-        if (data && Array.isArray(data.nodes)) {
-          graphCache.set(workflowId, data);
-          if (!cancelled) setGraph(data);
-        } else if (!cancelled) {
-          setError("Could not load the workflow graph.");
-        }
-      } catch {
-        if (!cancelled) setError("Could not load the workflow graph.");
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
+      const token = await getToken();
+      const data = await fetchWorkflowDef(workflowId, token);
+      if (cancelled) return;
+      if (data) setGraph(data);
+      else setError("Could not load the workflow graph.");
+      setLoading(false);
     })();
     return () => {
       cancelled = true;

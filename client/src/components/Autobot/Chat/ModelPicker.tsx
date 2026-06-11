@@ -81,7 +81,7 @@ export const ModelPicker = ({
       </DropdownMenuTrigger>
       <DropdownMenuContent
         align="end"
-        className="w-[280px] dark:bg-[#262626] border-gray-200 dark:border-gray-700"
+        className="w-[300px] dark:bg-[#262626] border-gray-200 dark:border-gray-700"
       >
         <DropdownMenuLabel className="text-xs font-medium text-gray-500 dark:text-gray-400">
           Model for this chat
@@ -125,7 +125,7 @@ export const ModelPicker = ({
               <span className="font-medium">{config.name}</span>
               <span className="text-[11px] text-gray-500 dark:text-gray-400 truncate">
                 {PROVIDER_LABELS[config.provider] || config.provider} ·{" "}
-                {config.model_name}
+                {config.model_name.split("/").pop() || config.model_name}
               </span>
             </div>
           </DropdownMenuItem>

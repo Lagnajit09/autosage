@@ -5,14 +5,16 @@
  *   run_workflow / rerun_workflow / run_script → <RunCard>   (live panel)
  *   preview_workflow_run                       → <PreviewCard>
  *   get_execution_histories                    → <ExecutionHistoryList>
- *   get_workflow_run / get_script_run          → <RunStatusInline>
+ *
+ * `get_workflow_run` / `get_script_run` are deliberately NOT rich-rendered:
+ * they're the model polling a run it already launched, so a card would just
+ * duplicate the live `RunCard` AND freeze a stale status ("Running" forever).
+ * They fall through to the plain badge (and fold into the "Thought process").
  *
  * Errors and in-flight calls are NOT rich-rendered — the badge surfaces those.
  */
 
 import { ArrowUpRight, History as HistoryIcon, Terminal, Workflow } from "lucide-react";
-
-import { cn } from "@/lib/utils";
 
 import RunCard from "./RunCard";
 import PreviewCard from "./PreviewCard";
@@ -28,7 +30,7 @@ export interface ToolCallView {
   result?: Record<string, unknown>;
 }
 
-export type RichKind = "run" | "preview" | "history" | "run_status";
+export type RichKind = "run" | "preview" | "history";
 
 const str = (o: Record<string, unknown>, k: string): string | undefined =>
   typeof o[k] === "string" ? (o[k] as string) : undefined;
@@ -51,8 +53,6 @@ export const richToolKind = (tc: ToolCallView): RichKind | null => {
   if (tc.name === "preview_workflow_run") return "preview";
   if (tc.name === "get_execution_histories" && Array.isArray(r.executions))
     return "history";
-  if (tc.name === "get_workflow_run" || tc.name === "get_script_run")
-    return "run_status";
   return null;
 };
 
@@ -175,64 +175,6 @@ const ExecutionHistoryList = ({ result }: { result: Record<string, unknown> }) =
   );
 };
 
-// ── get_workflow_run / get_script_run ────────────────────────────────
-
-const RunStatusInline = ({
-  name,
-  result,
-  argsJson,
-}: {
-  name: string;
-  result: Record<string, unknown>;
-  argsJson: string;
-}) => {
-  const { openRun } = useRunPanel();
-  const kind: RunKind = name === "get_script_run" ? "script" : "workflow";
-  const Icon = kind === "script" ? Terminal : Workflow;
-
-  let runId = str(result, "id");
-  if (!runId) {
-    try {
-      runId = JSON.parse(argsJson)?.run_id;
-    } catch {
-      runId = undefined;
-    }
-  }
-  const status = str(result, "status") || "queued";
-  const title = str(result, "workflow_name") || str(result, "script_name") || `${kind} run`;
-  const error = str(result, "error_message");
-
-  return (
-    <div className="my-1 w-full max-w-xl rounded-xl border border-gray-200 bg-white px-3.5 py-3 shadow-sm dark:border-gray-800 dark:bg-gray-900/60">
-      <div className="flex items-center gap-2.5">
-        <Icon className="h-4 w-4 shrink-0 text-gray-500 dark:text-gray-400" />
-        <span className="min-w-0 flex-1 truncate text-sm font-semibold text-gray-900 dark:text-gray-100">
-          {title}
-        </span>
-        <StatusPill status={status} />
-        {runId && (
-          <button
-            type="button"
-            onClick={() => openRun(runId as string, kind)}
-            title="Open run panel"
-            className={cn(
-              "shrink-0 rounded p-0.5 text-gray-400 transition-colors",
-              "hover:text-purple-600 dark:hover:text-purple-400",
-            )}
-          >
-            <ArrowUpRight className="h-4 w-4" />
-          </button>
-        )}
-      </div>
-      {error && (
-        <p className="mt-1.5 break-words text-xs text-red-600 dark:text-red-400">
-          {error}
-        </p>
-      )}
-    </div>
-  );
-};
-
 // ── Dispatcher ────────────────────────────────────────────────────────
 
 export const ToolResultCard = ({ tc }: { tc: ToolCallView }) => {
@@ -245,10 +187,6 @@ export const ToolResultCard = ({ tc }: { tc: ToolCallView }) => {
       return <PreviewCard result={tc.result} argsJson={tc.argumentsJson} />;
     case "history":
       return <ExecutionHistoryList result={tc.result} />;
-    case "run_status":
-      return (
-        <RunStatusInline name={tc.name} result={tc.result} argsJson={tc.argumentsJson} />
-      );
     default:
       return null;
   }

@@ -69,6 +69,7 @@ import {
   type LLMConfig,
 } from "@/lib/api/autobot";
 import {
+  refreshStreamToken,
   streamMessage,
   type AutobotStreamEvent,
 } from "@/lib/api/autobot-stream";
@@ -92,6 +93,12 @@ const welcomeMessages = [
   "How can I make your work easier?",
   "What would you like to explore?",
 ];
+
+// How often to push a fresh JWT into an in-flight stream. Clerk session
+// tokens are short-lived (~60s); a long tool turn makes mid-turn Django
+// persists with the stream's held token, so we must refresh before it
+// expires or those persists 403 ("Signature has expired").
+const STREAM_TOKEN_REFRESH_MS = 40_000;
 
 // Reverse-infinite-scroll page size. Includes role=tool rows (so a page is a
 // handful of real turns); tunable in one place.
@@ -543,23 +550,50 @@ const Interface = () => {
       turnToolCallsRef.current = [];
       setPendingAssistant({ content: "", toolCalls: [], startedAt });
 
-      await streamMessage(
-        token,
-        targetThreadId,
-        {
-          content,
-          client_id: clientId,
-          content_type: "text/plain",
-          mode: activeMode,
-        },
-        (event: AutobotStreamEvent) => {
-          switch (event.type) {
-            case "stream_start": {
-              // User message is persisted on Django. Keep the optimistic
-              // bubble visible until `done` lands — clearing now would
-              // make it flicker out and back in.
-              break;
-            }
+      // Keep the stream's server-side JWT fresh. Clerk session tokens expire
+      // in ~60s; a long tool turn makes Django persists mid-turn with the
+      // stream's held token, so without this they 403 ("Signature has
+      // expired") and the turn aborts before any tool step is shown.
+      let refreshTimer: ReturnType<typeof setInterval> | null = null;
+      const stopTokenRefresh = () => {
+        if (refreshTimer) {
+          clearInterval(refreshTimer);
+          refreshTimer = null;
+        }
+      };
+
+      try {
+        await streamMessage(
+          token,
+          targetThreadId,
+          {
+            content,
+            client_id: clientId,
+            content_type: "text/plain",
+            mode: activeMode,
+          },
+          (event: AutobotStreamEvent) => {
+            switch (event.type) {
+              case "stream_start": {
+                // User message is persisted on Django. Keep the optimistic
+                // bubble visible until `done` lands — clearing now would
+                // make it flicker out and back in.
+                const streamId = event.stream_id;
+                stopTokenRefresh();
+                refreshTimer = setInterval(() => {
+                  void (async () => {
+                    try {
+                      // skipCache forces a freshly-minted token each tick.
+                      const fresh = await getToken({ skipCache: true });
+                      if (fresh)
+                        await refreshStreamToken(fresh, targetThreadId, streamId);
+                    } catch (e) {
+                      console.warn("Stream token refresh failed:", e);
+                    }
+                  })();
+                }, STREAM_TOKEN_REFRESH_MS);
+                break;
+              }
             case "token": {
               setPendingAssistant((prev) =>
                 prev
@@ -612,6 +646,7 @@ const Interface = () => {
               break;
             }
             case "done": {
+              stopTokenRefresh();
               // Build an optimistic user message so clearing
               // `pendingUser` below doesn't make the bubble disappear.
               // The canonical row was persisted by Django; a future
@@ -655,6 +690,7 @@ const Interface = () => {
               break;
             }
             case "error": {
+              stopTokenRefresh();
               // Clear the assistant bubble so "Thinking…" doesn't sit
               // next to the error banner. `pendingUser` stays so the
               // user can retry without re-typing.
@@ -663,10 +699,14 @@ const Interface = () => {
               toast.error(event.message);
               break;
             }
-          }
-        },
-        { signal: controller.signal },
-      );
+            }
+          },
+          { signal: controller.signal },
+        );
+      } finally {
+        // Covers normal close, abort, and any throw.
+        stopTokenRefresh();
+      }
     },
     [getToken],
   );

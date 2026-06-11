@@ -902,9 +902,16 @@ async def post_message_stream(
 
             # No tool calls → final answer.
             if not tool_calls:
+                # Guard against an empty final turn (the model ends with no
+                # text and no tools) — persisting/emitting "" leaves a blank
+                # bubble. Substitute an honest fallback instead.
+                final_content = (final_payload.get("content") or "").strip() or (
+                    "I don't have anything to add here. Let me know if you'd "
+                    "like me to continue or try a different approach."
+                )
                 assistant_payload: dict[str, Any] = {
                     "role": "assistant",
-                    "content": final_payload["content"],
+                    "content": final_content,
                     "content_type": "text/markdown",
                     "provider": final_payload["provider"],
                     "model_name": final_payload["model_name"],
@@ -1063,25 +1070,87 @@ async def post_message_stream(
                     "content": result_content,
                 })
 
-        # Hit max rounds without converging. Everything's persisted; the
-        # error frame lets the client offer a retry.
+        # Hit max rounds without the model volunteering a final answer.
+        # Rather than dead-ending with an error, make ONE more call with NO
+        # tools so it MUST reply in text using everything it gathered. This
+        # turns "ran N rounds, said nothing" into an actual answer (e.g.
+        # "the run is in progress — watch the panel above").
         logger.warning(
-            "Tool-call loop hit max rounds (%d) without a final reply",
+            "Tool-call loop hit max rounds (%d); forcing a tool-free answer",
             max_rounds,
         )
+        final_resolution = selected_resolution or resolution
+        forced_text = ""
+        forced_payload: dict[str, Any] | None = None
+        try:
+            async for kind, payload in astream_complete(
+                llm_messages, final_resolution, tools=None,
+            ):
+                if kind == "token":
+                    forced_text += payload
+                    yield sse_token(payload)
+                elif kind == "done":
+                    forced_payload = payload
+        except LLMError as e:
+            logger.error("Forced final answer failed (kind=%s): %s", e.kind, e)
+            yield sse_error(friendly_llm_message(e.kind), code=f"llm_{e.kind}")
+            return
+
+        if forced_payload is None:
+            forced_payload = {
+                "content": forced_text,
+                "provider": final_resolution.provider,
+                "model_name": final_resolution.model_name,
+                "prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0,
+            }
+        final_text = (forced_payload.get("content") or "").strip() or (
+            "I worked through several steps but couldn't wrap up in one turn. "
+            "The results are above — let me know how you'd like to proceed."
+        )
+        assistant_payload = {
+            "role": "assistant",
+            "content": final_text,
+            "content_type": "text/markdown",
+            "provider": forced_payload.get("provider") or final_resolution.provider,
+            "model_name": forced_payload.get("model_name") or final_resolution.model_name,
+            "prompt_tokens": forced_payload.get("prompt_tokens") or 0,
+            "completion_tokens": forced_payload.get("completion_tokens") or 0,
+            "total_tokens": forced_payload.get("total_tokens") or 0,
+            "is_byo": not resolution.is_admin,
+        }
+        try:
+            ps, persisted_env = await client.request(
+                method="POST",
+                path=f"/api/autobot/threads/{thread_id}/messages/",
+                jwt=auth_handle.raw_jwt,
+                json_body=assistant_payload,
+            )
+        except DjangoUnavailable as e:
+            logger.error(
+                "Storage unreachable persisting forced final answer: %s", e,
+            )
+            yield sse_error(
+                "Storage service temporarily unavailable.",
+                code="storage_unavailable",
+            )
+            return
+        if ps not in (200, 201):
+            yield sse_error(
+                "Failed to persist assistant message.",
+                code=f"assistant_persist_status_{ps}",
+            )
+            return
         logger.info(
             "TURN_TOKENS thread=%s rounds=%d tool_calls=%d "
             "prompt=%d completion=%d total=%d provider=%s model=%s "
-            "(hit_max_rounds)",
+            "(forced_final)",
             thread_id, max_rounds, turn_tool_calls,
-            turn_prompt_tokens, turn_completion_tokens,
-            turn_total_tokens, turn_provider, turn_model,
+            turn_prompt_tokens + int(forced_payload.get("prompt_tokens") or 0),
+            turn_completion_tokens + int(forced_payload.get("completion_tokens") or 0),
+            turn_total_tokens + int(forced_payload.get("total_tokens") or 0),
+            turn_provider, turn_model,
         )
-        yield sse_error(
-            f"The assistant ran {max_rounds} tool rounds without "
-            "settling on a final answer. Try rephrasing or asking again.",
-            code="max_tool_rounds",
-        )
+        yield sse_done((persisted_env or {}).get("data") or {})
 
     async def _stream_with_cleanup():
         """Unregister the stream on every exit path (success, exception,
