@@ -62,6 +62,13 @@ import {
   streamMessage,
   type AutobotStreamEvent,
 } from "@/lib/api/autobot-stream";
+import { RunPanelProvider, useRunPanel } from "./run/RunPanelProvider";
+import RunPanel from "./run/RunPanel";
+import {
+  ToolResultCard,
+  richToolKind,
+  type ToolCallView,
+} from "./run/ToolResultRenderer";
 
 const welcomeMessages = [
   "Hello! How can I help you today?",
@@ -176,6 +183,17 @@ const Interface = () => {
   // ── Mode state (Research / Generation / Execution) ─────────────────
   // Mode is per-turn client state — not persisted on Thread.
   const [mode, setMode] = useState<ChatMode>("research");
+
+  // Execution is BYO-only (AD-B3b): available iff a per-thread BYO config is
+  // selected OR the user has a default BYO config. Shared/admin keys can't run.
+  const canExecute = Boolean(selectedConfigId || userDefaultId);
+
+  // Composer seed (history-row click / "Run it now") — prefills, never sends.
+  const [seed, setSeed] = useState<{ text: string; nonce: number } | undefined>();
+  const seedNonceRef = useRef(0);
+  const seedPrompt = useCallback((text: string) => {
+    setSeed({ text, nonce: ++seedNonceRef.current });
+  }, []);
 
   const [shareModalOpen, setShareModalOpen] = useState(false);
   const [customizeModalOpen, setCustomizeModalOpen] = useState(false);
@@ -563,6 +581,30 @@ const Interface = () => {
     </ReactMarkdown>
   );
 
+  // Execution mode is BYO-gated — if the user drops their BYO key (or it
+  // never resolved) while Execution is selected, fall back to Research so the
+  // composer never sits in a mode the backend will refuse (AD-B3b).
+  useEffect(() => {
+    if (mode === "execution" && !canExecute) setMode("research");
+  }, [mode, canExecute]);
+
+  // Map tool_call_id → result by reading the role=tool history messages, so
+  // historical workflow/script runs re-render as live RunCards (the role=tool
+  // rows are filtered out of the bubbles but carry the result JSON).
+  const toolResults = useMemo(() => {
+    const map = new Map<string, Record<string, unknown>>();
+    for (const m of messages) {
+      if (m.role === "tool" && m.tool_call_id && m.content) {
+        try {
+          map.set(m.tool_call_id, JSON.parse(m.content));
+        } catch {
+          /* non-JSON tool content — skip */
+        }
+      }
+    }
+    return map;
+  }, [messages]);
+
   const visibleMessages = messages.filter(
     (m) => m.role === "user" || m.role === "assistant",
   );
@@ -575,7 +617,15 @@ const Interface = () => {
     historyLoading;
 
   return (
-    <div className="flex flex-col h-full w-full relative overflow-hidden">
+    <RunPanelProvider
+      getToken={getToken}
+      onSeedPrompt={seedPrompt}
+      resetKey={threadId}
+    >
+      <div className="relative flex h-full w-full overflow-hidden">
+        {/* Chat column — flexes to fill space left by the run drawer (which
+         * compresses it on lg+; on mobile the drawer overlays instead). */}
+        <div className="relative flex h-full min-w-0 flex-1 flex-col overflow-hidden">
       {/* Mobile Header */}
       <div className="flex lg:hidden items-center justify-between w-full px-4 py-3 border-b border-gray-200 dark:border-gray-800 shrink-0 bg-white dark:bg-gray-900 z-50">
         <Sheet>
@@ -754,6 +804,8 @@ const Interface = () => {
               disabled={isStreaming || !!thread?.is_archived}
               mode={mode}
               onModeChange={setMode}
+              executionEnabled={canExecute}
+              seed={seed}
             />
           </div>
         </div>
@@ -777,6 +829,7 @@ const Interface = () => {
                   message={message}
                   userInitial={userInitial}
                   renderMarkdown={renderMarkdown}
+                  toolResults={toolResults}
                 />
               ))}
 
@@ -858,12 +911,38 @@ const Interface = () => {
                 disabled={isStreaming || !!thread?.is_archived}
                 mode={mode}
                 onModeChange={setMode}
+                executionEnabled={canExecute}
+                seed={seed}
               />
             </div>
           </div>
         </>
       )}
-    </div>
+        </div>
+        {/* Right-sidebar run drawer (compresses chat on lg+, overlays on mobile). */}
+        <RunDrawer />
+      </div>
+    </RunPanelProvider>
+  );
+};
+
+// ── Run drawer ───────────────────────────────────────────────────────
+
+const RunDrawer = () => {
+  const { activeRun, closeRun } = useRunPanel();
+  if (!activeRun) return null;
+  return (
+    <>
+      {/* Mobile backdrop — desktop has no overlay (the panel is a column). */}
+      <div
+        onClick={closeRun}
+        className="fixed inset-0 z-40 bg-black/40 lg:hidden"
+        aria-hidden
+      />
+      <aside className="animate-slide-in-right fixed inset-y-0 right-0 z-50 flex w-full flex-col border-l border-gray-200 bg-white shadow-xl dark:border-gray-800 dark:bg-gray-950 sm:w-[420px] lg:static lg:z-auto lg:w-[440px] lg:shadow-none xl:w-[500px] 2xl:w-[560px]">
+        <RunPanel activeRun={activeRun} />
+      </aside>
+    </>
   );
 };
 
@@ -873,24 +952,25 @@ interface MessageRowProps {
   message: AutobotMessage;
   userInitial: string;
   renderMarkdown: (content: string) => React.ReactNode;
+  /** tool_call_id → parsed result, harvested from role=tool history rows. */
+  toolResults: Map<string, Record<string, unknown>>;
 }
 
 const MessageRow = ({
   message,
   userInitial,
   renderMarkdown,
+  toolResults,
 }: MessageRowProps) => {
   if (message.role === "user") {
     return <UserBubble content={message.content} userInitial={userInitial} />;
   }
-  // Assistant — historical rows may carry tool_calls. For history we
-  // render each tool_call as a `done` badge (we don't have the live
-  // `tool_result` here — the matching role=tool message is filtered
-  // out, but its content lives in Postgres if a future "expand history"
-  // feature wants it).
+  // Assistant — historical rows carry tool_calls; we pair each with its
+  // persisted result (the matching role=tool message) so a past workflow /
+  // script run re-renders as a live RunCard that reconnects/hydrates.
   return (
     <AssistantBubble
-      toolCalls={historicalBadges(message.tool_calls)}
+      toolCalls={historicalBadges(message.tool_calls, toolResults)}
       body={
         message.content ? (
           <div className="w-full text-gray-900 dark:text-gray-200 rounded-lg prose prose-sm prose-invert prose-pre:bg-transparent prose-pre:p-0 prose-pre:m-0 prose-pre:border-0 max-w-none">
@@ -904,6 +984,7 @@ const MessageRow = ({
 
 const historicalBadges = (
   toolCalls: AutobotToolCall[] | undefined,
+  toolResults: Map<string, Record<string, unknown>>,
 ): PendingToolCall[] => {
   if (!toolCalls || toolCalls.length === 0) return [];
   return toolCalls.map((tc) => ({
@@ -911,9 +992,7 @@ const historicalBadges = (
     name: tc.function.name,
     argumentsJson: tc.function.arguments,
     status: "done" as const,
-    // The matching tool result is a separate role=tool Message; we
-    // surface this call as "done" without a body for now.
-    result: undefined,
+    result: toolResults.get(tc.id),
   }));
 };
 
@@ -947,16 +1026,29 @@ interface AssistantBubbleProps {
 const AssistantBubble = ({ toolCalls, body }: AssistantBubbleProps) => (
   <div className="w-full">
     {toolCalls.length > 0 && (
-      <div className="mb-2 flex flex-wrap gap-2">
-        {toolCalls.map((tc) => (
-          <ToolCallBadge
-            key={tc.id}
-            name={tc.name}
-            status={tc.status}
-            argumentsJson={tc.argumentsJson}
-            result={tc.result}
-          />
-        ))}
+      <div className="mb-2 flex flex-col items-start gap-2">
+        {toolCalls.map((tc) => {
+          const view: ToolCallView = {
+            id: tc.id,
+            name: tc.name,
+            argumentsJson: tc.argumentsJson,
+            status: tc.status,
+            result: tc.result,
+          };
+          // Execution / preview / history results get a rich renderer; every
+          // other tool (and errors / in-flight calls) keeps the plain badge.
+          return richToolKind(view) ? (
+            <ToolResultCard key={tc.id} tc={view} />
+          ) : (
+            <ToolCallBadge
+              key={tc.id}
+              name={tc.name}
+              status={tc.status}
+              argumentsJson={tc.argumentsJson}
+              result={tc.result}
+            />
+          );
+        })}
       </div>
     )}
     {body}

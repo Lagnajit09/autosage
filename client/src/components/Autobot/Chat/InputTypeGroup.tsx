@@ -4,7 +4,9 @@
  * Modes bias the system prompt:
  *   • Research   — read-only exploration (list_*, read_*).
  *   • Generation — create/modify scripts and workflows.
- *   • Execution  — not yet shipped; greyed out.
+ *   • Execution  — run workflows/scripts from chat. BYO-only (AD-B3b): users
+ *     on shared/admin keys can't execute, so the option locks until a BYO
+ *     LLM config is selected (`executionEnabled`).
  */
 
 import { Search, Atom, Cpu, Check, Lock } from "lucide-react";
@@ -23,6 +25,9 @@ interface InputTypeGroupProps {
   /** Outer container disables all buttons (e.g. while a stream is in
    * flight — you can't change the mode mid-turn). */
   disabled?: boolean;
+  /** Execution is BYO-only (AD-B3b). When false, the option is locked with a
+   * "bring your own key" explanation rather than hidden. */
+  executionEnabled?: boolean;
 }
 
 interface ButtonConfig {
@@ -33,6 +38,8 @@ interface ButtonConfig {
   description: string;
   /** Modes still in development show a Lock icon and refuse selection. */
   comingSoon?: boolean;
+  /** Requires a BYO LLM config (gated by `executionEnabled`). */
+  requiresByo?: boolean;
 }
 
 const BUTTONS: ButtonConfig[] = [
@@ -56,10 +63,10 @@ const BUTTONS: ButtonConfig[] = [
     id: "execution",
     label: "Execution",
     icon: Cpu,
-    short: "Run workflows (coming soon)",
+    short: "Run workflows and scripts",
     description:
-      "Trigger workflow runs and inspect results inline. Not available yet — workflow execution as a chat tool ships in v2.",
-    comingSoon: true,
+      "Trigger workflow and script runs and watch them live, then investigate failures. Requires your own API key (BYO) — runs use more tokens, so they're not available on shared keys.",
+    requiresByo: true,
   },
 ];
 
@@ -67,13 +74,21 @@ const InputTypeGroup: React.FC<InputTypeGroupProps> = ({
   value,
   onChange,
   disabled = false,
+  executionEnabled = false,
 }) => {
   return (
     <div className="flex items-center bg-[#efe9f3] dark:bg-[#170f2085] rounded-lg shadow-sm border border-[#d9cde0] dark:border-[#27073a52] w-fit">
       {BUTTONS.map(
-        ({ id, label, short, description, icon: Icon, comingSoon }) => {
+        ({ id, label, short, description, icon: Icon, comingSoon, requiresByo }) => {
           const active = value === id;
-          const isLocked = comingSoon || disabled;
+          const byoLocked = !!requiresByo && !executionEnabled;
+          const showLock = comingSoon || byoLocked;
+          const isLocked = showLock || disabled;
+          const status = comingSoon
+            ? "Coming Soon"
+            : byoLocked
+              ? "BYO key required"
+              : "Enabled";
           return (
             <Tooltip key={id}>
               <TooltipTrigger asChild>
@@ -83,7 +98,7 @@ const InputTypeGroup: React.FC<InputTypeGroupProps> = ({
                     if (isLocked) return;
                     onChange(id);
                   }}
-                  disabled={comingSoon || disabled}
+                  disabled={isLocked}
                   className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-all
                     ${
                       active
@@ -91,16 +106,16 @@ const InputTypeGroup: React.FC<InputTypeGroupProps> = ({
                         : "text-[#8d70b4] hover:text-[#83269d] dark:hover:text-[#c89bff]"
                     }
                     ${
-                      comingSoon
+                      showLock
                         ? "opacity-50 cursor-not-allowed hover:text-[#8d70b4] dark:hover:text-[#8d70b4]"
                         : disabled
                           ? "opacity-60 cursor-not-allowed"
                           : ""
                     }`}
                   aria-pressed={active}
-                  aria-label={`${label} mode${comingSoon ? " (coming soon)" : ""}`}
+                  aria-label={`${label} mode${showLock ? " (locked)" : ""}`}
                 >
-                  {comingSoon ? (
+                  {showLock ? (
                     <Lock size={16} strokeWidth={2} />
                   ) : (
                     <Icon
@@ -119,8 +134,8 @@ const InputTypeGroup: React.FC<InputTypeGroupProps> = ({
                   label={label}
                   short={short}
                   description={description}
-                  status={comingSoon ? "Coming Soon" : "Enabled"}
-                  statusOk={!comingSoon}
+                  status={status}
+                  statusOk={!showLock}
                   tag="Chat Mode"
                 />
               </TooltipContent>

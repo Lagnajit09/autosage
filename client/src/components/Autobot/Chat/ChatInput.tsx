@@ -40,12 +40,17 @@ type Props = {
   placeholder?: string;
   mode?: ChatMode;
   onModeChange?: (mode: ChatMode) => void;
+  /** Execution mode is BYO-only (AD-B3b); unlocks the mode option. */
+  executionEnabled?: boolean;
+  /** Prefill the composer without sending. Bump `nonce` to re-apply the same
+   * text (e.g. clicking a history row twice). */
+  seed?: { text: string; nonce: number };
 };
 
 const MODE_PLACEHOLDERS: Record<ChatMode, string> = {
   research: "Ask about your scripts, workflows, or vault…",
   generation: "Describe a script or workflow to create…",
-  execution: "Workflow execution from chat is coming soon.",
+  execution: "Ask me to run, watch, or investigate a workflow…",
 };
 
 const ChatInput = ({
@@ -54,6 +59,8 @@ const ChatInput = ({
   placeholder,
   mode = "research",
   onModeChange,
+  executionEnabled = false,
+  seed,
 }: Props) => {
   const { id } = useParams();
   const { isLoading } = useLoading();
@@ -216,6 +223,25 @@ const ChatInput = ({
     handleAutoResize();
   }, [handleAutoResize]);
 
+  // Seed the composer from an external action (history row, "Run it now")
+  // without sending — the user reviews and presses send. `nonce` lets the
+  // same text be re-applied on repeat clicks.
+  React.useEffect(() => {
+    if (!seed) return;
+    setInputValue(seed.text);
+    const el = textareaRef.current;
+    if (el) {
+      el.focus();
+      const len = seed.text.length;
+      requestAnimationFrame(() => {
+        el.selectionStart = len;
+        el.selectionEnd = len;
+        handleAutoResize();
+      });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [seed?.nonce]);
+
   React.useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
       if (
@@ -336,6 +362,7 @@ const ChatInput = ({
                   value={mode}
                   onChange={(m) => onModeChange?.(m)}
                   disabled={isDisabled}
+                  executionEnabled={executionEnabled}
                 />
               </div>
 
