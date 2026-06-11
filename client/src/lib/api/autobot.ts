@@ -80,6 +80,8 @@ export interface AutobotThread {
   created_at: string;
   modified_at: string;
   message_count?: number;
+  /** Count of role=user messages — drives the long-thread guardrails. */
+  user_message_count?: number;
 }
 
 export interface ThreadCreateBody {
@@ -253,15 +255,19 @@ export const deleteThread = async (
 };
 
 // Messages: READ only here — writes happen via the stream.
+// `ordering` defaults to oldest-first; pass "-created_at" for the
+// latest-first paging the chat uses (reverse infinite scroll).
 export const listMessages = async (
   token: string,
   threadId: string,
   page: number = 1,
   pageSize: number = 50,
+  ordering: "created_at" | "-created_at" = "created_at",
 ): Promise<PaginatedMessages> => {
   const qs = new URLSearchParams({
     page: String(page),
     page_size: String(pageSize),
+    ordering,
   }).toString();
   const response = await apiRequest(
     `${AI_BASE}/threads/${threadId}/messages/?${qs}`,

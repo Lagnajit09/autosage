@@ -62,7 +62,7 @@ export const ToolCallBadge = ({
         : label;
 
   return (
-    <div className="my-2 max-w-full">
+    <div className="max-w-full">
       <button
         type="button"
         onClick={() => status !== "running" && setExpanded((p) => !p)}

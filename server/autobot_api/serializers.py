@@ -96,6 +96,9 @@ class ThreadSerializer(serializers.ModelSerializer):
     # Annotated by the list/detail view — read-only and optional in payload
     # form (POST/PATCH responses set it after the .annotate() round-trip).
     message_count = serializers.IntegerField(read_only=True, required=False)
+    # USER-message count (not total) — drives the client's long-thread
+    # guardrails. Optional so POST/PATCH responses (pre-annotation) don't fail.
+    user_message_count = serializers.IntegerField(read_only=True, required=False)
 
     class Meta:
         model = Thread
@@ -109,6 +112,7 @@ class ThreadSerializer(serializers.ModelSerializer):
             'created_at',
             'modified_at',
             'message_count',
+            'user_message_count',
         ]
         read_only_fields = [
             'id',
@@ -116,6 +120,7 @@ class ThreadSerializer(serializers.ModelSerializer):
             'created_at',
             'modified_at',
             'message_count',
+            'user_message_count',
         ]
 
     def validate_llm_config(self, value):

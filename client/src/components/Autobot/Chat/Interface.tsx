@@ -11,7 +11,14 @@
  * ReactMarkdown like the rest of history.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import ReactMarkdown from "react-markdown";
 import { useNavigate, useParams } from "react-router-dom";
 import { useAuth, useUser } from "@clerk/clerk-react";
@@ -39,11 +46,15 @@ import {
 } from "@/components/ui/tooltip";
 import {
   BarChart3,
+  Brain,
+  ChevronRight,
   DatabaseZap,
+  Loader2,
   Menu,
   Settings2,
   ShareIcon,
   SlidersHorizontal,
+  X,
 } from "lucide-react";
 
 import {
@@ -55,7 +66,6 @@ import {
   patchThread,
   type AutobotMessage,
   type AutobotThread,
-  type AutobotToolCall,
   type LLMConfig,
 } from "@/lib/api/autobot";
 import {
@@ -83,6 +93,14 @@ const welcomeMessages = [
   "What would you like to explore?",
 ];
 
+// Reverse-infinite-scroll page size. Includes role=tool rows (so a page is a
+// handful of real turns); tunable in one place.
+const MESSAGE_PAGE_SIZE = 50;
+// Long-thread guardrails, counted in USER messages (token cost grows with the
+// whole transcript each turn). Soft = nudge; hard = block, must start fresh.
+const SOFT_USER_MSG_LIMIT = 20;
+const HARD_USER_MSG_LIMIT = 40;
+
 interface PendingToolCall {
   id: string;
   name: string;
@@ -94,6 +112,8 @@ interface PendingToolCall {
 interface PendingAssistant {
   content: string;
   toolCalls: PendingToolCall[];
+  /** ms epoch when this turn started — powers the live "thinking" timer. */
+  startedAt: number;
 }
 
 interface PendingUserMessage {
@@ -108,6 +128,114 @@ const newClientId = (): string => {
   } catch {
     return `msg_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
   }
+};
+
+// Turn the just-completed turn's live tool calls into the SAME message shape
+// Django persists (one assistant row with tool_calls + one role=tool row per
+// result), so the existing history renderer keeps showing the steps after the
+// stream ends — without an extra fetch. Optimistic ids are replaced by the
+// canonical rows on the next history load.
+const buildStepMessages = (
+  toolCalls: PendingToolCall[],
+  clientId: string,
+): AutobotMessage[] => {
+  if (toolCalls.length === 0) return [];
+  const base = {
+    content_type: "text/plain" as const,
+    provider: "",
+    model_name: "",
+    prompt_tokens: null,
+    completion_tokens: null,
+    total_tokens: null,
+    client_id: "",
+    created_at: new Date().toISOString(),
+  };
+  const out: AutobotMessage[] = [
+    {
+      ...base,
+      id: `optimistic-steps-${clientId}`,
+      role: "assistant",
+      content: "",
+      tool_calls: toolCalls.map((tc) => ({
+        id: tc.id,
+        type: "function" as const,
+        function: { name: tc.name, arguments: tc.argumentsJson },
+      })),
+      tool_call_id: "",
+    },
+  ];
+  for (const tc of toolCalls) {
+    if (tc.result === undefined) continue;
+    out.push({
+      ...base,
+      id: `optimistic-toolresult-${tc.id}`,
+      role: "tool",
+      content: JSON.stringify(tc.result),
+      tool_calls: [],
+      tool_call_id: tc.id,
+    });
+  }
+  return out;
+};
+
+// A conversational turn: the user message, the tool steps taken, and the
+// assistant's final response. Past turns collapse their steps behind a
+// single "Thought for Xs ›"; the live + most-recent turn stay expanded.
+interface Turn {
+  key: string;
+  user: AutobotMessage | null;
+  toolCalls: PendingToolCall[];
+  response: AutobotMessage | null;
+  /** user→response wall-clock, for the "Thought for Xs" label. */
+  durationSec: number | null;
+}
+
+const buildTurns = (
+  visible: AutobotMessage[],
+  toolResults: Map<string, Record<string, unknown>>,
+): Turn[] => {
+  const turns: Turn[] = [];
+  let cur: Turn | null = null;
+  let startMs: number | null = null;
+  const open = (user: AutobotMessage | null) => {
+    startMs = user?.created_at ? Date.parse(user.created_at) : null;
+    cur = {
+      key: user?.id ?? `turn-${turns.length}`,
+      user,
+      toolCalls: [],
+      response: null,
+      durationSec: null,
+    };
+    turns.push(cur);
+  };
+  for (const m of visible) {
+    if (m.role === "user") {
+      open(m);
+      continue;
+    }
+    // assistant
+    if (!cur) open(null);
+    if (m.tool_calls?.length) {
+      for (const tc of m.tool_calls) {
+        cur!.toolCalls.push({
+          id: tc.id,
+          name: tc.function.name,
+          argumentsJson: tc.function.arguments,
+          status: "done",
+          result: toolResults.get(tc.id),
+        });
+      }
+    }
+    if (m.content) {
+      cur!.response = m;
+      cur!.key = m.id; // stable key from the persisted response row
+      const endMs = Date.parse(m.created_at);
+      if (startMs != null && !Number.isNaN(endMs)) {
+        cur!.durationSec = Math.max(0, Math.round((endMs - startMs) / 1000));
+      }
+    }
+  }
+  return turns;
 };
 
 // Non-dismissible — dismissing without unarchiving would leave the
@@ -189,7 +317,9 @@ const Interface = () => {
   const canExecute = Boolean(selectedConfigId || userDefaultId);
 
   // Composer seed (history-row click / "Run it now") — prefills, never sends.
-  const [seed, setSeed] = useState<{ text: string; nonce: number } | undefined>();
+  const [seed, setSeed] = useState<
+    { text: string; nonce: number } | undefined
+  >();
   const seedNonceRef = useRef(0);
   const seedPrompt = useCallback((text: string) => {
     setSeed({ text, nonce: ++seedNonceRef.current });
@@ -202,6 +332,27 @@ const Interface = () => {
 
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
+  // Mirrors the in-flight turn's tool calls so `done` can materialize them
+  // into the message list (reading state inside a setter would be impure).
+  const turnToolCallsRef = useRef<PendingToolCall[]>([]);
+
+  // ── Reverse-infinite-scroll pagination ─────────────────────────────
+  const [hasMoreOlder, setHasMoreOlder] = useState(false);
+  const [loadingOlder, setLoadingOlder] = useState(false);
+  const nextOlderPageRef = useRef(2);
+  const topSentinelRef = useRef<HTMLDivElement>(null);
+  // Scroll anchoring on prepend + a "stick to bottom only if near bottom"
+  // heuristic so loading older history doesn't yank the viewport around.
+  const prependAnchorRef = useRef<{ prevHeight: number; prevTop: number } | null>(
+    null,
+  );
+  const justPrependedRef = useRef(false);
+  const nearBottomRef = useRef(true);
+
+  // ── Long-thread guardrails ─────────────────────────────────────────
+  const [userMsgCount, setUserMsgCount] = useState(0);
+  const [longThreadDismissed, setLongThreadDismissed] = useState(false);
+  const longThreadToastedRef = useRef<Set<string>>(new Set());
 
   const refreshConfigs = useCallback(async () => {
     try {
@@ -234,24 +385,34 @@ const Interface = () => {
       setPendingAssistant(null);
       setStreamError(null);
       setSelectedConfigId(null);
+      setUserMsgCount(0);
+      setHasMoreOlder(false);
+      nextOlderPageRef.current = 2;
       return;
     }
 
     let cancelled = false;
+    setLongThreadDismissed(false);
+    nearBottomRef.current = true;
     (async () => {
       setHistoryLoading(true);
       setStreamError(null);
       try {
         const token = await getToken();
         if (!token) throw new Error("Not signed in.");
+        // Latest-first page 1; render oldest→newest (reverse) so new turns
+        // append at the bottom and older history loads on scroll-up.
         const [threadData, historyPage] = await Promise.all([
           getThread(token, threadId),
-          listMessages(token, threadId, 1, 50),
+          listMessages(token, threadId, 1, MESSAGE_PAGE_SIZE, "-created_at"),
         ]);
         if (cancelled) return;
         setThread(threadData);
         setSelectedConfigId(threadData.llm_config);
-        setMessages(historyPage.messages);
+        setMessages([...historyPage.messages].reverse());
+        setUserMsgCount(threadData.user_message_count ?? 0);
+        nextOlderPageRef.current = 2;
+        setHasMoreOlder(historyPage.current_page < historyPage.total_pages);
       } catch (err) {
         if (cancelled) return;
         const msg =
@@ -275,15 +436,90 @@ const Interface = () => {
     [],
   );
 
-  useEffect(() => {
+  // Track whether the viewport is pinned near the bottom (so we only
+  // auto-scroll on new content when the user is already at the bottom).
+  const handleScroll = useCallback(() => {
     const el = messagesContainerRef.current;
     if (!el) return;
-    // Defer to next paint so newly-appended DOM is measured.
+    nearBottomRef.current =
+      el.scrollHeight - el.scrollTop - el.clientHeight < 120;
+  }, []);
+
+  // Stick to bottom for NEW content (send / stream / appended turn) — but
+  // never when we just prepended older history, and never if the user has
+  // scrolled up to read.
+  useEffect(() => {
+    if (justPrependedRef.current) {
+      justPrependedRef.current = false;
+      return;
+    }
+    const el = messagesContainerRef.current;
+    if (!el || !nearBottomRef.current) return;
     const timeoutId = setTimeout(() => {
       el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
     }, 0);
     return () => clearTimeout(timeoutId);
   }, [messages.length, pendingUser, pendingAssistant]);
+
+  // Restore scroll position after prepending older messages so the view
+  // doesn't jump (classic infinite-scroll-up anchoring).
+  useLayoutEffect(() => {
+    const el = messagesContainerRef.current;
+    const anchor = prependAnchorRef.current;
+    if (el && anchor) {
+      el.scrollTop = el.scrollHeight - anchor.prevHeight + anchor.prevTop;
+      prependAnchorRef.current = null;
+      justPrependedRef.current = true;
+    }
+  }, [messages]);
+
+  // Fetch the next older page (newest-first server order → reverse → prepend).
+  const loadOlder = useCallback(async () => {
+    if (loadingOlder || !hasMoreOlder || !threadId) return;
+    setLoadingOlder(true);
+    try {
+      const token = await getToken();
+      if (!token) return;
+      const page = nextOlderPageRef.current;
+      const res = await listMessages(
+        token,
+        threadId,
+        page,
+        MESSAGE_PAGE_SIZE,
+        "-created_at",
+      );
+      const older = [...res.messages].reverse();
+      const el = messagesContainerRef.current;
+      if (el) {
+        prependAnchorRef.current = {
+          prevHeight: el.scrollHeight,
+          prevTop: el.scrollTop,
+        };
+      }
+      setMessages((prev) => [...older, ...prev]);
+      nextOlderPageRef.current = page + 1;
+      setHasMoreOlder(res.current_page < res.total_pages);
+    } catch (err) {
+      console.warn("Failed to load older messages:", err);
+    } finally {
+      setLoadingOlder(false);
+    }
+  }, [loadingOlder, hasMoreOlder, threadId, getToken]);
+
+  // Fire loadOlder when the top sentinel scrolls into view.
+  useEffect(() => {
+    const sentinel = topSentinelRef.current;
+    const root = messagesContainerRef.current;
+    if (!sentinel || !root) return;
+    const obs = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting) void loadOlder();
+      },
+      { root, rootMargin: "240px 0px 0px 0px", threshold: 0 },
+    );
+    obs.observe(sentinel);
+    return () => obs.disconnect();
+  }, [loadOlder, hasMoreOlder]);
 
   // Opens an SSE stream and reduces every event into local state.
   // Caller is responsible for the surrounding `isStreaming` flag.
@@ -303,7 +539,9 @@ const Interface = () => {
         return;
       }
 
-      setPendingAssistant({ content: "", toolCalls: [] });
+      const startedAt = Date.now();
+      turnToolCallsRef.current = [];
+      setPendingAssistant({ content: "", toolCalls: [], startedAt });
 
       await streamMessage(
         token,
@@ -326,52 +564,51 @@ const Interface = () => {
               setPendingAssistant((prev) =>
                 prev
                   ? { ...prev, content: prev.content + event.content }
-                  : { content: event.content, toolCalls: [] },
+                  : { content: event.content, toolCalls: [], startedAt },
               );
               break;
             }
             case "tool_call_start": {
-              setPendingAssistant((prev) => {
-                const base = prev ?? { content: "", toolCalls: [] };
-                // Replace any same-id entry (re-emit safety).
-                const without = base.toolCalls.filter(
-                  (tc) => tc.id !== event.id,
-                );
-                return {
-                  ...base,
-                  toolCalls: [
-                    ...without,
-                    {
-                      id: event.id,
-                      name: event.name,
-                      argumentsJson: event.arguments,
-                      status: "running",
-                    },
-                  ],
-                };
-              });
+              // The ref is the source of truth (so `done` can read it
+              // synchronously); state mirrors it for rendering.
+              const without = turnToolCallsRef.current.filter(
+                (tc) => tc.id !== event.id,
+              );
+              turnToolCallsRef.current = [
+                ...without,
+                {
+                  id: event.id,
+                  name: event.name,
+                  argumentsJson: event.arguments,
+                  status: "running",
+                },
+              ];
+              const snapshot = turnToolCallsRef.current;
+              setPendingAssistant((prev) => ({
+                ...(prev ?? { content: "", toolCalls: [], startedAt }),
+                toolCalls: snapshot,
+              }));
               break;
             }
             case "tool_result": {
-              setPendingAssistant((prev) => {
-                const base = prev ?? { content: "", toolCalls: [] };
-                const hasError =
-                  event.result != null &&
-                  typeof event.result === "object" &&
-                  "error" in event.result;
-                return {
-                  ...base,
-                  toolCalls: base.toolCalls.map((tc) =>
-                    tc.id === event.id
-                      ? {
-                          ...tc,
-                          status: hasError ? "error" : "done",
-                          result: event.result,
-                        }
-                      : tc,
-                  ),
-                };
-              });
+              const hasError =
+                event.result != null &&
+                typeof event.result === "object" &&
+                "error" in event.result;
+              turnToolCallsRef.current = turnToolCallsRef.current.map((tc) =>
+                tc.id === event.id
+                  ? {
+                      ...tc,
+                      status: hasError ? "error" : "done",
+                      result: event.result,
+                    }
+                  : tc,
+              );
+              const snapshot = turnToolCallsRef.current;
+              setPendingAssistant((prev) => ({
+                ...(prev ?? { content: "", toolCalls: [], startedAt }),
+                toolCalls: snapshot,
+              }));
               break;
             }
             case "done": {
@@ -392,9 +629,27 @@ const Interface = () => {
                 tool_calls: [],
                 tool_call_id: "",
                 client_id: clientId,
-                created_at: new Date().toISOString(),
+                // Turn start (not done-time) so the optimistic "Thought for Xs"
+                // duration is realistic until the canonical rows load.
+                created_at: new Date(startedAt).toISOString(),
               };
-              setMessages((prev) => [...prev, optimisticUser, event.message]);
+              // Materialize this turn's tool steps so they DON'T vanish when
+              // pendingAssistant clears. We mirror exactly what a later
+              // refresh produces: one assistant row carrying the tool_calls +
+              // one role=tool row per result (consumed by the `toolResults`
+              // map → rich cards). Live RunCards re-register idempotently and
+              // keep streaming from the shared store.
+              const stepMessages = buildStepMessages(
+                turnToolCallsRef.current,
+                clientId,
+              );
+              turnToolCallsRef.current = [];
+              setMessages((prev) => [
+                ...prev,
+                optimisticUser,
+                ...stepMessages,
+                event.message,
+              ]);
               setPendingAssistant(null);
               setPendingUser(null);
               break;
@@ -426,11 +681,20 @@ const Interface = () => {
         toast.error("This chat is archived. Unarchive to send messages.");
         return;
       }
+      // Long-thread hard cap — input is disabled, but a race could reach here.
+      if (threadId && userMsgCount >= HARD_USER_MSG_LIMIT) {
+        toast.error(
+          "This conversation has reached its length limit. Start a new thread to continue.",
+        );
+        return;
+      }
 
       setStreamError(null);
 
       const clientId = newClientId();
       setPendingUser({ content: trimmed, clientId });
+      // Optimistic — server count is authoritative on next load.
+      setUserMsgCount((c) => c + 1);
       setIsStreaming(true);
 
       try {
@@ -472,6 +736,7 @@ const Interface = () => {
       selectedConfigId,
       mode,
       thread?.is_archived,
+      userMsgCount,
     ],
   );
 
@@ -605,9 +870,34 @@ const Interface = () => {
     return map;
   }, [messages]);
 
-  const visibleMessages = messages.filter(
-    (m) => m.role === "user" || m.role === "assistant",
+  const visibleMessages = useMemo(
+    () => messages.filter((m) => m.role === "user" || m.role === "assistant"),
+    [messages],
   );
+
+  // Group into turns (user → tool steps → response) so past turns can collapse
+  // their steps behind a single "Thought for Xs ›".
+  const turns = useMemo(
+    () => buildTurns(visibleMessages, toolResults),
+    [visibleMessages, toolResults],
+  );
+
+  // Long-thread guardrails (user-message count).
+  const overSoft = !!threadId && userMsgCount > SOFT_USER_MSG_LIMIT;
+  const overHard = !!threadId && userMsgCount >= HARD_USER_MSG_LIMIT;
+  // The most recent completed turn stays expanded while idle; it collapses
+  // once a new turn starts streaming. The live turn renders separately.
+  const idle = !pendingUser && !pendingAssistant;
+
+  // One-time nudge per thread when crossing the soft limit.
+  useEffect(() => {
+    if (overSoft && !overHard && threadId && !longThreadToastedRef.current.has(threadId)) {
+      longThreadToastedRef.current.add(threadId);
+      toast(
+        "This conversation is getting long — consider starting a new thread. Long threads re-send the whole transcript each turn and cost more tokens.",
+      );
+    }
+  }, [overSoft, overHard, threadId]);
 
   // Has-content check for the welcome screen flip.
   const hasAnyContent =
@@ -626,298 +916,320 @@ const Interface = () => {
         {/* Chat column — flexes to fill space left by the run drawer (which
          * compresses it on lg+; on mobile the drawer overlays instead). */}
         <div className="relative flex h-full min-w-0 flex-1 flex-col overflow-hidden">
-      {/* Mobile Header */}
-      <div className="flex lg:hidden items-center justify-between w-full px-4 py-3 border-b border-gray-200 dark:border-gray-800 shrink-0 bg-white dark:bg-gray-900 z-50">
-        <Sheet>
-          <SheetTrigger asChild>
-            <button className="p-2 -ml-2 rounded-md">
-              <Menu className="w-5 h-5 dark:text-gray-100" />
-            </button>
-          </SheetTrigger>
-          <SheetContent
-            side="left"
-            className="w-[80%] max-w-[300px] p-0 dark:bg-gray-900"
-          >
-            <div className="h-full flex flex-col p-4">
-              <div className="flex items-center gap-2 mb-6 px-2">
-                <img
-                  src="/icon.png"
-                  alt="AutoSage Icon"
-                  className="w-8 h-8 object-contain rounded-full shadow-sm"
-                />
-                <span className="font-bold text-lg dark:text-gray-100 tracking-tight">
-                  AutoSage
-                </span>
-              </div>
-              <NavItems mobile />
-            </div>
-          </SheetContent>
-        </Sheet>
-
-        <div className="flex items-center gap-2">
-          <img
-            src="/icon.png"
-            alt="AutoSage Icon"
-            className="w-6 h-6 object-contain rounded-full shadow-sm"
-          />
-          <span className="font-semibold dark:text-gray-100 tracking-tight">
-            AutoSage
-          </span>
-        </div>
-
-        <SidebarTrigger className="lg:hidden" />
-      </div>
-      <div className="hidden lg:flex items-center justify-between absolute top-0 left-0 right-0 px-6 py-3 z-30 backdrop-blur-md bg-transparent border-b border-gray-200/30 dark:border-gray-800/30 shadow-sm">
-        <div className="flex items-center gap-2">
-          <AutobotIcon size={24} />
-          <span className="font-semibold text-gray-900 dark:text-gray-100 tracking-tight text-lg">
-            Autobot
-          </span>
-        </div>
-
-        <div className="flex items-center gap-1">
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                onClick={() => navigate("/ai/autobot/dashboard")}
-                className="flex items-center gap-2 cursor-pointer bg-transparent hover:bg-gray-100/70 dark:hover:bg-gray-800/70 py-2 px-3 rounded-full transition-colors"
+          {/* Mobile Header */}
+          <div className="flex lg:hidden items-center justify-between w-full px-4 py-3 border-b border-gray-200 dark:border-gray-800 shrink-0 bg-white dark:bg-gray-900 z-50">
+            <Sheet>
+              <SheetTrigger asChild>
+                <button className="p-2 -ml-2 rounded-md">
+                  <Menu className="w-5 h-5 dark:text-gray-100" />
+                </button>
+              </SheetTrigger>
+              <SheetContent
+                side="left"
+                className="w-[80%] max-w-[300px] p-0 dark:bg-gray-900"
               >
-                <BarChart3 className="w-4 h-4 text-gray-800 dark:text-gray-200" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>
-              <p>Dashboard</p>
-            </TooltipContent>
-          </Tooltip>
-
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                onClick={() => setVaultModalOpen(true)}
-                className="flex items-center gap-2 cursor-pointer bg-transparent hover:bg-gray-100/70 dark:hover:bg-gray-800/70 py-2 px-3 rounded-full transition-colors"
-              >
-                <DatabaseZap className="w-4 h-4 text-gray-800 dark:text-gray-200" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>
-              <p>Vault</p>
-            </TooltipContent>
-          </Tooltip>
-
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                onClick={() => setCustomizeModalOpen(true)}
-                className="flex items-center gap-2 cursor-pointer bg-transparent hover:bg-gray-100/70 dark:hover:bg-gray-800/70 py-2 px-3 rounded-full transition-colors"
-              >
-                <Settings2 className="w-4 h-4 text-gray-800 dark:text-gray-200" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>
-              <p>Customize</p>
-            </TooltipContent>
-          </Tooltip>
-
-          {thread && (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  onClick={() => setThreadSettingsOpen(true)}
-                  className="flex items-center gap-2 cursor-pointer bg-transparent hover:bg-gray-100/70 dark:hover:bg-gray-800/70 py-2 px-3 rounded-full transition-colors"
-                >
-                  <SlidersHorizontal className="w-4 h-4 text-gray-800 dark:text-gray-200" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>
-                <p>Thread settings</p>
-              </TooltipContent>
-            </Tooltip>
-          )}
-
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                onClick={() => setShareModalOpen(true)}
-                className="flex items-center gap-2 cursor-pointer bg-transparent hover:bg-gray-100/70 dark:hover:bg-gray-800/70 py-2 px-3 rounded-full transition-colors"
-              >
-                <ShareIcon className="w-4 h-4 text-gray-800 dark:text-gray-200" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>
-              <p>Share</p>
-            </TooltipContent>
-          </Tooltip>
-        </div>
-      </div>
-
-      <ShareModal open={shareModalOpen} onOpenChange={setShareModalOpen} />
-      <CustomizeModal
-        open={customizeModalOpen}
-        onOpenChange={setCustomizeModalOpen}
-        onConfigsChanged={() => void refreshConfigs()}
-      />
-      <ThreadSettingsModal
-        open={threadSettingsOpen}
-        onOpenChange={setThreadSettingsOpen}
-        thread={thread}
-        configs={configs}
-        userDefaultId={userDefaultId}
-        onSaved={(updated) => {
-          // Keep the ModelPicker pill in sync — it reads from
-          // `selectedConfigId`, not `thread.llm_config`.
-          setThread(updated);
-          setSelectedConfigId(updated.llm_config);
-        }}
-      />
-      <Vault isOpen={vaultModalOpen} setIsOpen={setVaultModalOpen} />
-
-      {!hasAnyContent ? (
-        <div className="flex-1 flex flex-col items-center justify-center p-4 lg:pt-16">
-          <div className="text-center mb-8 max-w-lg mx-auto">
-            <p className="text-2xl font-medium text-gray-600 dark:text-gray-400">
-              {welcomeText}
-            </p>
-            {thread?.title && (
-              <p className="mt-2 text-sm text-gray-500 dark:text-gray-500">
-                {thread.title}
-              </p>
-            )}
-          </div>
-          <div className="w-full max-w-2xl flex flex-col gap-2">
-            <div className="flex justify-end px-2">
-              <ModelPicker
-                selectedConfigId={selectedConfigId}
-                configs={configs}
-                userDefaultId={userDefaultId}
-                disabled={isStreaming || modelSwitching}
-                onChange={(id) => void handleModelChange(id)}
-              />
-            </div>
-            {thread?.is_archived && (
-              <ArchivedBanner
-                onUnarchive={() => void unarchiveCurrentThread()}
-                busy={unarchiving}
-              />
-            )}
-            <ChatInput
-              handleSubmit={onChatInputSubmit}
-              disabled={isStreaming || !!thread?.is_archived}
-              mode={mode}
-              onModeChange={setMode}
-              executionEnabled={canExecute}
-              seed={seed}
-            />
-          </div>
-        </div>
-      ) : (
-        <>
-          {/* Scrollable Messages Area */}
-          <div
-            ref={messagesContainerRef}
-            className="flex-1 w-full overflow-y-auto scroll-smooth"
-          >
-            <div className="w-full max-w-3xl xl:max-w-[70%] mx-auto flex flex-col gap-6 px-4 py-6 pb-4 lg:pt-20">
-              {historyLoading && visibleMessages.length === 0 && (
-                <p className="text-center text-sm text-gray-500 dark:text-gray-400">
-                  Loading conversation…
-                </p>
-              )}
-
-              {visibleMessages.map((message) => (
-                <MessageRow
-                  key={message.id}
-                  message={message}
-                  userInitial={userInitial}
-                  renderMarkdown={renderMarkdown}
-                  toolResults={toolResults}
-                />
-              ))}
-
-              {/* Optimistic user bubble (until `done` clears it). */}
-              {pendingUser && (
-                <UserBubble
-                  content={pendingUser.content}
-                  userInitial={userInitial}
-                />
-              )}
-
-              {/* Live assistant draft. */}
-              {pendingAssistant && (
-                <AssistantBubble
-                  toolCalls={pendingAssistant.toolCalls}
-                  // While streaming, render plain text — markdown parse
-                  // on every token is wasteful and visually jumpy.
-                  body={
-                    pendingAssistant.content ? (
-                      <p className="whitespace-pre-wrap leading-relaxed text-sm text-gray-900 dark:text-gray-200">
-                        {pendingAssistant.content}
-                        <span className="ml-0.5 inline-block h-4 w-1 animate-pulse bg-gray-700 dark:bg-gray-300 align-middle" />
-                      </p>
-                    ) : (
-                      <p className="text-sm text-gray-500 dark:text-gray-400 italic">
-                        Thinking…
-                      </p>
-                    )
-                  }
-                />
-              )}
-
-              {streamError && !isStreaming && (
-                <div className="rounded-md border border-red-300 bg-red-50 p-3 text-sm text-red-700 dark:border-red-800/60 dark:bg-red-950/40 dark:text-red-300">
-                  {streamError}
+                <div className="h-full flex flex-col p-4">
+                  <div className="flex items-center gap-2 mb-6 px-2">
+                    <img
+                      src="/icon.png"
+                      alt="AutoSage Icon"
+                      className="w-8 h-8 object-contain rounded-full shadow-sm"
+                    />
+                    <span className="font-bold text-lg dark:text-gray-100 tracking-tight">
+                      AutoSage
+                    </span>
+                  </div>
+                  <NavItems mobile />
                 </div>
+              </SheetContent>
+            </Sheet>
+
+            <div className="flex items-center gap-2">
+              <img
+                src="/icon.png"
+                alt="AutoSage Icon"
+                className="w-6 h-6 object-contain rounded-full shadow-sm"
+              />
+              <span className="font-semibold dark:text-gray-100 tracking-tight">
+                AutoSage
+              </span>
+            </div>
+
+            <SidebarTrigger className="lg:hidden" />
+          </div>
+          <div className="hidden lg:flex items-center justify-between absolute top-0 left-0 right-0 px-6 py-3 z-30 backdrop-blur-md bg-transparent border-b border-gray-200/30 dark:border-gray-800/30 shadow-sm">
+            <div className="flex items-center gap-2">
+              <AutobotIcon size={24} />
+              <span className="font-semibold text-gray-900 dark:text-gray-100 tracking-tight text-lg">
+                Autobot
+              </span>
+            </div>
+
+            <div className="flex items-center gap-1">
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    onClick={() => navigate("/ai/autobot/dashboard")}
+                    className="flex items-center gap-2 cursor-pointer bg-transparent hover:bg-gray-100/70 dark:hover:bg-gray-800/70 py-2 px-3 rounded-full transition-colors"
+                  >
+                    <BarChart3 className="w-4 h-4 text-gray-800 dark:text-gray-200" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>Dashboard</p>
+                </TooltipContent>
+              </Tooltip>
+
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    onClick={() => setVaultModalOpen(true)}
+                    className="flex items-center gap-2 cursor-pointer bg-transparent hover:bg-gray-100/70 dark:hover:bg-gray-800/70 py-2 px-3 rounded-full transition-colors"
+                  >
+                    <DatabaseZap className="w-4 h-4 text-gray-800 dark:text-gray-200" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>Vault</p>
+                </TooltipContent>
+              </Tooltip>
+
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    onClick={() => setCustomizeModalOpen(true)}
+                    className="flex items-center gap-2 cursor-pointer bg-transparent hover:bg-gray-100/70 dark:hover:bg-gray-800/70 py-2 px-3 rounded-full transition-colors"
+                  >
+                    <Settings2 className="w-4 h-4 text-gray-800 dark:text-gray-200" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>Customize</p>
+                </TooltipContent>
+              </Tooltip>
+
+              {thread && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      onClick={() => setThreadSettingsOpen(true)}
+                      className="flex items-center gap-2 cursor-pointer bg-transparent hover:bg-gray-100/70 dark:hover:bg-gray-800/70 py-2 px-3 rounded-full transition-colors"
+                    >
+                      <SlidersHorizontal className="w-4 h-4 text-gray-800 dark:text-gray-200" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>Thread settings</p>
+                  </TooltipContent>
+                </Tooltip>
               )}
+
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    onClick={() => setShareModalOpen(true)}
+                    className="flex items-center gap-2 cursor-pointer bg-transparent hover:bg-gray-100/70 dark:hover:bg-gray-800/70 py-2 px-3 rounded-full transition-colors"
+                  >
+                    <ShareIcon className="w-4 h-4 text-gray-800 dark:text-gray-200" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>Share</p>
+                </TooltipContent>
+              </Tooltip>
             </div>
           </div>
 
-          {/* Fixed Input Area */}
-          <div className="w-full shrink-0 z-20 pb-4 pt-2 px-4 bg-transparent">
-            <div className="w-full max-w-3xl xl:max-w-[75%] mx-auto flex flex-col gap-2">
-              <div className="flex justify-end items-center gap-1.5 px-2">
-                {thread && (
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <button
-                        type="button"
-                        onClick={() => setThreadSettingsOpen(true)}
-                        disabled={isStreaming}
-                        aria-label="Thread settings"
-                        className="lg:hidden inline-flex items-center justify-center rounded-full border border-gray-300 dark:border-gray-700 bg-white/60 dark:bg-gray-800/40 px-2 py-1 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700/60 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                      >
-                        <SlidersHorizontal className="h-3 w-3" />
-                      </button>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      <p>Thread settings</p>
-                    </TooltipContent>
-                  </Tooltip>
+          <ShareModal open={shareModalOpen} onOpenChange={setShareModalOpen} />
+          <CustomizeModal
+            open={customizeModalOpen}
+            onOpenChange={setCustomizeModalOpen}
+            onConfigsChanged={() => void refreshConfigs()}
+          />
+          <ThreadSettingsModal
+            open={threadSettingsOpen}
+            onOpenChange={setThreadSettingsOpen}
+            thread={thread}
+            configs={configs}
+            userDefaultId={userDefaultId}
+            onSaved={(updated) => {
+              // Keep the ModelPicker pill in sync — it reads from
+              // `selectedConfigId`, not `thread.llm_config`.
+              setThread(updated);
+              setSelectedConfigId(updated.llm_config);
+            }}
+          />
+          <Vault isOpen={vaultModalOpen} setIsOpen={setVaultModalOpen} />
+
+          {!hasAnyContent ? (
+            <div className="flex-1 flex flex-col items-center justify-center p-4 lg:pt-16">
+              <div className="text-center mb-8 max-w-lg mx-auto">
+                <p className="text-2xl font-medium text-gray-600 dark:text-gray-400">
+                  {welcomeText}
+                </p>
+                {thread?.title && (
+                  <p className="mt-2 text-sm text-gray-500 dark:text-gray-500">
+                    {thread.title}
+                  </p>
                 )}
-                <ModelPicker
-                  selectedConfigId={selectedConfigId}
-                  configs={configs}
-                  userDefaultId={userDefaultId}
-                  disabled={isStreaming || modelSwitching}
-                  onChange={(id) => void handleModelChange(id)}
+              </div>
+              <div className="w-full max-w-2xl flex flex-col gap-2">
+                <div className="flex justify-end px-2">
+                  <ModelPicker
+                    selectedConfigId={selectedConfigId}
+                    configs={configs}
+                    userDefaultId={userDefaultId}
+                    disabled={isStreaming || modelSwitching}
+                    onChange={(id) => void handleModelChange(id)}
+                  />
+                </div>
+                {thread?.is_archived && (
+                  <ArchivedBanner
+                    onUnarchive={() => void unarchiveCurrentThread()}
+                    busy={unarchiving}
+                  />
+                )}
+                <ChatInput
+                  handleSubmit={onChatInputSubmit}
+                  disabled={isStreaming || !!thread?.is_archived}
+                  mode={mode}
+                  onModeChange={setMode}
+                  executionEnabled={canExecute}
+                  seed={seed}
                 />
               </div>
-              {thread?.is_archived && (
-                <ArchivedBanner
-                  onUnarchive={() => void unarchiveCurrentThread()}
-                  busy={unarchiving}
-                />
-              )}
-              <ChatInput
-                handleSubmit={onChatInputSubmit}
-                disabled={isStreaming || !!thread?.is_archived}
-                mode={mode}
-                onModeChange={setMode}
-                executionEnabled={canExecute}
-                seed={seed}
-              />
             </div>
-          </div>
-        </>
-      )}
+          ) : (
+            <>
+              {/* Scrollable Messages Area */}
+              <div
+                ref={messagesContainerRef}
+                onScroll={handleScroll}
+                className="flex-1 w-full overflow-y-auto scroll-smooth"
+              >
+                <div className="w-full max-w-3xl xl:max-w-[70%] mx-auto flex flex-col gap-6 px-4 py-6 pb-4 lg:pt-20">
+                  {historyLoading && visibleMessages.length === 0 && (
+                    <p className="text-center text-sm text-gray-500 dark:text-gray-400">
+                      Loading conversation…
+                    </p>
+                  )}
+
+                  {/* Top sentinel — drives loading older history on scroll-up. */}
+                  {hasMoreOlder && (
+                    <div ref={topSentinelRef} className="flex justify-center py-1">
+                      {loadingOlder && (
+                        <Loader2 className="h-4 w-4 animate-spin text-gray-400" />
+                      )}
+                    </div>
+                  )}
+
+                  {turns.map((turn, i) => (
+                    <TurnRow
+                      key={turn.key}
+                      turn={turn}
+                      expanded={idle && i === turns.length - 1}
+                      userInitial={userInitial}
+                      renderMarkdown={renderMarkdown}
+                    />
+                  ))}
+
+                  {/* Optimistic user bubble (until `done` clears it). */}
+                  {pendingUser && (
+                    <UserBubble
+                      content={pendingUser.content}
+                      userInitial={userInitial}
+                    />
+                  )}
+
+                  {/* Live assistant draft. */}
+                  {pendingAssistant && (
+                    <AssistantBubble
+                      toolCalls={pendingAssistant.toolCalls}
+                      timerStartMs={pendingAssistant.startedAt}
+                      // While streaming, render plain text — markdown parse
+                      // on every token is wasteful and visually jumpy.
+                      body={
+                        pendingAssistant.content ? (
+                          <p className="whitespace-pre-wrap leading-relaxed text-sm text-gray-900 dark:text-gray-200">
+                            {pendingAssistant.content}
+                            <span className="ml-0.5 inline-block h-4 w-1 animate-pulse bg-gray-700 dark:bg-gray-300 align-middle" />
+                          </p>
+                        ) : (
+                          <p className="text-sm text-gray-500 dark:text-gray-400 italic">
+                            Thinking…
+                          </p>
+                        )
+                      }
+                    />
+                  )}
+
+                  {streamError && !isStreaming && (
+                    <div className="rounded-md border border-red-300 bg-red-50 p-3 text-sm text-red-700 dark:border-red-800/60 dark:bg-red-950/40 dark:text-red-300">
+                      {streamError}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Fixed Input Area */}
+              <div className="w-full shrink-0 z-20 pb-4 pt-2 px-4 bg-transparent">
+                <div className="w-full max-w-3xl xl:max-w-[75%] mx-auto flex flex-col gap-2">
+                  <div className="flex justify-end items-center gap-1.5 px-2">
+                    {thread && (
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <button
+                            type="button"
+                            onClick={() => setThreadSettingsOpen(true)}
+                            disabled={isStreaming}
+                            aria-label="Thread settings"
+                            className="lg:hidden inline-flex items-center justify-center rounded-full border border-gray-300 dark:border-gray-700 bg-white/60 dark:bg-gray-800/40 px-2 py-1 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700/60 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            <SlidersHorizontal className="h-3 w-3" />
+                          </button>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p>Thread settings</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    )}
+                    <ModelPicker
+                      selectedConfigId={selectedConfigId}
+                      configs={configs}
+                      userDefaultId={userDefaultId}
+                      disabled={isStreaming || modelSwitching}
+                      onChange={(id) => void handleModelChange(id)}
+                    />
+                  </div>
+                  {thread?.is_archived && (
+                    <ArchivedBanner
+                      onUnarchive={() => void unarchiveCurrentThread()}
+                      busy={unarchiving}
+                    />
+                  )}
+                  {overHard ? (
+                    <ThreadLimitBanner onNewThread={() => navigate("/ai/autobot")} />
+                  ) : (
+                    overSoft &&
+                    !longThreadDismissed && (
+                      <LongThreadBanner
+                        onNewThread={() => navigate("/ai/autobot")}
+                        onDismiss={() => setLongThreadDismissed(true)}
+                      />
+                    )
+                  )}
+                  <ChatInput
+                    handleSubmit={onChatInputSubmit}
+                    disabled={isStreaming || !!thread?.is_archived || overHard}
+                    mode={mode}
+                    onModeChange={setMode}
+                    executionEnabled={canExecute}
+                    seed={seed}
+                  />
+                </div>
+              </div>
+            </>
+          )}
         </div>
         {/* Right-sidebar run drawer (compresses chat on lg+, overlays on mobile). */}
         <RunDrawer />
@@ -948,53 +1260,156 @@ const RunDrawer = () => {
 
 // ── Sub-components ───────────────────────────────────────────────────
 
-interface MessageRowProps {
-  message: AutobotMessage;
-  userInitial: string;
-  renderMarkdown: (content: string) => React.ReactNode;
-  /** tool_call_id → parsed result, harvested from role=tool history rows. */
-  toolResults: Map<string, Record<string, unknown>>;
-}
-
-const MessageRow = ({
-  message,
-  userInitial,
-  renderMarkdown,
-  toolResults,
-}: MessageRowProps) => {
-  if (message.role === "user") {
-    return <UserBubble content={message.content} userInitial={userInitial} />;
-  }
-  // Assistant — historical rows carry tool_calls; we pair each with its
-  // persisted result (the matching role=tool message) so a past workflow /
-  // script run re-renders as a live RunCard that reconnects/hydrates.
-  return (
-    <AssistantBubble
-      toolCalls={historicalBadges(message.tool_calls, toolResults)}
-      body={
-        message.content ? (
-          <div className="w-full text-gray-900 dark:text-gray-200 rounded-lg prose prose-sm prose-invert prose-pre:bg-transparent prose-pre:p-0 prose-pre:m-0 prose-pre:border-0 max-w-none">
-            {renderMarkdown(message.content)}
-          </div>
-        ) : null
-      }
+// One tool call → its rich renderer (execution/preview/history) or the
+// plain badge fallback. The single source of truth for both live and history.
+const ToolCallItem = ({ tc }: { tc: PendingToolCall }) => {
+  const view: ToolCallView = {
+    id: tc.id,
+    name: tc.name,
+    argumentsJson: tc.argumentsJson,
+    status: tc.status,
+    result: tc.result,
+  };
+  return richToolKind(view) ? (
+    <ToolResultCard tc={view} />
+  ) : (
+    <ToolCallBadge
+      name={tc.name}
+      status={tc.status}
+      argumentsJson={tc.argumentsJson}
+      result={tc.result}
     />
   );
 };
 
-const historicalBadges = (
-  toolCalls: AutobotToolCall[] | undefined,
-  toolResults: Map<string, Record<string, unknown>>,
-): PendingToolCall[] => {
-  if (!toolCalls || toolCalls.length === 0) return [];
-  return toolCalls.map((tc) => ({
-    id: tc.id,
-    name: tc.function.name,
-    argumentsJson: tc.function.arguments,
-    status: "done" as const,
-    result: toolResults.get(tc.id),
-  }));
+// Collapsed view of a past turn's tool steps. Data is already loaded (it
+// arrived with the page) — expanding just reveals it; no extra fetch.
+const ThoughtBlock = ({
+  toolCalls,
+  durationSec,
+}: {
+  toolCalls: PendingToolCall[];
+  durationSec: number | null;
+}) => {
+  const [open, setOpen] = useState(false);
+  const label =
+    durationSec != null ? `Thought for ${formatThinking(durationSec)}` : "Thought process";
+  return (
+    <div className="w-full">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className="inline-flex items-center gap-1.5 rounded-full border border-gray-200 bg-gray-50 px-2.5 py-1 text-xs font-medium text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-700 dark:border-gray-700 dark:bg-gray-800/50 dark:text-gray-400 dark:hover:bg-gray-700/60 dark:hover:text-gray-200"
+      >
+        <Brain className="h-3.5 w-3.5" />
+        {label}
+        <span className="text-gray-400 dark:text-gray-500">
+          · {toolCalls.length} step{toolCalls.length === 1 ? "" : "s"}
+        </span>
+        <ChevronRight
+          className={`h-3.5 w-3.5 transition-transform ${open ? "rotate-90" : ""}`}
+        />
+      </button>
+      {open && (
+        <div className="mt-2 flex flex-col items-start gap-2 border-l-2 border-gray-200 pl-3 dark:border-gray-700">
+          {toolCalls.map((tc) => (
+            <ToolCallItem key={tc.id} tc={tc} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
 };
+
+const AssistantResponse = ({
+  message,
+  renderMarkdown,
+}: {
+  message: AutobotMessage;
+  renderMarkdown: (content: string) => React.ReactNode;
+}) => (
+  <div className="w-full text-gray-900 dark:text-gray-200 rounded-lg prose prose-sm prose-invert prose-pre:bg-transparent prose-pre:p-0 prose-pre:m-0 prose-pre:border-0 max-w-none">
+    {renderMarkdown(message.content)}
+  </div>
+);
+
+interface TurnRowProps {
+  turn: Turn;
+  /** Render steps inline (live/most-recent turn) vs collapse them (past). */
+  expanded: boolean;
+  userInitial: string;
+  renderMarkdown: (content: string) => React.ReactNode;
+}
+
+const TurnRow = ({ turn, expanded, userInitial, renderMarkdown }: TurnRowProps) => (
+  <>
+    {turn.user && (
+      <UserBubble content={turn.user.content} userInitial={userInitial} />
+    )}
+    {turn.toolCalls.length > 0 &&
+      (expanded ? (
+        <div className="flex w-full flex-col items-start gap-2">
+          {turn.toolCalls.map((tc) => (
+            <ToolCallItem key={tc.id} tc={tc} />
+          ))}
+        </div>
+      ) : (
+        <ThoughtBlock toolCalls={turn.toolCalls} durationSec={turn.durationSec} />
+      ))}
+    {turn.response && (
+      <AssistantResponse message={turn.response} renderMarkdown={renderMarkdown} />
+    )}
+  </>
+);
+
+// Long-thread guardrails. Soft = dismissible nudge; hard = blocking notice.
+const LongThreadBanner = ({
+  onNewThread,
+  onDismiss,
+}: {
+  onNewThread: () => void;
+  onDismiss: () => void;
+}) => (
+  <div className="flex items-center justify-between gap-3 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:border-amber-800/60 dark:bg-amber-950/40 dark:text-amber-200">
+    <span className="min-w-0">
+      This conversation is getting long — consider a new thread to save tokens.
+    </span>
+    <div className="flex shrink-0 items-center gap-2">
+      <Button
+        size="sm"
+        variant="outline"
+        onClick={onNewThread}
+        className="bg-transparent border-amber-400 text-amber-800 hover:bg-amber-100 dark:border-amber-700 dark:text-amber-200 dark:hover:bg-amber-900/40"
+      >
+        New thread
+      </Button>
+      <button
+        type="button"
+        onClick={onDismiss}
+        aria-label="Dismiss"
+        className="rounded p-1 text-amber-700 hover:bg-amber-100 dark:text-amber-300 dark:hover:bg-amber-900/40"
+      >
+        <X className="h-4 w-4" />
+      </button>
+    </div>
+  </div>
+);
+
+const ThreadLimitBanner = ({ onNewThread }: { onNewThread: () => void }) => (
+  <div className="flex items-center justify-between gap-3 rounded-md border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-800/60 dark:bg-red-950/40 dark:text-red-300">
+    <span className="min-w-0">
+      This conversation has reached its length limit. Start a new thread to
+      continue.
+    </span>
+    <Button
+      size="sm"
+      onClick={onNewThread}
+      className="shrink-0 bg-purple-600 text-white hover:bg-purple-700"
+    >
+      New thread
+    </Button>
+  </div>
+);
 
 interface UserBubbleProps {
   content: string;
@@ -1018,37 +1433,50 @@ const UserBubble = ({ content, userInitial }: UserBubbleProps) => (
   </div>
 );
 
+// Live "thinking"/elapsed timer for the in-flight turn: 12s, 1m 10s.
+const formatThinking = (seconds: number): string =>
+  seconds < 60
+    ? `${seconds}s`
+    : `${Math.floor(seconds / 60)}m ${String(seconds % 60).padStart(2, "0")}s`;
+
+const ThinkingTimer = ({ startMs }: { startMs: number }) => {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, []);
+  const seconds = Math.max(0, Math.floor((now - startMs) / 1000));
+  return (
+    <span className="inline-flex items-center gap-1.5 rounded-full bg-gray-100 px-2 py-0.5 text-[11px] font-medium tabular-nums text-gray-500 dark:bg-gray-800/60 dark:text-gray-400">
+      <Loader2 className="h-3 w-3 animate-spin text-purple-500" />
+      {formatThinking(seconds)}
+    </span>
+  );
+};
+
 interface AssistantBubbleProps {
   toolCalls: PendingToolCall[];
   body: React.ReactNode;
+  /** When set, render a live elapsed timer (only the in-flight turn). */
+  timerStartMs?: number;
 }
 
-const AssistantBubble = ({ toolCalls, body }: AssistantBubbleProps) => (
+const AssistantBubble = ({
+  toolCalls,
+  body,
+  timerStartMs,
+}: AssistantBubbleProps) => (
   <div className="w-full">
+    {timerStartMs !== undefined && (
+      <div className="mb-1.5">
+        <ThinkingTimer startMs={timerStartMs} />
+      </div>
+    )}
     {toolCalls.length > 0 && (
       <div className="mb-2 flex flex-col items-start gap-2">
-        {toolCalls.map((tc) => {
-          const view: ToolCallView = {
-            id: tc.id,
-            name: tc.name,
-            argumentsJson: tc.argumentsJson,
-            status: tc.status,
-            result: tc.result,
-          };
-          // Execution / preview / history results get a rich renderer; every
-          // other tool (and errors / in-flight calls) keeps the plain badge.
-          return richToolKind(view) ? (
-            <ToolResultCard key={tc.id} tc={view} />
-          ) : (
-            <ToolCallBadge
-              key={tc.id}
-              name={tc.name}
-              status={tc.status}
-              argumentsJson={tc.argumentsJson}
-              result={tc.result}
-            />
-          );
-        })}
+        {toolCalls.map((tc) => (
+          <ToolCallItem key={tc.id} tc={tc} />
+        ))}
       </div>
     )}
     {body}

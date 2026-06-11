@@ -3,7 +3,7 @@ from datetime import timedelta
 
 from django.core.paginator import EmptyPage, Paginator
 from django.db import IntegrityError, transaction
-from django.db.models import Count, Sum
+from django.db.models import Count, Q, Sum
 from django.utils import timezone
 from rest_framework import generics, status
 from rest_framework.exceptions import NotFound
@@ -181,6 +181,11 @@ class ThreadListCreateView(generics.ListCreateAPIView):
         # Per-user scoping — the only auth check that matters here.
         qs = Thread.objects.filter(user=self.request.user).annotate(
             message_count=Count('messages'),
+            # USER-message count drives the client's long-thread guardrails —
+            # reliable regardless of how many message pages are loaded.
+            user_message_count=Count(
+                'messages', filter=Q(messages__role=Message.Role.USER)
+            ),
         )
 
         archived_param = (
@@ -279,6 +284,9 @@ class ThreadDetailView(generics.RetrieveUpdateDestroyAPIView):
     def get_queryset(self):
         return Thread.objects.filter(user=self.request.user).annotate(
             message_count=Count('messages'),
+            user_message_count=Count(
+                'messages', filter=Q(messages__role=Message.Role.USER)
+            ),
         )
 
     def get_serializer_context(self):

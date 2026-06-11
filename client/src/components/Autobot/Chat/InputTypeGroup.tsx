@@ -65,7 +65,7 @@ const BUTTONS: ButtonConfig[] = [
     icon: Cpu,
     short: "Run workflows and scripts",
     description:
-      "Trigger workflow and script runs and watch them live, then investigate failures. Requires your own API key (BYO) — runs use more tokens, so they're not available on shared keys.",
+      "Trigger workflow and script runs and watch them live, then investigate failures. Requires your own API key (BYO).",
     requiresByo: true,
   },
 ];
@@ -79,7 +79,15 @@ const InputTypeGroup: React.FC<InputTypeGroupProps> = ({
   return (
     <div className="flex items-center bg-[#efe9f3] dark:bg-[#170f2085] rounded-lg shadow-sm border border-[#d9cde0] dark:border-[#27073a52] w-fit">
       {BUTTONS.map(
-        ({ id, label, short, description, icon: Icon, comingSoon, requiresByo }) => {
+        ({
+          id,
+          label,
+          short,
+          description,
+          icon: Icon,
+          comingSoon,
+          requiresByo,
+        }) => {
           const active = value === id;
           const byoLocked = !!requiresByo && !executionEnabled;
           const showLock = comingSoon || byoLocked;
