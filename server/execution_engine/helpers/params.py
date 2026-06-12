@@ -342,12 +342,14 @@ def build_needs_params(nodes: Any) -> list[dict[str, Any]]:
     one entry per parameter that carries an ``id``::
 
         { "param_id", "name", "type", "has_default": bool,
-          "is_secret": bool, "source": "manual" | "output" }
+          "is_secret": bool, "source": "manual" | "output",
+          "node_id", "node_label", "node_type" }
 
     ``has_default`` reflects whether a value is baked into the workflow JSON
     (``False`` → the user must supply it in the form). ``is_secret`` is
     ``type == "password"``. ``source`` mirrors ``sourceType`` — an ``output``
-    param is a node reference the form shows read-only (never edited).
+    param is a node reference the form shows read-only (never edited). The
+    ``node_*`` fields tell the user which step the value feeds.
 
     A param id can appear on multiple nodes; the first occurrence wins, with
     ``has_default`` OR-ed across them (any baked value counts as a default).
@@ -359,9 +361,12 @@ def build_needs_params(nodes: Any) -> list[dict[str, Any]]:
     for node in nodes:
         if not isinstance(node, dict):
             continue
-        params = (node.get("data") or {}).get("parameters")
+        data = node.get("data") or {}
+        params = data.get("parameters")
         if not isinstance(params, list):
             continue
+        node_label = data.get("label") or node.get("id") or ""
+        node_type = data.get("type") or node.get("type") or ""
         for p in params:
             if not isinstance(p, dict):
                 continue
@@ -384,6 +389,9 @@ def build_needs_params(nodes: Any) -> list[dict[str, Any]]:
                     "has_default": has_default,
                     "is_secret": ptype == "password",
                     "source": (p.get("sourceType") or SOURCE_MANUAL).lower(),
+                    "node_id": node.get("id") or "",
+                    "node_label": node_label,
+                    "node_type": node_type,
                 }
             )
     return out

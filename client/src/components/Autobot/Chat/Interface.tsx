@@ -20,6 +20,7 @@ import {
   useState,
 } from "react";
 import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import { useNavigate, useParams } from "react-router-dom";
 import { useAuth, useUser } from "@clerk/clerk-react";
 import { toast } from "sonner";
@@ -75,6 +76,7 @@ import {
 } from "@/lib/api/autobot-stream";
 import { RunPanelProvider, useRunPanel } from "./run/RunPanelProvider";
 import RunPanel from "./run/RunPanel";
+import { ComposerSecretForm } from "./run/SecretForm";
 import {
   ToolResultCard,
   richToolKind,
@@ -643,6 +645,9 @@ const Interface = () => {
                 ...(prev ?? { content: "", toolCalls: [], startedAt }),
                 toolCalls: snapshot,
               }));
+              // X17 — when a result is `awaiting_secret`, the live
+              // <AwaitingSecretCard> opens the composer form itself (no state
+              // to manage here); see ToolResultRenderer.
               break;
             }
             case "done": {
@@ -847,7 +852,42 @@ const Interface = () => {
   // ── Render helpers ─────────────────────────────────────────────────
   const renderMarkdown = (content: string) => (
     <ReactMarkdown
+      // GFM enables tables, strikethrough, task lists, and autolinks.
+      remarkPlugins={[remarkGfm]}
       components={{
+        // Tables — wrapped so a wide table scrolls instead of overflowing the
+        // bubble; theme-aware borders + a subtle header row.
+        table(props: React.ComponentPropsWithoutRef<"table">) {
+          return (
+            <div className="my-2 w-full overflow-x-auto rounded-lg border border-gray-200 dark:border-gray-700">
+              <table className="w-full border-collapse text-sm" {...props} />
+            </div>
+          );
+        },
+        thead(props: React.ComponentPropsWithoutRef<"thead">) {
+          return (
+            <thead
+              className="bg-gray-50 dark:bg-gray-800/60"
+              {...props}
+            />
+          );
+        },
+        th(props: React.ComponentPropsWithoutRef<"th">) {
+          return (
+            <th
+              className="border-b border-gray-200 px-3 py-2 text-left text-xs font-semibold text-gray-700 dark:border-gray-700 dark:text-gray-200"
+              {...props}
+            />
+          );
+        },
+        td(props: React.ComponentPropsWithoutRef<"td">) {
+          return (
+            <td
+              className="border-b border-gray-100 px-3 py-2 align-top text-xs text-gray-700 dark:border-gray-800 dark:text-gray-300"
+              {...props}
+            />
+          );
+        },
         code(props: React.ComponentPropsWithoutRef<"code">) {
           const { children, className, ...rest } = props;
           const match = /language-(\w+)/.exec(className || "");
@@ -1129,6 +1169,7 @@ const Interface = () => {
                     busy={unarchiving}
                   />
                 )}
+                <ComposerSecretForm />
                 <ChatInput
                   handleSubmit={onChatInputSubmit}
                   disabled={isStreaming || !!thread?.is_archived}
@@ -1258,6 +1299,7 @@ const Interface = () => {
                       />
                     )
                   )}
+                  <ComposerSecretForm />
                   <ChatInput
                     handleSubmit={onChatInputSubmit}
                     disabled={isStreaming || !!thread?.is_archived || overHard}
@@ -1302,7 +1344,15 @@ const RunDrawer = () => {
 
 // One tool call → its rich renderer (execution/preview/history) or the
 // plain badge fallback. The single source of truth for both live and history.
-const ToolCallItem = ({ tc }: { tc: PendingToolCall }) => {
+const ToolCallItem = ({
+  tc,
+  live = false,
+}: {
+  tc: PendingToolCall;
+  /** True in the streaming turn — lets an awaiting-secret result auto-open the
+   * composer confirmation form once on arrival. */
+  live?: boolean;
+}) => {
   const view: ToolCallView = {
     id: tc.id,
     name: tc.name,
@@ -1311,7 +1361,7 @@ const ToolCallItem = ({ tc }: { tc: PendingToolCall }) => {
     result: tc.result,
   };
   return richToolKind(view) ? (
-    <ToolResultCard tc={view} />
+    <ToolResultCard tc={view} live={live} />
   ) : (
     <ToolCallBadge
       name={tc.name}
@@ -1515,7 +1565,7 @@ const AssistantBubble = ({
     {toolCalls.length > 0 && (
       <div className="mb-2 flex flex-col items-start gap-2">
         {toolCalls.map((tc) => (
-          <ToolCallItem key={tc.id} tc={tc} />
+          <ToolCallItem key={tc.id} tc={tc} live />
         ))}
       </div>
     )}

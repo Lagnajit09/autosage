@@ -14,13 +14,20 @@
  * Errors and in-flight calls are NOT rich-rendered — the badge surfaces those.
  */
 
-import { ArrowUpRight, History as HistoryIcon, Terminal, Workflow } from "lucide-react";
+import { useEffect } from "react";
+import {
+  ArrowUpRight,
+  History as HistoryIcon,
+  ShieldCheck,
+  Terminal,
+  Workflow,
+} from "lucide-react";
 
 import RunCard from "./RunCard";
 import PreviewCard from "./PreviewCard";
 import { useRunPanel } from "./RunPanelProvider";
 import { StatusPill } from "./runUi";
-import type { RunDescriptor, RunKind } from "./runTypes";
+import { parsePendingSecret, type RunDescriptor, type RunKind } from "./runTypes";
 
 export interface ToolCallView {
   id: string;
@@ -30,7 +37,7 @@ export interface ToolCallView {
   result?: Record<string, unknown>;
 }
 
-export type RichKind = "run" | "preview" | "history";
+export type RichKind = "run" | "preview" | "history" | "awaiting";
 
 const str = (o: Record<string, unknown>, k: string): string | undefined =>
   typeof o[k] === "string" ? (o[k] as string) : undefined;
@@ -42,6 +49,13 @@ export const richToolKind = (tc: ToolCallView): RichKind | null => {
   if (!r || typeof r !== "object" || "error" in r) return null;
   const runId = r.run_id;
   const kind = r.kind;
+  // X17 — a run that's prepared but waiting on the composer confirmation form.
+  if (
+    tc.name === "run_workflow" &&
+    r.status === "awaiting_secret" &&
+    typeof r.run_intent_id === "string"
+  )
+    return "awaiting";
   if (
     (tc.name === "run_workflow" ||
       tc.name === "rerun_workflow" ||
@@ -175,9 +189,73 @@ const ExecutionHistoryList = ({ result }: { result: Record<string, unknown> }) =
   );
 };
 
+// ── awaiting_secret (X17) ─────────────────────────────────────────────
+
+/** Compact bubble for a run that needs the composer confirmation form. The
+ * actual inputs live in the composer (the single typing surface) — this card
+ * just points there. When `live` (rendered in the streaming turn) it opens the
+ * form once on arrival; the button re-opens it any time. */
+const AwaitingSecretCard = ({
+  result,
+  live = false,
+}: {
+  result: Record<string, unknown>;
+  live?: boolean;
+}) => {
+  const { requestSecret, autoRequestSecret } = useRunPanel();
+  const pending = parsePendingSecret(result);
+  const intentId = pending?.runIntentId;
+
+  // Auto-open the composer form the first time a live result lands. Guarded in
+  // the provider so a historical card (on reload) never re-pops a stale form.
+  useEffect(() => {
+    if (live && pending && intentId) autoRequestSecret(pending);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [live, intentId]);
+
+  if (!pending) return null;
+  const count = pending.params.length;
+
+  return (
+    <div className="my-1 w-full max-w-xl overflow-hidden rounded-xl border border-purple-200 bg-purple-50/60 shadow-sm dark:border-purple-900/50 dark:bg-purple-950/20">
+      <div className="flex items-start gap-2.5 px-3.5 py-3">
+        <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-purple-500" />
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">
+            Confirm to run · {pending.workflowName}
+          </p>
+          <p className="mt-0.5 text-xs text-gray-600 dark:text-gray-400">
+            Fill the secure form below the message box
+            {count > 0
+              ? ` to confirm ${count} value${count === 1 ? "" : "s"} and start this run.`
+              : " to start this run."}{" "}
+            Secrets go straight to the server, never through chat.
+          </p>
+          <button
+            type="button"
+            onClick={() => requestSecret(pending)}
+            className="mt-2 inline-flex items-center gap-1.5 rounded-lg bg-purple-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-purple-700"
+          >
+            <ShieldCheck className="h-3.5 w-3.5" />
+            Open confirmation form
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 // ── Dispatcher ────────────────────────────────────────────────────────
 
-export const ToolResultCard = ({ tc }: { tc: ToolCallView }) => {
+export const ToolResultCard = ({
+  tc,
+  live = false,
+}: {
+  tc: ToolCallView;
+  /** True when rendered in the streaming turn — lets the awaiting-secret card
+   * auto-open the composer form once on arrival. */
+  live?: boolean;
+}) => {
   const kind = richToolKind(tc);
   if (!kind || !tc.result) return null;
   switch (kind) {
@@ -187,6 +265,8 @@ export const ToolResultCard = ({ tc }: { tc: ToolCallView }) => {
       return <PreviewCard result={tc.result} argsJson={tc.argumentsJson} />;
     case "history":
       return <ExecutionHistoryList result={tc.result} />;
+    case "awaiting":
+      return <AwaitingSecretCard result={tc.result} live={live} />;
     default:
       return null;
   }

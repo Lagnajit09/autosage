@@ -18,13 +18,19 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   useSyncExternalStore,
   type ReactNode,
 } from "react";
 
 import { RunStore } from "./runStore";
-import type { RunDescriptor, RunKind, RunSnapshot } from "./runTypes";
+import type {
+  PendingSecret,
+  RunDescriptor,
+  RunKind,
+  RunSnapshot,
+} from "./runTypes";
 
 export type RunTab = "graph" | "logs" | "response";
 
@@ -41,6 +47,15 @@ interface RunPanelContextValue {
   setTab: (tab: RunTab) => void;
   closeRun: () => void;
   seedPrompt: (text: string) => void;
+  /** The run awaiting confirmation in the composer form, if any (X17). */
+  pendingSecret: PendingSecret | null;
+  /** Open the composer-anchored confirmation form (manual — always opens). */
+  requestSecret: (intent: PendingSecret) => void;
+  /** Open it only the FIRST time an intent is seen — used by the live card so
+   * a historical bubble doesn't re-pop the form on reload. */
+  autoRequestSecret: (intent: PendingSecret) => void;
+  /** Dismiss the composer form (cancel, or after a successful submit). */
+  clearSecret: () => void;
 }
 
 const RunPanelContext = createContext<RunPanelContextValue | null>(null);
@@ -70,9 +85,19 @@ export const RunPanelProvider = ({
 
   const [activeRun, setActiveRun] = useState<ActiveRun | null>(null);
 
+  // ── Composer-anchored confirmation form (X17) ──────────────────────────
+  const [pendingSecret, setPendingSecret] = useState<PendingSecret | null>(null);
+  // Intents we've already surfaced — so the live card auto-opens once, and a
+  // historical card (on reload) never auto-pops a stale form.
+  const seenIntentsRef = useRef<Set<string>>(new Set());
+
   useEffect(() => () => store.dispose(), [store]);
-  // Collapse the drawer when the thread changes.
-  useEffect(() => setActiveRun(null), [resetKey]);
+  // Collapse the drawer + drop any pending form when the thread changes.
+  useEffect(() => {
+    setActiveRun(null);
+    setPendingSecret(null);
+    seenIntentsRef.current.clear();
+  }, [resetKey]);
 
   const openRun = useCallback(
     (runId: string, kind: RunKind, tab: RunTab = kind === "workflow" ? "graph" : "logs") => {
@@ -93,10 +118,43 @@ export const RunPanelProvider = ({
     (text: string) => onSeedPrompt?.(text),
     [onSeedPrompt],
   );
+  const requestSecret = useCallback((intent: PendingSecret) => {
+    seenIntentsRef.current.add(intent.runIntentId);
+    setPendingSecret(intent);
+  }, []);
+  const autoRequestSecret = useCallback((intent: PendingSecret) => {
+    // First sighting only — keeps a reloaded historical card from re-opening.
+    if (seenIntentsRef.current.has(intent.runIntentId)) return;
+    seenIntentsRef.current.add(intent.runIntentId);
+    setPendingSecret(intent);
+  }, []);
+  const clearSecret = useCallback(() => setPendingSecret(null), []);
 
   const value = useMemo<RunPanelContextValue>(
-    () => ({ store, activeRun, openRun, setTab, closeRun, seedPrompt }),
-    [store, activeRun, openRun, setTab, closeRun, seedPrompt],
+    () => ({
+      store,
+      activeRun,
+      openRun,
+      setTab,
+      closeRun,
+      seedPrompt,
+      pendingSecret,
+      requestSecret,
+      autoRequestSecret,
+      clearSecret,
+    }),
+    [
+      store,
+      activeRun,
+      openRun,
+      setTab,
+      closeRun,
+      seedPrompt,
+      pendingSecret,
+      requestSecret,
+      autoRequestSecret,
+      clearSecret,
+    ],
   );
 
   return (

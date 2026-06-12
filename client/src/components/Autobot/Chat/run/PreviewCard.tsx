@@ -17,6 +17,7 @@ import {
   ListTree,
   Play,
   ShieldAlert,
+  ShieldCheck,
   Workflow,
 } from "lucide-react";
 
@@ -41,6 +42,8 @@ interface PreviewResult {
   blocking?: string[];
   /** X17 forward-compat: structured run-time secrets the workflow needs. */
   needs_secret?: Array<{ param_id?: string; name?: string }>;
+  /** X17 — every configured param; running opens a secure confirmation form. */
+  needs_params?: Array<{ is_secret?: boolean }>;
 }
 
 /** Pull param ids out of a Layer-4a blocking message: "(parameter id(s): a, b)". */
@@ -83,6 +86,10 @@ export const PreviewCard = ({
       return r.needs_secret.map((s) => s.name || s.param_id || "secret");
     return parseSecretIds(Array.isArray(r.blocking) ? r.blocking : []);
   }, [r.needs_secret, r.blocking]);
+
+  const needsParams = Array.isArray(r.needs_params) ? r.needs_params : [];
+  const paramCount = needsParams.length;
+  const secretCount = needsParams.filter((p) => p.is_secret).length;
 
   return (
     <div className="my-1 w-full max-w-xl overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-900/60">
@@ -182,14 +189,26 @@ export const PreviewCard = ({
 
         {/* Ready → prefill a confirmation (AD-B3: user sends it themselves) */}
         {ready && (
-          <button
-            type="button"
-            onClick={() => seedPrompt(`Yes, run "${name}" now.`)}
-            className="inline-flex items-center gap-1.5 rounded-lg bg-purple-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-purple-700"
-          >
-            <Play className="h-3.5 w-3.5" />
-            Run it now
-          </button>
+          <div className="space-y-2">
+            {paramCount > 0 && (
+              <p className="flex items-center gap-1.5 text-[11px] text-gray-500 dark:text-gray-400">
+                <ShieldCheck className="h-3.5 w-3.5 text-purple-500" />
+                Running opens a secure form to confirm {paramCount} parameter
+                {paramCount === 1 ? "" : "s"}
+                {secretCount > 0
+                  ? ` (${secretCount} entered privately).`
+                  : "."}
+              </p>
+            )}
+            <button
+              type="button"
+              onClick={() => seedPrompt(`Yes, run "${name}" now.`)}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-purple-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-purple-700"
+            >
+              <Play className="h-3.5 w-3.5" />
+              Run it now
+            </button>
+          </div>
         )}
       </div>
     </div>

@@ -447,9 +447,12 @@ def _collect_needs_params(nodes: Any) -> list[dict[str, Any]]:
     for node in nodes:
         if not isinstance(node, dict):
             continue
-        params = (node.get("data") or {}).get("parameters")
+        data = node.get("data") or {}
+        params = data.get("parameters")
         if not isinstance(params, list):
             continue
+        node_label = data.get("label") or node.get("id") or ""
+        node_type = data.get("type") or node.get("type") or ""
         for p in params:
             if not isinstance(p, dict):
                 continue
@@ -470,6 +473,9 @@ def _collect_needs_params(nodes: Any) -> list[dict[str, Any]]:
                 "has_default": has_default,
                 "is_secret": ptype == "password",
                 "source": (p.get("sourceType") or "manual").lower(),
+                "node_id": node.get("id") or "",
+                "node_label": node_label,
+                "node_type": node_type,
             })
     return out
 

@@ -13,6 +13,56 @@ import type { WorkflowRun, WorkflowNodeRun, ScriptExecution } from "@/utils/type
 
 export type RunKind = "workflow" | "script";
 
+/**
+ * One configured workflow parameter, as described by `needs_params` on a
+ * `preview_workflow_run` / `run_workflow` result (X17). Drives the rows of the
+ * composer-anchored confirmation form.
+ */
+export interface NeedsParam {
+  param_id: string;
+  name: string;
+  /** "string" | "number" | "boolean" | "password" */
+  type: string;
+  /** A value is baked into the workflow JSON — the field can be left blank. */
+  has_default: boolean;
+  /** type === "password"; rendered as a masked input, value POSTs to Django. */
+  is_secret: boolean;
+  /** "manual" (editable) | "output" (a node reference; read-only). */
+  source: "manual" | "output" | string;
+  /** The step this value feeds — shown so the user knows where it's used. */
+  node_id?: string;
+  node_label?: string;
+  node_type?: string;
+}
+
+/**
+ * A `run_workflow` result that returned `status:"awaiting_secret"` — the run is
+ * prepared (a single-use intent exists) but waits on the user confirming params
+ * in the composer form. The secret never flows through Autobot; on submit the
+ * form POSTs browser→Django directly to the fulfill endpoint.
+ */
+export interface PendingSecret {
+  runIntentId: string;
+  workflowName: string;
+  params: NeedsParam[];
+}
+
+/** Extract a `PendingSecret` from a tool result, or null if it isn't one. */
+export const parsePendingSecret = (result: unknown): PendingSecret | null => {
+  if (!result || typeof result !== "object") return null;
+  const r = result as Record<string, unknown>;
+  if (r.status !== "awaiting_secret" || typeof r.run_intent_id !== "string")
+    return null;
+  const params = Array.isArray(r.needs_params)
+    ? (r.needs_params as NeedsParam[])
+    : [];
+  return {
+    runIntentId: r.run_intent_id,
+    workflowName: typeof r.name === "string" && r.name ? r.name : "this workflow",
+    params,
+  };
+};
+
 /** What a `run_*`/`rerun_*` tool result hands us — the seed for a live run. */
 export interface RunDescriptor {
   runId: string;
