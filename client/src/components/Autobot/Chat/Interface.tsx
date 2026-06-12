@@ -321,7 +321,7 @@ const Interface = () => {
   // Mode is per-turn client state — not persisted on Thread.
   const [mode, setMode] = useState<ChatMode>("research");
 
-  // Execution is BYO-only (AD-B3b): available iff a per-thread BYO config is
+  // Execution is BYO-only: available iff a per-thread BYO config is
   // selected OR the user has a default BYO config. Shared/admin keys can't run.
   const canExecute = Boolean(selectedConfigId || userDefaultId);
 
@@ -645,7 +645,7 @@ const Interface = () => {
                 ...(prev ?? { content: "", toolCalls: [], startedAt }),
                 toolCalls: snapshot,
               }));
-              // X17 — when a result is `awaiting_secret`, the live
+              // When a result is `awaiting_secret`, the live
               // <AwaitingSecretCard> opens the composer form itself (no state
               // to manage here); see ToolResultRenderer.
               break;
@@ -928,7 +928,7 @@ const Interface = () => {
 
   // Execution mode is BYO-gated — if the user drops their BYO key (or it
   // never resolved) while Execution is selected, fall back to Research so the
-  // composer never sits in a mode the backend will refuse (AD-B3b).
+  // composer never sits in a mode the backend will refuse.
   useEffect(() => {
     if (mode === "execution" && !canExecute) setMode("research");
   }, [mode, canExecute]);

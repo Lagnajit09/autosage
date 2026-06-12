@@ -1,5 +1,5 @@
 /**
- * Routes an autobot tool result to its rich renderer (X15). Anything not
+ * Routes an autobot tool result to its rich renderer. Anything not
  * matched here falls back to the plain `ToolCallBadge` in the bubble.
  *
  *   run_workflow / rerun_workflow / run_script → <RunCard>   (live panel)
@@ -49,7 +49,7 @@ export const richToolKind = (tc: ToolCallView): RichKind | null => {
   if (!r || typeof r !== "object" || "error" in r) return null;
   const runId = r.run_id;
   const kind = r.kind;
-  // X17 — a run that's prepared but waiting on the composer confirmation form.
+  // A run that's prepared but waiting on the composer confirmation form.
   if (
     tc.name === "run_workflow" &&
     r.status === "awaiting_secret" &&
@@ -189,7 +189,7 @@ const ExecutionHistoryList = ({ result }: { result: Record<string, unknown> }) =
   );
 };
 
-// ── awaiting_secret (X17) ─────────────────────────────────────────────
+// ── awaiting_secret ───────────────────────────────────────────────────
 
 /** Compact bubble for a run that needs the composer confirmation form. The
  * actual inputs live in the composer (the single typing surface) — this card

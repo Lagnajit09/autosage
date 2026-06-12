@@ -181,15 +181,15 @@ def _password_param_ids(workflow) -> set[str]:
 @permission_classes([IsAuthenticated])
 @throttle_classes([ExecutionBurstThrottle, ExecutionSustainedThrottle])
 def create_workflow_run_intent(request, workflow_id):
-    """Mint a single-use run intent for the Autobot secure side-channel (X17).
+    """Mint a single-use run intent for the Autobot secure side-channel.
 
-    AD-B9 Layer-4b. Autobot calls this (trigger_source must be ``autobot``)
-    instead of enqueuing directly when a workflow has run-time parameters. NO
-    ``WorkflowRun`` is created here — the user's browser later POSTs the
-    confirmed params to ``fulfill_workflow_run_intent``, which enqueues on the
-    *manual* path so the X03b Layer-3 password drop does not fire.
+    Autobot calls this (trigger_source must be ``autobot``) instead of
+    enqueuing directly when a workflow has run-time parameters. No WorkflowRun
+    is created here — the user's browser later POSTs the confirmed params to
+    ``fulfill_workflow_run_intent``, which enqueues on the manual path so the
+    autobot password drop does not fire.
 
-    The intent stores only the model-proposed **non-secret** inputs; any
+    The intent stores only the model-proposed non-secret inputs; any
     password-typed input is stripped here too (defense in depth — the model
     should never be sending one). Returns ``{run_intent_id, needs_params}``.
     """
@@ -259,15 +259,15 @@ def create_workflow_run_intent(request, workflow_id):
 @permission_classes([IsAuthenticated])
 @throttle_classes([ExecutionBurstThrottle, ExecutionSustainedThrottle])
 def fulfill_workflow_run_intent(request, run_intent_id):
-    """Enqueue the run a prior intent prepared, carrying the browser's params (X17).
+    """Enqueue the run a prior intent prepared, carrying the browser's params.
 
     The browser POSTs ``{"params": {<param_id>: <value>, ...}}`` — the full
     confirmed set including any secrets the user typed. We atomically consume
     the intent (single-use), overlay the browser params onto the intent's
-    non-secret inputs (browser is authoritative), and converge on
-    ``enqueue_workflow_run`` with ``trigger_source="manual"`` — the crux: the
-    secret came from the user's browser over TLS, so the Layer-3 autobot drop
-    must NOT fire. Persist-time masking (run_builder) still masks it on the row.
+    non-secret inputs (browser is authoritative), and enqueue with
+    ``trigger_source="manual"``: the secret came from the user's browser over
+    TLS, so the autobot password drop must NOT fire. Persist-time masking
+    (run_builder) still masks it on the stored row.
     """
     # Atomic fetch-and-delete: a double-submit / expired intent yields None.
     intent = consume_intent(str(run_intent_id))

@@ -1,48 +1,43 @@
-"""Execution tools — investigate (X06,X07) + preview (X09) + run (X10–X12).
+"""Execution tools — investigate, preview, and run workflows/scripts.
 
 Async wrappers around Django's execution-engine endpoints. The JWT is
 forwarded; Django scopes every queryset to the calling user, so a
 cross-user run id returns 404 → we surface `{"error": ...}`.
 
-The X06/X07 investigation tools are SAFE in both `research` and
-`execution` modes (mode hard-floor `_READ_TOOLS`): they only READ run
-history / status / logs, never trigger or mutate anything.
+The investigation tools are SAFE in both `research` and `execution` modes:
+they only READ run history / status / logs, never trigger or mutate anything.
 
-`preview_workflow_run` (X09) is ALSO side-effect-free (it never enqueues),
-but lives in the `_EXEC_TOOLS` floor — it's only meaningful in `execution`
-mode as the mandatory pre-run confirmation step (AD-B3). It masks
-password-param values (AD-B9) and returns `needs_params` describing every
+`preview_workflow_run` is side-effect-free (it never enqueues) but only
+meaningful in `execution` mode, as the mandatory pre-run confirmation step.
+It masks password-param values and returns `needs_params` describing every
 configured param so the client can render the secure confirmation form.
 
-`run_workflow` (X10) is the first WRITE tool here. A no-param workflow it
-enqueues directly; a workflow with run-time params it does NOT run — it mints
-a single-use run intent and returns `awaiting_secret` (AD-B9 Layer-4b), so
-the user confirms params in a composer-anchored form that POSTs the secret
-browser→Django, never through Autobot. It is gated by the exec quota (X08),
-drops any password-typed input before POSTing (AD-B9 Layer-2; the Django
-Layer-3 backstop drops it again), and sends an Idempotency-Key = the
-per-tool-call id (X01b) so a double-call in one turn collapses to one run.
-`trigger_source` is fixed to `"autobot"`.
-Both gating signals (user_sub, tool-call id) arrive via
-`current_tool_context()`, not the handler args.
+`run_workflow` is the first WRITE tool here. A no-param workflow it enqueues
+directly; a workflow with run-time params it does NOT run — it mints a
+single-use run intent and returns `awaiting_secret`, so the user confirms
+params in a composer-anchored form that POSTs any secret browser→Django,
+never through Autobot. It is gated by the exec quota, drops any
+password-typed input before POSTing (the Django backstop drops it again), and
+sends an Idempotency-Key = the per-tool-call id so a double-call in one turn
+collapses to one run. `trigger_source` is fixed to `"autobot"`. Both gating
+signals (user_sub, tool-call id) arrive via `current_tool_context()`, not the
+handler args.
 
-`run_script` (X11) is the script sibling: it resolves the four bindings
+`run_script` is the script sibling: it resolves the four bindings
 (script + vault/server/credential), ticks the same exec quota, and POSTs
-the nested ScriptExecutionRequest to the X02 `run/async/` endpoint. There
-is no SSE stream for scripts (AD-B4) — `watch_url` is the status-poll URL.
-Scripts have no password-type param schema, so its `inputs_preview` masks
-secret-looking keys by name heuristic (`_security.mask_inputs_by_keyname`).
+the nested ScriptExecutionRequest to the `run/async/` endpoint. There is no
+SSE stream for scripts — `watch_url` is the status-poll URL. Scripts have no
+password-type param schema, so its `inputs_preview` masks secret-looking keys
+by name heuristic (`_security.mask_inputs_by_keyname`).
 
 Two response hygiene rules enforced here, before anything reaches the LLM:
-  • **Signed GCS URLs never leave the tool.** Django returns short-lived
+  • Signed GCS URLs never leave the tool. Django returns short-lived
     `*_signed_url` fields on runs/nodes; the model has no use for a URL and
     it would just burn tokens / risk being echoed. We strip them from the
-    metadata tools (X06) and, in `read_run_logs` (X07), fetch the URL
-    server-side and return the TEXT.
-  • **Persisted `inputs` are already password-masked by Django**
-    (`run_builder.py` masks password-typed params to "*****" at persist
-    time), so `get_workflow_run` can surface `inputs` as-is — but we keep
-    the AD-B9 posture explicit in case that ever changes.
+    metadata tools and, in `read_run_logs`, fetch the URL server-side and
+    return the TEXT.
+  • Persisted `inputs` are already password-masked by Django at persist time,
+    so `get_workflow_run` surfaces `inputs` as-is.
 """
 
 from __future__ import annotations
@@ -62,7 +57,7 @@ logger = logging.getLogger(__name__)
 
 
 def _watch_url(run_id: str) -> str:
-    """The pre-existing workflow-run SSE stream the RunPanel consumes (AD-B2)."""
+    """The workflow-run SSE stream the RunPanel consumes."""
     return f"/api/execution-engine/workflows/runs/{run_id}/stream/"
 
 
@@ -109,7 +104,7 @@ def _require_run_id(args: dict[str, Any]) -> tuple[str | None, dict[str, Any] | 
     return rid.strip(), None
 
 
-# ── X06 — metadata / status tools ────────────────────────────────────
+# ── Metadata / status tools ──────────────────────────────────────────
 
 
 async def _handler_get_execution_histories(
@@ -215,7 +210,7 @@ async def _handler_get_workflow_run(
     run = _strip_signed_urls(run)
     run["nodes"] = nodes
     # `inputs` is already password-masked by Django at persist time
-    # (run_builder.py). Left as-is; see module docstring (AD-B9).
+    # (run_builder.py). Left as-is; see module docstring.
     return run
 
 
@@ -245,7 +240,7 @@ async def _handler_get_script_run(
     return _strip_signed_urls((body or {}).get("data") or {})
 
 
-# ── X07 — log-reading tool ───────────────────────────────────────────
+# ── Log-reading tool ─────────────────────────────────────────────────
 
 
 def _tail(text: str, limit: int = _LOG_TAIL_BYTES) -> str:
@@ -397,7 +392,7 @@ async def _handler_read_run_logs(
     return out
 
 
-# ── X09 — preview (side-effect-free pre-run confirmation) ────────────
+# ── Preview (side-effect-free pre-run confirmation) ──────────────────
 
 
 def _collect_password_params(nodes: Any) -> dict[str, bool]:
@@ -406,9 +401,9 @@ def _collect_password_params(nodes: Any) -> dict[str, bool]:
     Mirrors `run_builder.py`'s detection (`type == "password"`, keyed by
     param `id`). `True` = a default value is baked into the workflow JSON
     (the worker supplies it at run time; Autobot never sees it). `False` =
-    the param needs a value at run time — which Autobot never transports
-    (AD-B9); the user supplies it in the secure confirmation form (Layer-4b).
-    Used to mask the inputs preview and strip secrets before any POST.
+    the param needs a value at run time — which Autobot never transports; the
+    user supplies it in the secure confirmation form. Used to mask the inputs
+    preview and strip secrets before any POST.
     """
     out: dict[str, bool] = {}
     if not isinstance(nodes, list):
@@ -432,7 +427,7 @@ def _collect_password_params(nodes: Any) -> dict[str, bool]:
 
 def _collect_needs_params(nodes: Any) -> list[dict[str, Any]]:
     """Describe every configured param across action nodes for the composer
-    confirmation form (X17). Mirrors Django's ``build_needs_params`` shape:
+    confirmation form. Mirrors Django's ``build_needs_params`` shape:
     ``{param_id, name, type, has_default, is_secret, source}``.
 
     The form renders one row per entry — secret params as masked inputs,
@@ -513,11 +508,11 @@ def _summarize_targets(nodes: Any) -> list[dict[str, Any]]:
 def _mask_inputs_preview(
     inputs: Any, password_ids: set[str]
 ) -> dict[str, Any]:
-    """Echo proposed `inputs` with password-typed keys masked (AD-B9).
+    """Echo proposed `inputs` with password-typed keys masked.
 
-    Mirrors `run_builder.py:178-189` — any input key that maps to a
-    password-typed param id is shown as ``"*****"`` so a value the user (or
-    model) put in `inputs` is never echoed back in plaintext.
+    Any input key that maps to a password-typed param id is shown as
+    ``"*****"`` so a value the user (or model) put in `inputs` is never echoed
+    back in plaintext.
     """
     if not isinstance(inputs, dict):
         return {}
@@ -532,14 +527,14 @@ async def _handler_preview_workflow_run(
 ) -> dict[str, Any]:
     """Summarize what a workflow run WOULD do — no enqueue, no write.
 
-    The mandatory side-effect-free first step of execution (AD-B3): the
-    model calls this, presents the summary, and waits for the user's
-    explicit "run it" before calling `run_workflow`.
+    The mandatory side-effect-free first step of execution: the model calls
+    this, presents the summary, and waits for the user's explicit "run it"
+    before calling `run_workflow`.
 
-    AD-B9 Layer-4(b): a workflow with run-time params (incl. a password with
-    no baked value) no longer blocks the preview. `needs_params` describes
-    every configured param; `run_workflow` will route it through the secure
-    composer form / intent so the secret goes browser→Django, never via us.
+    A workflow with run-time params (incl. a password with no baked value)
+    does not block the preview. `needs_params` describes every configured
+    param; `run_workflow` routes it through the secure composer form / intent
+    so the secret goes browser→Django, never via us.
     """
     wf_id = args.get("workflow_id")
     if not isinstance(wf_id, str) or not wf_id.strip():
@@ -563,8 +558,8 @@ async def _handler_preview_workflow_run(
     password_params = _collect_password_params(node_list)
     proposed_inputs = args.get("inputs") if isinstance(args.get("inputs"), dict) else {}
 
-    # AD-B9 Layer-4(b): a run-time password no longer blocks. Params (secret or
-    # not) are confirmed in the composer form after run_workflow returns
+    # A run-time password no longer blocks. Params (secret or not) are
+    # confirmed in the composer form after run_workflow returns
     # awaiting_secret, so the preview is always `ready`.
     return {
         "name": wf.get("name") if isinstance(wf, dict) else None,
@@ -579,7 +574,7 @@ async def _handler_preview_workflow_run(
     }
 
 
-# ── X10 — run_workflow (gated write; enqueues a real run) ────────────
+# ── run_workflow (gated write; enqueues a real run) ──────────────────
 
 
 async def _check_exec_quota() -> dict[str, Any] | None:
@@ -639,7 +634,7 @@ async def _create_run_intent(
     needs_params: list[dict[str, Any]],
     jwt: str,
 ) -> dict[str, Any]:
-    """AD-B9 Layer-4(b): mint a single-use run intent instead of enqueuing.
+    """Mint a single-use run intent instead of enqueuing.
 
     The model-proposed (already password-stripped) `inputs` are stashed in the
     intent; the user's browser will overlay the authoritative params — incl.
@@ -687,17 +682,17 @@ async def _create_run_intent(
 async def _handler_run_workflow(args: dict[str, Any], jwt: str) -> dict[str, Any]:
     """Run a workflow on the `autobot` trigger path.
 
-    Two paths, both gated by the exec quota (X08) — the tick happens once,
-    before the branch, since either outcome is "the user asked to run it":
-      • Any configured params → AD-B9 Layer-4(b): create a single-use intent
-        and return `awaiting_secret`; the user confirms in the composer form
-        and the run proceeds browser→Django (no secret ever flows through us).
+    Two paths, both gated by the exec quota — the tick happens once, before
+    the branch, since either outcome is "the user asked to run it":
+      • Any configured params → create a single-use intent and return
+        `awaiting_secret`; the user confirms in the composer form and the run
+        proceeds browser→Django (no secret ever flows through us).
       • No params → direct enqueue fast path with an Idempotency-Key = this
         tool call's id, so a double-call in one turn collapses to one run.
 
-    Either way AD-B9 Layer-2 drops any password-typed input the model supplied
-    BEFORE it leaves Autobot. The user must have confirmed via
-    preview_workflow_run first (enforced by the prompt).
+    Either way any password-typed input the model supplied is dropped BEFORE
+    it leaves Autobot. The user must have confirmed via preview_workflow_run
+    first (enforced by the prompt).
     """
     wf_id = args.get("workflow_id")
     if not isinstance(wf_id, str) or not wf_id.strip():
@@ -714,7 +709,7 @@ async def _handler_run_workflow(args: dict[str, Any], jwt: str) -> dict[str, Any
     pwd_ids = set(_collect_password_params(nodes))
     needs_params = _collect_needs_params(nodes)
 
-    # AD-B9 Layer-2 — strip password-typed inputs before they leave Autobot.
+    # Strip password-typed inputs before they leave Autobot.
     raw_inputs = args.get("inputs")
     inputs: dict[str, Any] = {}
     dropped: list[str] = []
@@ -726,7 +721,7 @@ async def _handler_run_workflow(args: dict[str, Any], jwt: str) -> dict[str, Any
             inputs[k] = v
     if dropped:
         logger.warning(
-            "run_workflow dropped %d password-typed input(s) %s (AD-B9 L2)",
+            "run_workflow dropped %d password-typed input(s) %s",
             len(dropped), dropped,
         )
 
@@ -754,8 +749,8 @@ async def _handler_run_workflow(args: dict[str, Any], jwt: str) -> dict[str, Any
     if isinstance(user_email, str) and user_email.strip():
         body_payload["user_email"] = user_email.strip()
 
-    # Idempotency-Key = the per-tool-call id (X01b). A retried/duplicated
-    # call in one turn collapses to one run server-side.
+    # Idempotency-Key = the per-tool-call id. A retried/duplicated call in
+    # one turn collapses to one run server-side.
     req_headers: dict[str, str] = {}
     tc_id = current_tool_context().tool_call_id
     if tc_id:
@@ -790,11 +785,11 @@ async def _handler_run_workflow(args: dict[str, Any], jwt: str) -> dict[str, Any
     return out
 
 
-# ── X11 — run_script (gated write; fire-and-forget script run) ───────
+# ── run_script (gated write; fire-and-forget script run) ─────────────
 
 
 def _status_poll_url(execution_id: str) -> str:
-    """Where the client polls a script run (no SSE stream for scripts — AD-B4)."""
+    """Where the client polls a script run (no SSE stream for scripts)."""
     return f"/api/execution-engine/{execution_id}/status/"
 
 
@@ -835,11 +830,11 @@ async def _resolve_script_meta(
 
 
 async def _handler_run_script(args: dict[str, Any], jwt: str) -> dict[str, Any]:
-    """Enqueue a fire-and-forget script run via the X02 async endpoint.
+    """Enqueue a fire-and-forget script run via the async endpoint.
 
     Validates the four bindings (script + vault/server/credential ids),
-    ticks the exec quota (X08), then POSTs the nested ScriptExecutionRequest
-    body. No live token stream (AD-B4) — the client polls watch_url. Returns
+    ticks the exec quota, then POSTs the nested ScriptExecutionRequest body.
+    No live token stream — the client polls watch_url. Returns
     `inputs_preview` with secret-looking keys masked (key-name heuristic, as
     scripts have no password-type schema).
     """
@@ -919,18 +914,18 @@ async def _handler_run_script(args: dict[str, Any], jwt: str) -> dict[str, Any]:
     }
 
 
-# ── X12 — rerun_workflow (gated write; re-enqueues a prior run) ──────
+# ── rerun_workflow (gated write; re-enqueues a prior run) ────────────
 
 
 async def _handler_rerun_workflow(args: dict[str, Any], jwt: str) -> dict[str, Any]:
     """Re-enqueue a prior workflow run as a fresh run (whole-workflow only).
 
     The investigate→fix→rerun endpoint of the failure loop. Ticks the exec
-    quota (X08) and sends an Idempotency-Key = this tool call's id (X01b) so
-    a double-call collapses to one new run. The server fixes
-    `trigger_source="autobot"`, so the Layer-3 backstop drops any password
-    that sneaks into an `inputs` override; omit `inputs` to reuse the prior
-    run's (already-masked) inputs. There is NO resume-from-failed-node.
+    quota and sends an Idempotency-Key = this tool call's id so a double-call
+    collapses to one new run. The server fixes `trigger_source="autobot"`, so
+    the backstop drops any password that sneaks into an `inputs` override;
+    omit `inputs` to reuse the prior run's (already-masked) inputs. There is
+    NO resume-from-failed-node.
     """
     run_id, err = _require_run_id(args)
     if err:

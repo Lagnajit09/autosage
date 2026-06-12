@@ -1,6 +1,5 @@
 /**
- * Run-intent fulfillment (X17, AD-B9 Layer-4b) — the secure password
- * side-channel's browser half.
+ * Run-intent fulfillment — the secure password side-channel's browser half.
  *
  * `fulfillRunIntent` POSTs the user's confirmed params (secrets included)
  * straight to Django via a DEDICATED raw `fetch` — deliberately NOT the shared

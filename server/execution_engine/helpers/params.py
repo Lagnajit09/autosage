@@ -336,7 +336,7 @@ def resolve_parameters(
 
 
 def build_needs_params(nodes: Any) -> list[dict[str, Any]]:
-    """Describe every configured param across a workflow's action nodes (X17).
+    """Describe every configured param across a workflow's action nodes.
 
     Produces the client-visible shape the composer confirmation form renders,
     one entry per parameter that carries an ``id``::

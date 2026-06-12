@@ -1,6 +1,5 @@
 /**
- * Shared types + status helpers for the chat execution renderer (Pillar B,
- * X14/X15).
+ * Shared types + status helpers for the chat execution renderer.
  *
  * A "run" is a chat-initiated workflow run or script execution. The tool
  * results that seed one (`run_workflow`, `rerun_workflow`, `run_script`) all
@@ -15,7 +14,7 @@ export type RunKind = "workflow" | "script";
 
 /**
  * One configured workflow parameter, as described by `needs_params` on a
- * `preview_workflow_run` / `run_workflow` result (X17). Drives the rows of the
+ * `preview_workflow_run` / `run_workflow` result. Drives the rows of the
  * composer-anchored confirmation form.
  */
 export interface NeedsParam {

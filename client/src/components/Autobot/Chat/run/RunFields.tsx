@@ -3,11 +3,11 @@
  *
  * `ParamGrid` renders proposed/persisted run inputs as compact key→value
  * boxes (read-only); values flagged secret (or already masked to "*****" by
- * Django/AD-B9) show as dots, never plaintext.
+ * Django) show as dots, never plaintext.
  *
  * `SecretField` is the run-time-secret affordance: a real `<input
  * type=password>`. It stays DISABLED in read-only contexts (e.g. the preview
- * card), and becomes LIVE inside the X17 confirmation form, where its value
+ * card), and becomes LIVE inside the confirmation form, where its value
  * POSTs browser→Django directly via the run-intent fulfill endpoint — never
  * through Autobot.
  *

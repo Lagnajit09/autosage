@@ -1,6 +1,6 @@
 /**
  * SecretForm — the composer-anchored confirmation form for a workflow run that
- * needs run-time parameters (X17, AD-B9 Layer-4b).
+ * needs run-time parameters.
  *
  * It renders directly above the chat composer (the single typing surface) when
  * `run_workflow` returns `status:"awaiting_secret"`. It shows EVERY configured

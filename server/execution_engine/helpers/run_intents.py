@@ -1,26 +1,21 @@
-"""Ephemeral store for prepared-but-not-enqueued workflow runs (X17).
+"""Ephemeral store for prepared-but-not-enqueued workflow runs.
 
-AD-B9 Layer-4b — the secure password side-channel. An autobot execution-mode
-turn that wants to run a workflow with run-time parameters does NOT enqueue
-directly. Instead it asks Django to mint a **run intent** here, and the user's
-browser later POSTs the confirmed params (secrets included) straight to the
-``fulfill`` view, which converges on ``enqueue_workflow_run`` on the *manual*
-trigger path. Autobot only ever holds the ``run_intent_id`` — never the value.
+The secure password side-channel: an autobot turn that wants to run a workflow
+with run-time parameters does NOT enqueue directly. It asks Django to mint a
+run intent here; the user's browser later POSTs the confirmed params (secrets
+included) straight to the fulfill view, which enqueues on the manual trigger
+path. Autobot only ever holds the run_intent_id, never the value.
 
-Why Redis instead of a Django model:
-  • The intent is short-lived (5 min) and single-use — Redis ``SET … EX`` gives
-    self-evicting expiry with no cleanup cron, and ``GETDEL`` consumes the
-    intent atomically (read-and-delete in one round trip), so a double-submit
-    or a fulfill/expire race collapses to exactly one run with no DB-level
-    ``fulfilled_at`` guard.
-  • It avoids a migration and a queryable row for what is a transient token.
+Intents live in Redis rather than a model: they are short-lived (5 min) and
+single-use, so ``SET … EX`` gives self-evicting expiry and ``GETDEL`` consumes
+one atomically (a double-submit or expire/fulfill race collapses to a single
+run). This avoids a migration, a cleanup cron, and a queryable row for what is
+a transient token.
 
-We use the raw redis client (mirroring ``redis_pubsub``), NOT Django's cache
-framework — the default ``CACHES`` backend is ``LocMemCache`` (per-process),
-which would not be shared across Gunicorn/Celery workers.
-
-A dropped key (Redis restart / LRU eviction) simply surfaces as "expired" on
-fulfill — the user re-asks Autobot to run it. Acceptable for a 5-min token.
+Uses the raw redis client (mirroring ``redis_pubsub``), not Django's cache
+framework, whose default ``LocMemCache`` backend is per-process and would not
+be shared across workers. A dropped key (Redis restart / eviction) simply
+surfaces as "expired" on fulfill — the user re-asks Autobot to run it.
 """
 
 from __future__ import annotations

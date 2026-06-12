@@ -1,12 +1,11 @@
 /**
- * PreviewCard — renders a `preview_workflow_run` result (AD-B3, the mandatory
- * side-effect-free confirmation step). Shows what WOULD run (targets, masked
+ * PreviewCard — renders a `preview_workflow_run` result, the mandatory
+ * side-effect-free confirmation step. Shows what WOULD run (targets, masked
  * inputs) and gates on `ready`:
  *   • ready    → a "Run it now" affordance that PREFILLS the composer (the
- *     user still presses send — confirmation must be its own turn, AD-B3).
- *   • !ready   → blocking reasons (e.g. AD-B9 Layer-4a: a run-time password →
- *     run from the builder) with a deep-link, plus the locked secret-box
- *     affordance (becomes a live secure field in X17).
+ *     user still presses send — confirmation must be its own turn).
+ *   • !ready   → blocking reasons with a deep-link to the builder, plus the
+ *     locked secret-box affordance.
  */
 
 import { useMemo } from "react";
@@ -40,13 +39,13 @@ interface PreviewResult {
   inputs_preview?: Record<string, unknown>;
   ready?: boolean;
   blocking?: string[];
-  /** X17 forward-compat: structured run-time secrets the workflow needs. */
+  /** Structured run-time secrets the workflow needs (legacy/back-compat). */
   needs_secret?: Array<{ param_id?: string; name?: string }>;
-  /** X17 — every configured param; running opens a secure confirmation form. */
+  /** Every configured param; running opens a secure confirmation form. */
   needs_params?: Array<{ is_secret?: boolean }>;
 }
 
-/** Pull param ids out of a Layer-4a blocking message: "(parameter id(s): a, b)". */
+/** Pull param ids out of a blocking message: "(parameter id(s): a, b)". */
 const parseSecretIds = (blocking: string[]): string[] => {
   const ids: string[] = [];
   for (const b of blocking) {
@@ -187,7 +186,7 @@ export const PreviewCard = ({
           </div>
         )}
 
-        {/* Ready → prefill a confirmation (AD-B3: user sends it themselves) */}
+        {/* Ready → prefill a confirmation (user sends it themselves) */}
         {ready && (
           <div className="space-y-2">
             {paramCount > 0 && (

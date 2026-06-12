@@ -47,7 +47,7 @@ interface RunPanelContextValue {
   setTab: (tab: RunTab) => void;
   closeRun: () => void;
   seedPrompt: (text: string) => void;
-  /** The run awaiting confirmation in the composer form, if any (X17). */
+  /** The run awaiting confirmation in the composer form, if any. */
   pendingSecret: PendingSecret | null;
   /** Open the composer-anchored confirmation form (manual — always opens). */
   requestSecret: (intent: PendingSecret) => void;
@@ -85,7 +85,7 @@ export const RunPanelProvider = ({
 
   const [activeRun, setActiveRun] = useState<ActiveRun | null>(null);
 
-  // ── Composer-anchored confirmation form (X17) ──────────────────────────
+  // ── Composer-anchored confirmation form ────────────────────────────────
   const [pendingSecret, setPendingSecret] = useState<PendingSecret | null>(null);
   // Intents we've already surfaced — so the live card auto-opens once, and a
   // historical card (on reload) never auto-pops a stale form.

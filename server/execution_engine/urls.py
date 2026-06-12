@@ -25,8 +25,8 @@ urlpatterns = [
 
     # Workflow Execution Endpoints
     path("workflows/<uuid:workflow_id>/run/", views_workflow.trigger_workflow_run, name="workflow-run"),
-    # Autobot secure side-channel (X17): mint a single-use run intent (no run
-    # yet), then the browser fulfills it with the confirmed params.
+    # Autobot secure side-channel: mint a single-use run intent (no run yet),
+    # then the browser fulfills it with the confirmed params.
     path("workflows/<uuid:workflow_id>/run/intent/", views_workflow.create_workflow_run_intent, name="workflow-run-intent"),
     path("workflows/runs/intents/<uuid:run_intent_id>/fulfill/", views_workflow.fulfill_workflow_run_intent, name="workflow-run-intent-fulfill"),
     path("workflows/runs/", views_workflow.list_workflow_runs, name="workflow-runs-list"),

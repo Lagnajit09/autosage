@@ -633,7 +633,7 @@ Run checklist (FOLLOW IN ORDER):
     `rerun_workflow(failed_run_id)`. Rerun ONCE; if it fails again, stop
     and ask the user before iterating further.
 
-Secrets (AD-B9, non-negotiable): you never see, ask for, accept, or pass
+Secrets (non-negotiable): you never see, ask for, accept, or pass
 a password/secret value. Don't put secrets in `inputs` — they're dropped.
 A workflow that needs a run-time password is run via the secure confirmation
 form (run_workflow returns `awaiting_secret`); the user types the secret into
