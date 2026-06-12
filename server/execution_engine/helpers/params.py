@@ -335,6 +335,60 @@ def resolve_parameters(
     return resolved
 
 
+def build_needs_params(nodes: Any) -> list[dict[str, Any]]:
+    """Describe every configured param across a workflow's action nodes (X17).
+
+    Produces the client-visible shape the composer confirmation form renders,
+    one entry per parameter that carries an ``id``::
+
+        { "param_id", "name", "type", "has_default": bool,
+          "is_secret": bool, "source": "manual" | "output" }
+
+    ``has_default`` reflects whether a value is baked into the workflow JSON
+    (``False`` → the user must supply it in the form). ``is_secret`` is
+    ``type == "password"``. ``source`` mirrors ``sourceType`` — an ``output``
+    param is a node reference the form shows read-only (never edited).
+
+    A param id can appear on multiple nodes; the first occurrence wins, with
+    ``has_default`` OR-ed across them (any baked value counts as a default).
+    """
+    out: list[dict[str, Any]] = []
+    seen: dict[str, int] = {}  # param_id -> index in `out`
+    if not isinstance(nodes, list):
+        return out
+    for node in nodes:
+        if not isinstance(node, dict):
+            continue
+        params = (node.get("data") or {}).get("parameters")
+        if not isinstance(params, list):
+            continue
+        for p in params:
+            if not isinstance(p, dict):
+                continue
+            pid = p.get("id")
+            if not pid:
+                continue
+            has_default = bool(p.get("value"))
+            if pid in seen:
+                # Same param on another node — OR-in any baked value.
+                if has_default:
+                    out[seen[pid]]["has_default"] = True
+                continue
+            ptype = (p.get("type") or "string")
+            seen[pid] = len(out)
+            out.append(
+                {
+                    "param_id": pid,
+                    "name": p.get("name") or pid,
+                    "type": ptype,
+                    "has_default": has_default,
+                    "is_secret": ptype == "password",
+                    "source": (p.get("sourceType") or SOURCE_MANUAL).lower(),
+                }
+            )
+    return out
+
+
 def resolve_template_variables(
     script: str,
     resolved_params: dict[str, Any],

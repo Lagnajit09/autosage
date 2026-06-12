@@ -36,6 +36,8 @@ from execution_engine.helpers.graph import (
     NODE_TYPE_ACTION,
 )
 from execution_engine.helpers.run_builder import RunBuildError, enqueue_workflow_run
+from execution_engine.helpers.params import build_needs_params
+from execution_engine.helpers.run_intents import create_intent, consume_intent
 from execution_engine.tasks import execute_workflow
 from execution_engine.helpers.redis_pubsub import subscribe_workflow_logs
 from execution_engine.helpers.script_execution.utils import sse_event, json_response, check_throttle
@@ -160,6 +162,174 @@ def trigger_workflow_run(request, workflow_id):
             "workflow_run_id": str(workflow_run.id),
             "status": "queued",
             "idempotent": False,
+        },
+        status_code=status.HTTP_202_ACCEPTED,
+    )
+
+
+def _password_param_ids(workflow) -> set[str]:
+    """Set of password-typed parameter ids on a workflow (mirrors run_builder)."""
+    ids: set[str] = set()
+    for node in workflow.nodes:
+        for p in (node.get("data", {}).get("parameters") or []):
+            if p.get("type") == "password" and p.get("id"):
+                ids.add(p["id"])
+    return ids
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+@throttle_classes([ExecutionBurstThrottle, ExecutionSustainedThrottle])
+def create_workflow_run_intent(request, workflow_id):
+    """Mint a single-use run intent for the Autobot secure side-channel (X17).
+
+    AD-B9 Layer-4b. Autobot calls this (trigger_source must be ``autobot``)
+    instead of enqueuing directly when a workflow has run-time parameters. NO
+    ``WorkflowRun`` is created here — the user's browser later POSTs the
+    confirmed params to ``fulfill_workflow_run_intent``, which enqueues on the
+    *manual* path so the X03b Layer-3 password drop does not fire.
+
+    The intent stores only the model-proposed **non-secret** inputs; any
+    password-typed input is stripped here too (defense in depth — the model
+    should never be sending one). Returns ``{run_intent_id, needs_params}``.
+    """
+    try:
+        workflow = Workflow.objects.get(id=workflow_id, user=request.user)
+    except Workflow.DoesNotExist:
+        return api_response(
+            success=False,
+            message="Workflow not found or access denied.",
+            status_code=status.HTTP_404_NOT_FOUND,
+        )
+
+    serializer = WorkflowRunRequestSerializer(data=request.data)
+    if not serializer.is_valid():
+        return api_response(
+            success=False,
+            message="Invalid request data.",
+            errors=serializer.errors,
+            status_code=status.HTTP_400_BAD_REQUEST,
+        )
+
+    # This endpoint exists ONLY for the autobot side-channel. A manual run
+    # never needs an intent (its secrets already come from the browser).
+    if serializer.validated_data.get("trigger_source") != "autobot":
+        return api_response(
+            success=False,
+            message="Run intents are only available on the autobot path.",
+            status_code=status.HTTP_400_BAD_REQUEST,
+        )
+
+    inputs = dict(serializer.validated_data.get("inputs", {}) or {})
+    send_email = serializer.validated_data.get("send_email", False)
+    user_email = serializer.validated_data.get("user_email", "") or ""
+
+    # Defense in depth: drop any password-typed input the model shouldn't have
+    # sent (mirrors the enqueue_workflow_run autobot scan). The secret only
+    # ever arrives later, on the browser fulfill path.
+    pwd_ids = _password_param_ids(workflow)
+    dropped = [pid for pid in pwd_ids if inputs.get(pid)]
+    if dropped:
+        inputs = {k: v for k, v in inputs.items() if k not in pwd_ids}
+        logger.warning(
+            "Dropped %d password-typed input(s) from run-intent for workflow %s: %s",
+            len(dropped), workflow.id, sorted(dropped),
+        )
+
+    intent_id = create_intent(
+        user_id=request.user.id,
+        workflow_id=workflow.id,
+        inputs=inputs,
+        send_email=send_email,
+        notification_email=user_email if send_email else "",
+    )
+
+    return api_response(
+        success=True,
+        message="Run intent created.",
+        data={
+            "run_intent_id": intent_id,
+            "needs_params": build_needs_params(workflow.nodes),
+        },
+        status_code=status.HTTP_202_ACCEPTED,
+    )
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+@throttle_classes([ExecutionBurstThrottle, ExecutionSustainedThrottle])
+def fulfill_workflow_run_intent(request, run_intent_id):
+    """Enqueue the run a prior intent prepared, carrying the browser's params (X17).
+
+    The browser POSTs ``{"params": {<param_id>: <value>, ...}}`` — the full
+    confirmed set including any secrets the user typed. We atomically consume
+    the intent (single-use), overlay the browser params onto the intent's
+    non-secret inputs (browser is authoritative), and converge on
+    ``enqueue_workflow_run`` with ``trigger_source="manual"`` — the crux: the
+    secret came from the user's browser over TLS, so the Layer-3 autobot drop
+    must NOT fire. Persist-time masking (run_builder) still masks it on the row.
+    """
+    # Atomic fetch-and-delete: a double-submit / expired intent yields None.
+    intent = consume_intent(str(run_intent_id))
+    if intent is None:
+        return api_response(
+            success=False,
+            message="This run request expired or was already used — ask to run it again.",
+            status_code=status.HTTP_410_GONE,
+        )
+
+    # Owner check (defense in depth — the id is an unguessable uuid handed only
+    # to the owner's browser). The intent is already consumed at this point.
+    if str(intent.get("user_id")) != str(request.user.id):
+        return api_response(
+            success=False,
+            message="Run intent does not belong to the current user.",
+            status_code=status.HTTP_403_FORBIDDEN,
+        )
+
+    try:
+        workflow = Workflow.objects.get(id=intent.get("workflow_id"), user=request.user)
+    except Workflow.DoesNotExist:
+        return api_response(
+            success=False,
+            message="Workflow not found or access denied.",
+            status_code=status.HTTP_404_NOT_FOUND,
+        )
+
+    params = request.data.get("params")
+    if params is not None and not isinstance(params, dict):
+        return api_response(
+            success=False,
+            message="'params' must be an object of {param_id: value}.",
+            status_code=status.HTTP_400_BAD_REQUEST,
+        )
+
+    # Intent's non-secret inputs, overlaid by the authoritative browser params
+    # (secrets + any user edits).
+    merged = {**(intent.get("inputs") or {}), **(params or {})}
+
+    try:
+        workflow_run = enqueue_workflow_run(
+            workflow=workflow,
+            user=request.user,
+            inputs=merged,
+            send_email=bool(intent.get("send_email")),
+            user_email=intent.get("notification_email") or "",
+            trigger_source="manual",
+        )
+    except RunBuildError as exc:
+        return api_response(
+            success=False,
+            message=exc.message,
+            status_code=status.HTTP_400_BAD_REQUEST,
+        )
+
+    return api_response(
+        success=True,
+        message="Workflow execution queued successfully.",
+        data={
+            "workflow_run_id": str(workflow_run.id),
+            "status": "queued",
         },
         status_code=status.HTTP_202_ACCEPTED,
     )

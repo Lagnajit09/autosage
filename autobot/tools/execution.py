@@ -11,14 +11,18 @@ history / status / logs, never trigger or mutate anything.
 `preview_workflow_run` (X09) is ALSO side-effect-free (it never enqueues),
 but lives in the `_EXEC_TOOLS` floor — it's only meaningful in `execution`
 mode as the mandatory pre-run confirmation step (AD-B3). It masks
-password-param values (AD-B9) and refuses workflows that need a run-time
-secret, redirecting the user to the builder (AD-B9 Layer-4a).
+password-param values (AD-B9) and returns `needs_params` describing every
+configured param so the client can render the secure confirmation form.
 
-`run_workflow` (X10) is the first WRITE tool here — it enqueues a real run.
-It is gated by the exec quota (X08), drops any password-typed input before
-POSTing (AD-B9 Layer-2; the Django Layer-3 backstop drops it again), and
-sends an Idempotency-Key = the per-tool-call id (X01b) so a double-call in
-one turn collapses to one run. `trigger_source` is fixed to `"autobot"`.
+`run_workflow` (X10) is the first WRITE tool here. A no-param workflow it
+enqueues directly; a workflow with run-time params it does NOT run — it mints
+a single-use run intent and returns `awaiting_secret` (AD-B9 Layer-4b), so
+the user confirms params in a composer-anchored form that POSTs the secret
+browser→Django, never through Autobot. It is gated by the exec quota (X08),
+drops any password-typed input before POSTing (AD-B9 Layer-2; the Django
+Layer-3 backstop drops it again), and sends an Idempotency-Key = the
+per-tool-call id (X01b) so a double-call in one turn collapses to one run.
+`trigger_source` is fixed to `"autobot"`.
 Both gating signals (user_sub, tool-call id) arrive via
 `current_tool_context()`, not the handler args.
 
@@ -402,8 +406,9 @@ def _collect_password_params(nodes: Any) -> dict[str, bool]:
     Mirrors `run_builder.py`'s detection (`type == "password"`, keyed by
     param `id`). `True` = a default value is baked into the workflow JSON
     (the worker supplies it at run time; Autobot never sees it). `False` =
-    the param needs a value at run time — which Autobot cannot provide
-    (AD-B9), so it forces a builder redirect.
+    the param needs a value at run time — which Autobot never transports
+    (AD-B9); the user supplies it in the secure confirmation form (Layer-4b).
+    Used to mask the inputs preview and strip secrets before any POST.
     """
     out: dict[str, bool] = {}
     if not isinstance(nodes, list):
@@ -422,6 +427,50 @@ def _collect_password_params(nodes: Any) -> dict[str, bool]:
                 continue
             # A param can appear once; OR-in any baked value across nodes.
             out[pid] = out.get(pid, False) or bool(p.get("value"))
+    return out
+
+
+def _collect_needs_params(nodes: Any) -> list[dict[str, Any]]:
+    """Describe every configured param across action nodes for the composer
+    confirmation form (X17). Mirrors Django's ``build_needs_params`` shape:
+    ``{param_id, name, type, has_default, is_secret, source}``.
+
+    The form renders one row per entry — secret params as masked inputs,
+    ``source=="output"`` (node references) as read-only chips, the rest as
+    editable inputs pre-filled from their baked default. A param id seen on
+    multiple nodes appears once, with ``has_default`` OR-ed across them.
+    """
+    out: list[dict[str, Any]] = []
+    seen: dict[str, int] = {}
+    if not isinstance(nodes, list):
+        return out
+    for node in nodes:
+        if not isinstance(node, dict):
+            continue
+        params = (node.get("data") or {}).get("parameters")
+        if not isinstance(params, list):
+            continue
+        for p in params:
+            if not isinstance(p, dict):
+                continue
+            pid = p.get("id")
+            if not pid:
+                continue
+            has_default = bool(p.get("value"))
+            if pid in seen:
+                if has_default:
+                    out[seen[pid]]["has_default"] = True
+                continue
+            ptype = p.get("type") or "string"
+            seen[pid] = len(out)
+            out.append({
+                "param_id": pid,
+                "name": p.get("name") or pid,
+                "type": ptype,
+                "has_default": has_default,
+                "is_secret": ptype == "password",
+                "source": (p.get("sourceType") or "manual").lower(),
+            })
     return out
 
 
@@ -481,9 +530,10 @@ async def _handler_preview_workflow_run(
     model calls this, presents the summary, and waits for the user's
     explicit "run it" before calling `run_workflow`.
 
-    AD-B9 Layer-4(a): if any password-typed param has no baked-in value, it
-    needs a run-time secret that Autobot must never handle → `ready:false`
-    with a `blocking` message telling the user to run it from the builder.
+    AD-B9 Layer-4(b): a workflow with run-time params (incl. a password with
+    no baked value) no longer blocks the preview. `needs_params` describes
+    every configured param; `run_workflow` will route it through the secure
+    composer form / intent so the secret goes browser→Django, never via us.
     """
     wf_id = args.get("workflow_id")
     if not isinstance(wf_id, str) or not wf_id.strip():
@@ -507,17 +557,9 @@ async def _handler_preview_workflow_run(
     password_params = _collect_password_params(node_list)
     proposed_inputs = args.get("inputs") if isinstance(args.get("inputs"), dict) else {}
 
-    blocking: list[str] = []
-    needs_secret = sorted(pid for pid, has_val in password_params.items() if not has_val)
-    if needs_secret:
-        blocking.append(
-            "This workflow has a password parameter with no stored value, so "
-            "it needs a secret at run time. I can't handle passwords — run "
-            "this one from the workflow builder so your secret goes straight "
-            "to the executor, never through me. "
-            f"(parameter id(s): {', '.join(needs_secret)})"
-        )
-
+    # AD-B9 Layer-4(b): a run-time password no longer blocks. Params (secret or
+    # not) are confirmed in the composer form after run_workflow returns
+    # awaiting_secret, so the preview is always `ready`.
     return {
         "name": wf.get("name") if isinstance(wf, dict) else None,
         "node_count": len(node_list),
@@ -525,8 +567,9 @@ async def _handler_preview_workflow_run(
         "inputs_preview": _mask_inputs_preview(
             proposed_inputs, set(password_params)
         ),
-        "ready": not blocking,
-        "blocking": blocking,
+        "needs_params": _collect_needs_params(node_list),
+        "ready": True,
+        "blocking": [],
     }
 
 
@@ -565,11 +608,10 @@ async def _check_exec_quota() -> dict[str, Any] | None:
     return None
 
 
-async def _password_param_ids(wf_id: str, jwt: str) -> tuple[set[str], dict[str, Any] | None]:
-    """Fetch the workflow and return its set of password-typed param ids.
-
-    Returns (ids, None) on success or (set(), error_dict) if the workflow
-    can't be read — so the caller can refuse the run rather than POST blind.
+async def _fetch_workflow(wf_id: str, jwt: str) -> tuple[dict[str, Any] | None, dict[str, Any] | None]:
+    """Fetch a workflow's stored JSON. Returns (wf_dict, None) on success or
+    (None, error_dict) if it can't be read — so the caller refuses the run
+    rather than POSTing blind.
     """
     client = get_django_client()
     try:
@@ -577,33 +619,96 @@ async def _password_param_ids(wf_id: str, jwt: str) -> tuple[set[str], dict[str,
             method="GET", path=f"/api/workflows/{wf_id}/", jwt=jwt,
         )
     except DjangoUnavailable as e:
-        return set(), {"error": f"Storage unreachable: {e}"}
+        return None, {"error": f"Storage unreachable: {e}"}
     if s != 200:
-        return set(), _django_error(s, body, "Failed to read workflow")
-    wf = (body or {}).get("data") or {}
-    return set(_collect_password_params(wf.get("nodes"))), None
+        return None, _django_error(s, body, "Failed to read workflow")
+    return (body or {}).get("data") or {}, None
+
+
+async def _create_run_intent(
+    wf_id: str,
+    inputs: dict[str, Any],
+    args: dict[str, Any],
+    name: Any,
+    needs_params: list[dict[str, Any]],
+    jwt: str,
+) -> dict[str, Any]:
+    """AD-B9 Layer-4(b): mint a single-use run intent instead of enqueuing.
+
+    The model-proposed (already password-stripped) `inputs` are stashed in the
+    intent; the user's browser will overlay the authoritative params — incl.
+    any secret — straight to Django's fulfill endpoint. We return
+    `awaiting_secret` so the client renders the composer confirmation form.
+    """
+    body_payload: dict[str, Any] = {
+        "inputs": inputs,
+        "trigger_source": "autobot",
+    }
+    send_email = args.get("send_email")
+    if isinstance(send_email, bool):
+        body_payload["send_email"] = send_email
+    user_email = args.get("user_email")
+    if isinstance(user_email, str) and user_email.strip():
+        body_payload["user_email"] = user_email.strip()
+
+    client = get_django_client()
+    try:
+        s, body = await client.request(
+            method="POST",
+            path=f"/api/execution-engine/workflows/{wf_id}/run/intent/",
+            jwt=jwt,
+            json_body=body_payload,
+        )
+    except DjangoUnavailable as e:
+        return {"error": f"Storage unreachable: {e}"}
+    if s not in (200, 202):
+        return _django_error(s, body, "Failed to prepare workflow run")
+
+    data = (body or {}).get("data") or {}
+    intent_id = data.get("run_intent_id")
+    if not intent_id:
+        return {"error": "Could not prepare the run (no intent id returned)."}
+    return {
+        "kind": "workflow",
+        "status": "awaiting_secret",
+        "run_intent_id": intent_id,
+        # Django is authoritative; fall back to our local view if absent.
+        "needs_params": data.get("needs_params") or needs_params,
+        "name": name,
+    }
 
 
 async def _handler_run_workflow(args: dict[str, Any], jwt: str) -> dict[str, Any]:
-    """Enqueue a real workflow run on the `autobot` trigger path.
+    """Run a workflow on the `autobot` trigger path.
 
-    Gating: exec quota (X08), AD-B9 Layer-2 (drops any password-typed input
-    key BEFORE POSTing — the model has no channel to supply a secret), and
-    an Idempotency-Key = this tool call's id so a double-call in one LLM
-    turn collapses to a single run (X01b). Whole-workflow run; the user must
-    have confirmed via preview_workflow_run first (enforced by the prompt).
+    Two paths, both gated by the exec quota (X08) — the tick happens once,
+    before the branch, since either outcome is "the user asked to run it":
+      • Any configured params → AD-B9 Layer-4(b): create a single-use intent
+        and return `awaiting_secret`; the user confirms in the composer form
+        and the run proceeds browser→Django (no secret ever flows through us).
+      • No params → direct enqueue fast path with an Idempotency-Key = this
+        tool call's id, so a double-call in one turn collapses to one run.
+
+    Either way AD-B9 Layer-2 drops any password-typed input the model supplied
+    BEFORE it leaves Autobot. The user must have confirmed via
+    preview_workflow_run first (enforced by the prompt).
     """
     wf_id = args.get("workflow_id")
     if not isinstance(wf_id, str) or not wf_id.strip():
         return {"error": "Missing required argument 'workflow_id'."}
     wf_id = wf_id.strip()
 
-    # AD-B9 Layer-2 — strip password-typed inputs before they leave Autobot.
-    # We must know which param ids are passwords, so read the workflow first.
-    pwd_ids, err = await _password_param_ids(wf_id, jwt)
+    # Read the workflow once: we need its param schema to (a) strip secrets and
+    # (b) decide between the intent form and the direct-enqueue path.
+    wf, err = await _fetch_workflow(wf_id, jwt)
     if err:
         return err
+    nodes = wf.get("nodes")
+    name = wf.get("name")
+    pwd_ids = set(_collect_password_params(nodes))
+    needs_params = _collect_needs_params(nodes)
 
+    # AD-B9 Layer-2 — strip password-typed inputs before they leave Autobot.
     raw_inputs = args.get("inputs")
     inputs: dict[str, Any] = {}
     dropped: list[str] = []
@@ -619,12 +724,19 @@ async def _handler_run_workflow(args: dict[str, Any], jwt: str) -> dict[str, Any
             len(dropped), dropped,
         )
 
-    # Quota AFTER validation but BEFORE the POST — an invalid request
-    # shouldn't burn the user's daily allowance.
+    # Quota AFTER validation but BEFORE either branch — an invalid request
+    # shouldn't burn the user's daily allowance, but an abandoned intent does
+    # consume a tick (the user asked to run it; ticking on fulfill would mean
+    # duplicating the Redis quota logic in Django — not worth it).
     quota_err = await _check_exec_quota()
     if quota_err:
         return quota_err
 
+    # Any run-time params → secure side-channel; the form IS the confirmation.
+    if needs_params:
+        return await _create_run_intent(wf_id, inputs, args, name, needs_params, jwt)
+
+    # No params → existing direct-enqueue fast path.
     body_payload: dict[str, Any] = {
         "inputs": inputs,
         "trigger_source": "autobot",
@@ -990,10 +1102,12 @@ register_tool(ToolDefinition(
         "user the summary, and WAIT for their explicit confirmation (never "
         "preview and run in the same turn). Returns name, node_count, targets "
         "(per script node: label, script type/id, whether a server is bound), "
-        "inputs_preview (your proposed inputs, password params masked), and "
-        "ready/blocking. If ready=false, relay each blocking reason and do "
-        "NOT run — a password-needing workflow must be run from the builder. "
-        "No side effects. You can NOT pass password values."
+        "inputs_preview (your proposed inputs, password params masked), "
+        "needs_params (every configured param: id/name/type/has_default/"
+        "is_secret/source), and ready/blocking. A workflow with run-time "
+        "params (incl. passwords) is now ready — run_workflow routes it "
+        "through a secure confirmation form. No side effects. You can NOT "
+        "pass password values."
     ),
     parameters_schema={
         "type": "object",
@@ -1026,11 +1140,14 @@ register_tool(ToolDefinition(
         "Run a workflow NOW (whole-workflow execution on the autobot path). "
         "Only call this AFTER preview_workflow_run returned ready=true and the "
         "user explicitly confirmed in a LATER turn — never preview and run in "
-        "the same turn. Returns {run_id, kind:'workflow', status:'queued', "
-        "watch_url}; the client mounts a live run panel from watch_url. You "
-        "CANNOT pass password/secret parameter values — any such key is "
-        "dropped before the run; password-needing workflows must be run from "
-        "the builder (preview tells you which). Counts against the user's "
+        "the same turn. For a no-param workflow this enqueues immediately and "
+        "returns {run_id, kind:'workflow', status:'queued', watch_url} — the "
+        "client mounts a live run panel. For a workflow WITH run-time params "
+        "it returns {status:'awaiting_secret', run_intent_id, needs_params, "
+        "name} instead of running: the user fills a secure form anchored at "
+        "the message box and the run proceeds via the intent. You CANNOT pass "
+        "password/secret values — any such key is dropped; the user supplies "
+        "them in that form, never through you. Counts against the user's "
         "daily execution limit."
     ),
     parameters_schema={
