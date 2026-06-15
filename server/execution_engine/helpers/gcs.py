@@ -4,6 +4,7 @@ Bucket: autosagex-logs
 Path structure: scripts-execution/<user_id>/<execution_id>/{stdout.log,stderr.log,logs.json}
 """
 
+import datetime
 import json
 import logging
 from google.cloud import storage
@@ -116,8 +117,6 @@ def upload_workflow_node_logs(user_id, workflow_id: str, run_id: str, node_id: s
     }
 
 
-import datetime
-
 def generate_signed_url(blob_path: str, expiration_minutes: int = 30) -> str:
     """
     Generate a V4 signed URL for a log blob.
@@ -138,6 +137,23 @@ def generate_signed_url(blob_path: str, expiration_minutes: int = 30) -> str:
     except Exception as e:
         logger.error(f"Failed to generate signed URL for {blob_path}: {e}")
         return ""
+
+
+def logs_expired(created_at) -> bool:
+    """
+    Whether a run's logs have aged past the bucket's lifecycle retention.
+
+    The autosagex-logs bucket deletes objects after 90 days; we consider logs
+    gone a few days earlier (settings.LOG_RETENTION_DAYS) so we never hand back
+    a signed URL for a blob the lifecycle sweep may have already removed. Past
+    this point the blobs are unrecoverable — surface that to the client instead
+    of minting a URL that 404s and reads as "no output".
+    """
+    if not created_at:
+        return False
+    retention_days = getattr(settings, "LOG_RETENTION_DAYS", 87)
+    age = datetime.datetime.now(datetime.timezone.utc) - created_at
+    return age > datetime.timedelta(days=retention_days)
 
 
 def get_blob_path_from_url(url: str) -> str:

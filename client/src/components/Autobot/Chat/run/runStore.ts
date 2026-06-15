@@ -457,6 +457,16 @@ export class RunStore {
         }
       }
 
+      // Past the bucket's retention the server blanks the URLs and flags the
+      // run — the blobs are gone, so don't fetch (it'd 404) and say so plainly.
+      if (sr?.logs_expired) {
+        this.appendLogs(runId, [
+          "[INFO] Logs are no longer available — execution logs are retained for 90 days.",
+        ]);
+        this.update(runId, (s) => ({ ...s, logsFetched: true }));
+        return;
+      }
+
       const lines: string[] = [];
       const out = await this.fetchSignedText(sr?.stdout_signed_url);
       if (out) lines.push(`[STDOUT] ${out.trimEnd()}`);

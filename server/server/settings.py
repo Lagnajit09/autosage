@@ -45,6 +45,12 @@ DEBUG = config('DEBUG', default=False, cast=bool)
 # Google Cloud Storage
 GOOGLE_APPLICATION_CREDENTIALS = config('GOOGLE_APPLICATION_CREDENTIALS', default='')
 
+# Execution log retention. The autosagex-logs bucket has a 90-day object
+# lifecycle rule; we treat logs as gone a few days BEFORE that so we never mint
+# a signed URL for a blob the lifecycle rule may have already swept (the
+# deletion isn't instantaneous at the 90-day mark). Keep this < the bucket rule.
+LOG_RETENTION_DAYS = config('LOG_RETENTION_DAYS', default=87, cast=int)
+
 ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='localhost,127.0.0.1', cast=Csv())
 
 # We sit behind nginx, which terminates TLS and proxies to us in plain HTTP

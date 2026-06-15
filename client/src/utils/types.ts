@@ -286,6 +286,9 @@ export interface ScriptExecution {
   stdout_signed_url?: string | null;
   stderr_signed_url?: string | null;
   logs_signed_url?: string | null;
+  /** True once the run is past the bucket's 90-day retention — signed URLs are
+   * blank because the blobs have been lifecycle-deleted and are unrecoverable. */
+  logs_expired?: boolean;
   exit_code: number | null;
   started_at: string | null;
   completed_at: string | null;

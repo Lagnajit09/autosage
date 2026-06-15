@@ -2,7 +2,45 @@ from rest_framework import serializers
 from execution_engine.models import ScriptExecution, WorkflowRun, WorkflowNodeRun
 
 
-from execution_engine.helpers.gcs import generate_signed_url, get_blob_path_from_url
+from execution_engine.helpers.gcs import (
+    generate_signed_url,
+    get_blob_path_from_url,
+    logs_expired,
+)
+
+
+class SignedLogUrlMixin:
+    """
+    Mints V4 signed URLs for a model's stdout/stderr/logs blobs, but returns
+    empty strings (and exposes `logs_expired: true`) once the run is past the
+    bucket's lifecycle retention. This stops us from handing the client a signed
+    URL for a blob the 90-day lifecycle sweep has already deleted — which would
+    404 and misleadingly read as "no output captured".
+
+    Hosting serializers must declare `created_at` in their Meta fields (used to
+    compute age) and add the three SerializerMethodFields + `logs_expired`.
+    """
+
+    def _expired(self, obj) -> bool:
+        return logs_expired(getattr(obj, "created_at", None))
+
+    def _signed(self, obj, log_url) -> str:
+        if self._expired(obj):
+            return ""
+        path = get_blob_path_from_url(log_url)
+        return generate_signed_url(path) if path else ""
+
+    def get_logs_expired(self, obj) -> bool:
+        return self._expired(obj)
+
+    def get_stdout_signed_url(self, obj) -> str:
+        return self._signed(obj, obj.stdout_log_url)
+
+    def get_stderr_signed_url(self, obj) -> str:
+        return self._signed(obj, obj.stderr_log_url)
+
+    def get_logs_signed_url(self, obj) -> str:
+        return self._signed(obj, obj.logs_url)
 
 
 class ScriptDetailsSerializer(serializers.Serializer):
@@ -23,62 +61,42 @@ class ScriptExecutionRequestSerializer(serializers.Serializer):
     inputs = serializers.DictField(required=False, default=dict)
 
 
-class ScriptExecutionResponseSerializer(serializers.ModelSerializer):
+class ScriptExecutionResponseSerializer(SignedLogUrlMixin, serializers.ModelSerializer):
     stdout_signed_url = serializers.SerializerMethodField()
     stderr_signed_url = serializers.SerializerMethodField()
     logs_signed_url = serializers.SerializerMethodField()
+    logs_expired = serializers.SerializerMethodField()
 
     class Meta:
         model = ScriptExecution
         fields = [
-            'id', 'status', 
+            'id', 'status',
             'stdout_signed_url', 'stderr_signed_url', 'logs_signed_url',
+            'logs_expired',
             'exit_code', 'started_at', 'completed_at', 'duration',
             'created_at', 'updated_at',
         ]
         read_only_fields = fields
 
-    def get_stdout_signed_url(self, obj):
-        path = get_blob_path_from_url(obj.stdout_log_url)
-        return generate_signed_url(path) if path else ""
 
-    def get_stderr_signed_url(self, obj):
-        path = get_blob_path_from_url(obj.stderr_log_url)
-        return generate_signed_url(path) if path else ""
-
-    def get_logs_signed_url(self, obj):
-        path = get_blob_path_from_url(obj.logs_url)
-        return generate_signed_url(path) if path else ""
-
-
-class ScriptExecutionHistorySerializer(serializers.ModelSerializer):
+class ScriptExecutionHistorySerializer(SignedLogUrlMixin, serializers.ModelSerializer):
     script_id = serializers.IntegerField(source='script.id', read_only=True)
     script_name = serializers.CharField(source='script.name', read_only=True)
     stdout_signed_url = serializers.SerializerMethodField()
     stderr_signed_url = serializers.SerializerMethodField()
     logs_signed_url = serializers.SerializerMethodField()
+    logs_expired = serializers.SerializerMethodField()
 
     class Meta:
         model = ScriptExecution
         fields = [
             'id', 'script_id', 'script_name', 'status',
             'stdout_signed_url', 'stderr_signed_url', 'logs_signed_url',
+            'logs_expired',
             'exit_code', 'started_at', 'completed_at', 'duration',
             'created_at', 'updated_at',
         ]
         read_only_fields = fields
-
-    def get_stdout_signed_url(self, obj):
-        path = get_blob_path_from_url(obj.stdout_log_url)
-        return generate_signed_url(path) if path else ""
-
-    def get_stderr_signed_url(self, obj):
-        path = get_blob_path_from_url(obj.stderr_log_url)
-        return generate_signed_url(path) if path else ""
-
-    def get_logs_signed_url(self, obj):
-        path = get_blob_path_from_url(obj.logs_url)
-        return generate_signed_url(path) if path else ""
 
 
 class WorkflowRunRequestSerializer(serializers.Serializer):
@@ -100,10 +118,11 @@ class WorkflowRunRequestSerializer(serializers.Serializer):
         return attrs
 
 
-class WorkflowNodeRunSerializer(serializers.ModelSerializer):
+class WorkflowNodeRunSerializer(SignedLogUrlMixin, serializers.ModelSerializer):
     stdout_signed_url = serializers.SerializerMethodField()
     stderr_signed_url = serializers.SerializerMethodField()
     logs_signed_url = serializers.SerializerMethodField()
+    logs_expired = serializers.SerializerMethodField()
 
     class Meta:
         model = WorkflowNodeRun
@@ -111,21 +130,16 @@ class WorkflowNodeRunSerializer(serializers.ModelSerializer):
             'id', 'workflow_run_id', 'node_id', 'node_label', 'status',
             'execution_order',
             'stdout_signed_url', 'stderr_signed_url', 'logs_signed_url',
+            'logs_expired',
             'exit_code', 'error_message', 'started_at', 'finished_at'
         ]
         read_only_fields = fields
 
-    def get_stdout_signed_url(self, obj):
-        path = get_blob_path_from_url(obj.stdout_log_url)
-        return generate_signed_url(path) if path else ""
-
-    def get_stderr_signed_url(self, obj):
-        path = get_blob_path_from_url(obj.stderr_log_url)
-        return generate_signed_url(path) if path else ""
-
-    def get_logs_signed_url(self, obj):
-        path = get_blob_path_from_url(obj.logs_url)
-        return generate_signed_url(path) if path else ""
+    # WorkflowNodeRun has no created_at of its own; its blobs live under the
+    # parent run's path, so retention is keyed off the run's creation time.
+    def _expired(self, obj) -> bool:
+        run = getattr(obj, "workflow_run", None)
+        return logs_expired(getattr(run, "created_at", None))
 
 
 class WorkflowRunSerializer(serializers.ModelSerializer):

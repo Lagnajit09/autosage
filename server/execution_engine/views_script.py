@@ -409,7 +409,11 @@ def all_executions(request):
     Supports pagination via 'page' and 'page_size' query parameters.
     """
     from execution_engine.models import WorkflowRun, ScriptExecution
-    from execution_engine.helpers.gcs import generate_signed_url, get_blob_path_from_url
+    from execution_engine.helpers.gcs import (
+        generate_signed_url,
+        get_blob_path_from_url,
+        logs_expired,
+    )
     from django.core.paginator import Paginator, EmptyPage
 
     user = request.user
@@ -455,15 +459,19 @@ def all_executions(request):
             duration_str = format_duration(se.duration)
         elif se.completed_at and se.started_at:
             duration_str = format_duration(se.completed_at - se.started_at)
+        # Past the lifecycle retention the blobs are gone — return empty URLs +
+        # a flag rather than minting links to deleted objects.
+        expired = logs_expired(se.created_at)
         results.append({
             'id': str(se.id),
             'name': se.script.name if se.script else "Unknown Script",
             'duration': duration_str,
             'status': se.status,
             'tag': 'script',
-            'stdout_signed_url': get_signed_url(se.stdout_log_url),
-            'stderr_signed_url': get_signed_url(se.stderr_log_url),
-            'logs_signed_url': get_signed_url(se.logs_url),
+            'stdout_signed_url': "" if expired else get_signed_url(se.stdout_log_url),
+            'stderr_signed_url': "" if expired else get_signed_url(se.stderr_log_url),
+            'logs_signed_url': "" if expired else get_signed_url(se.logs_url),
+            'logs_expired': expired,
             'created_at': se.created_at.isoformat(),
             'timestamp': se.created_at,
         })
