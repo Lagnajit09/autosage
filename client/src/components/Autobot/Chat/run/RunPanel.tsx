@@ -277,6 +277,16 @@ export const RunPanel = ({ activeRun }: RunPanelProps) => {
     return activeRun.tab;
   }, [kind, activeRun.tab]);
 
+  // Lazy log fetch: pull the script's GCS blobs only when the Logs tab is
+  // actually open and they haven't been fetched yet. This defers the one
+  // billed Class-B read off conversation load (X-quota) onto explicit intent.
+  // (Workflow logs stream over SSE — no GCS read to defer.)
+  useEffect(() => {
+    if (kind !== "script" || tab !== "logs") return;
+    if (!snap || snap.logsFetched || snap.logsLoading) return;
+    void store.fetchScriptLogs(runId);
+  }, [kind, tab, runId, snap, store]);
+
   const HeaderIcon = kind === "workflow" ? Workflow : Terminal;
   const title =
     snap?.name || (kind === "workflow" ? "Workflow run" : "Script run");
@@ -378,7 +388,11 @@ export const RunPanel = ({ activeRun }: RunPanelProps) => {
 
           <TabsContent value="logs" className="m-0 h-full data-[state=inactive]:hidden">
             <ExecutionTerminal
-              logs={snap?.logs ?? []}
+              logs={
+                kind === "script" && snap?.logsLoading
+                  ? [...(snap?.logs ?? []), "[INFO] Fetching logs…"]
+                  : (snap?.logs ?? [])
+              }
               elapsedSeconds={live ? elapsed : null}
               runId={runId}
             />

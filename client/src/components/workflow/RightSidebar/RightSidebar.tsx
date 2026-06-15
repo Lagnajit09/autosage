@@ -1,5 +1,6 @@
-import React, { useState } from "react";
+import React from "react";
 import { Trash2, Settings } from "lucide-react";
+import { useDeferredModal } from "@/hooks/use-deferred-modal";
 import { Button } from "@/components/ui/button";
 import {
   Sheet,
@@ -57,7 +58,11 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({
   workflowId,
   onCreateEdge,
 }) => {
-  const [showParametersModal, setShowParametersModal] = useState(false);
+  const {
+    isOpen: showParametersModal,
+    open: openParametersModal,
+    close: closeParametersModal,
+  } = useDeferredModal(false);
 
   const handleInputChange = (field: string, value: string) => {
     if (selectedNode) {
@@ -220,7 +225,7 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({
                       Parameters
                     </label>
                     <Button
-                      onClick={() => setShowParametersModal(true)}
+                      onClick={openParametersModal}
                       size="sm"
                       className="text-xs py-2 px-3 
                                bg-purple-600 dark:bg-purple-600 hover:bg-purple-700 dark:hover:bg-purple-700
@@ -288,7 +293,7 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({
         {selectedNode && (
           <ParametersModal
             isOpen={showParametersModal}
-            onClose={() => setShowParametersModal(false)}
+            onClose={closeParametersModal}
             parameters={selectedNode.data?.parameters || []}
             onUpdateParameters={handleUpdateParameters}
             nodeId={selectedNode.id}

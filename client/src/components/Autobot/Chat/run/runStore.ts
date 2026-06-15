@@ -61,6 +61,8 @@ const seedSnapshot = (d: RunDescriptor): RunSnapshot => ({
   finishedAtMs: null,
   error: null,
   live: true,
+  logsFetched: false,
+  logsLoading: false,
   name: d.scriptName ?? null,
   workflowId: null,
   workflowRun: null,
@@ -402,7 +404,13 @@ export class RunStore {
             : s.finishedAtMs,
         }));
         if (terminal) {
-          await this.fetchScriptLogs(runId, sr);
+          // Status line is cheap (no GCS read) so the card/terminal always
+          // shows the outcome. The stdout/stderr blobs are the one billed
+          // Class-B read — pulled ONLY when the user opens the Logs tab (see
+          // `fetchScriptLogs`), never on card mount / thought-expand / reload.
+          this.appendLogs(runId, [
+            `[STATUS] Script ${sr.status}${sr.exit_code != null ? ` (exit ${sr.exit_code})` : ""}`,
+          ]);
           this.update(runId, (s) => ({ ...s, live: false }));
         }
       }
@@ -415,16 +423,53 @@ export class RunStore {
     entry.pollTimer = setTimeout(() => void this.pollScript(runId), SCRIPT_POLL_MS);
   }
 
-  private async fetchScriptLogs(runId: string, sr: ScriptExecution): Promise<void> {
-    const lines: string[] = [
-      `[STATUS] Script ${sr.status}${sr.exit_code != null ? ` (exit ${sr.exit_code})` : ""}`,
-    ];
-    const out = await this.fetchSignedText(sr.stdout_signed_url);
-    if (out) lines.push(`[STDOUT] ${out.trimEnd()}`);
-    const err = await this.fetchSignedText(sr.stderr_signed_url);
-    if (err) lines.push(`[STDERR] ${err.trimEnd()}`);
-    if (!out && !err) lines.push("[INFO] No output captured for this run.");
-    this.appendLogs(runId, lines);
+  /**
+   * Pull the script's stdout/stderr blobs from their signed GCS URLs — the one
+   * billed Class-B read per run. Public + idempotent: the Logs tab calls it on
+   * open, and `pollScript` calls it once for a live-session run. Guards on
+   * `logsFetched`/`logsLoading` so concurrent triggers fetch at most once.
+   *
+   * The signed URLs ride on the cached `scriptRun` (minted by Django's status
+   * serializer). If the poll hasn't populated it yet — e.g. a historical run
+   * opened straight from a Logs click before any poll completed — fetch the
+   * status once to obtain fresh, unexpired URLs.
+   */
+  async fetchScriptLogs(runId: string): Promise<void> {
+    const entry = this.runs.get(runId);
+    if (!entry || entry.snap.kind !== "script") return;
+    if (entry.snap.logsFetched || entry.snap.logsLoading) return;
+
+    this.update(runId, (s) => ({ ...s, logsLoading: true }));
+    try {
+      let sr = entry.snap.scriptRun;
+      // Mint fresh URLs if we have none (or the cached ones may have expired).
+      const token = await this.getToken();
+      if (!sr || !sr.stdout_signed_url) {
+        const res = await apiRequest(
+          `/api/execution-engine/${runId}/status/`,
+          {},
+          token,
+        );
+        const fresh: ScriptExecution | undefined = res?.data ?? res;
+        if (fresh && typeof fresh === "object") {
+          sr = fresh;
+          this.update(runId, (s) => ({ ...s, scriptRun: fresh }));
+        }
+      }
+
+      const lines: string[] = [];
+      const out = await this.fetchSignedText(sr?.stdout_signed_url);
+      if (out) lines.push(`[STDOUT] ${out.trimEnd()}`);
+      const err = await this.fetchSignedText(sr?.stderr_signed_url);
+      if (err) lines.push(`[STDERR] ${err.trimEnd()}`);
+      if (!out && !err) lines.push("[INFO] No output captured for this run.");
+      this.appendLogs(runId, lines);
+      this.update(runId, (s) => ({ ...s, logsFetched: true }));
+    } catch {
+      // Leave logsFetched false so a later Logs open can retry.
+    } finally {
+      this.update(runId, (s) => ({ ...s, logsLoading: false }));
+    }
   }
 
   private async fetchSignedText(url: string | null | undefined): Promise<string | null> {

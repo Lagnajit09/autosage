@@ -1,6 +1,6 @@
 [
   {
-    "origin": ["http://localhost:5173"],
+    "origin": ["http://localhost:5173", "https://autosagex.web.app"],
     "method": ["GET"],
     "responseHeader": ["Content-Type"],
     "maxAgeSeconds": 3600

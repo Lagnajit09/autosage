@@ -95,6 +95,11 @@ export interface RunSnapshot {
   error: string | null;
   /** Whether an SSE/poll loop is currently attached. */
   live: boolean;
+  /** Script-only: the GCS log text has been pulled (or attempted). Gates the
+   * one billed Class-B read so it fires once, on demand, not on every load. */
+  logsFetched: boolean;
+  /** Script-only: a log fetch is currently in flight (drives a spinner). */
+  logsLoading: boolean;
 
   // ── Lazily-hydrated detail (fetched once per run) ──────────────────
   /** Resolved workflow name (or echoed script name). */

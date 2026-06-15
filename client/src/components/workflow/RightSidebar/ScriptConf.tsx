@@ -29,6 +29,7 @@ import { apiRequest } from "@/lib/api-client";
 import { toast } from "sonner";
 import { JSONSchemaModal } from "./JSONSchemaModal";
 import { scriptService, mapScriptToScriptFile } from "@/lib/api/scripts";
+import { useDeferredModal } from "@/hooks/use-deferred-modal";
 
 export const ScriptConf: React.FC<BaseConfigProps> = ({
   selectedNode,
@@ -37,7 +38,11 @@ export const ScriptConf: React.FC<BaseConfigProps> = ({
   const { getToken, isSignedIn } = useAuth();
   const [vaults, setVaults] = useState<Vault[]>([]);
   const [isLoadingVaults, setIsLoadingVaults] = useState(false);
-  const [isSchemaModalOpen, setIsSchemaModalOpen] = useState(false);
+  const {
+    isOpen: isSchemaModalOpen,
+    open: openSchemaModal,
+    close: closeSchemaModal,
+  } = useDeferredModal(false);
   const [savedScripts, setSavedScripts] = useState<ScriptFile[]>([]);
   const [isLoadingScripts, setIsLoadingScripts] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -522,7 +527,7 @@ export const ScriptConf: React.FC<BaseConfigProps> = ({
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => setIsSchemaModalOpen(true)}
+                onClick={openSchemaModal}
                 className="w-full text-sm py-2.5 bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700 border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white transition-all duration-200"
               >
                 <Code size={14} className="mr-2" />
@@ -556,7 +561,7 @@ export const ScriptConf: React.FC<BaseConfigProps> = ({
 
       <JSONSchemaModal
         isOpen={isSchemaModalOpen}
-        onClose={() => setIsSchemaModalOpen(false)}
+        onClose={closeSchemaModal}
         schema={selectedNode.data?.jsonSchema || []}
         onSave={handleSchemaSave}
       />

@@ -315,6 +315,20 @@ export const HTTPTrigger: React.FC<BaseConfigProps> = ({
     setTimeout(() => setCopiedBody(false), 2000);
   };
 
+  // The secret modal is a Radix Dialog rendered inside the RightSidebar Sheet.
+  // Defer the unmount so the Dialog's scroll-lock cleanup doesn't race the
+  // Sheet's and leave `pointer-events: none` stuck on <body> (frozen screen).
+  const closeRevealed = () => {
+    setTimeout(() => {
+      setRevealed(null);
+      setTimeout(() => {
+        if (document.body.style.pointerEvents === "none") {
+          document.body.style.pointerEvents = "";
+        }
+      }, 0);
+    }, 0);
+  };
+
   return (
     <div className="space-y-4">
       <div className="text-xs text-gray-500 dark:text-gray-400 leading-relaxed">
@@ -563,7 +577,7 @@ export const HTTPTrigger: React.FC<BaseConfigProps> = ({
       {revealed && (
         <HttpTriggerSecretModal
           isOpen
-          onClose={() => setRevealed(null)}
+          onClose={closeRevealed}
           secret={revealed.secret}
           triggerUrl={revealed.triggerUrl}
           rotated={revealed.rotated}
