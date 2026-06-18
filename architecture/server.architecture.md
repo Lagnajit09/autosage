@@ -42,6 +42,8 @@ flowchart TD
 
             Sched["<b>celery worker</b> (dedicated)<br/>queue: scheduler · concurrency 2<br/>━━━━━━<br/>• triggers.fire_scheduled_workflow<br/>• enforces no-overlap policy<br/>• calls enqueue_workflow_run()"]:::worker
 
+            Autobot["<b>autobot (Uvicorn :8030)</b><br/>image: ghcr.io/lagnajit09/autosage/<br/>autosage-autobot:latest (arm64)<br/>expose only — NOT host-mapped<br/>━━━━━━<br/>• FastAPI AI service<br/>• routed by nginx at /api/ai/*<br/>• Clerk JWT verify (JWKS 1h cache)<br/>• Redis DB /2: hot context + exec-quota<br/>• LiteLLM (admin pool + BYO)<br/>• v2: execution copilot tools<br/>  run_workflow/run_script/rerun_workflow<br/>  preview_workflow_run/investigation tools<br/>• Secure side-channel: /run/intent/ fulfill<br/>  (browser → Django, never through Autobot)"]:::django
+
             Certbot["<b>certbot</b> (profile: tools)<br/>image: certbot/certbot<br/>━━━━━━<br/>• one-shot, NOT started by 'up -d'<br/>• ACME http-01 via webroot<br/>• invoked by:<br/>&nbsp;&nbsp;– initial bootstrap (manual)<br/>&nbsp;&nbsp;– daily renewal cron 03:17 UTC"]:::worker
 
             LEVol[("named vol: letsencrypt<br/>/etc/letsencrypt<br/>cert + account state")]:::volume
@@ -50,6 +52,7 @@ flowchart TD
 
         subgraph BindMounts ["host bind mounts (read-only)"]
             ServerEnv[("server.env<br/>chmod 600<br/>$$ escaped")]:::external
+            AutobotEnv[("autobot.env<br/>chmod 600<br/>AUTOBOT_EXEC_DAILY_LIMIT etc.")]:::external
             GcsKey[("gcs_key.json<br/>chmod 600<br/>→ /app/creds/service-account.json")]:::external
             NginxCfg[("nginx/active.conf<br/>→ /etc/nginx/conf.d/default.conf")]:::external
         end
@@ -68,6 +71,12 @@ flowchart TD
     DDNS -->|"A record"| Net
     Net -->|"TCP 80 → 301 HTTPS<br/>TCP 443 → TLS"| Nginx
     Nginx -->|"http://django:8000<br/>(internal bridge)"| Django
+    Nginx -->|"http://autobot:8030<br/>/api/ai/* (prefix stripped)"| Autobot
+
+    %% Autobot side
+    Autobot -.->|"JWKS fetch (cached 1h)"| Clerk
+    Autobot <-->|"hot context + exec-quota<br/>(Redis DB /2)"| Redis
+    Autobot -->|"forwarded Clerk JWT<br/>all Django API calls"| Django
 
     %% Django side
     Django -.->|"JWKS fetch (cached 1h)"| Clerk
@@ -96,6 +105,7 @@ flowchart TD
     ServerEnv -.->|"env_file"| Celery
     ServerEnv -.->|"env_file"| Beat
     ServerEnv -.->|"env_file"| Sched
+    AutobotEnv -.->|"env_file"| Autobot
     GcsKey -.->|"ro volume"| Django
     GcsKey -.->|"ro volume"| Celery
     GcsKey -.->|"ro volume"| Beat

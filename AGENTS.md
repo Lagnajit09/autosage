@@ -31,7 +31,7 @@ Autosage splits into three independently-deployed planes:
 | **Control plane** | OCI Ampere A1 VM, in `docker compose` | `server/` + `nginx/` | API, auth, orchestration, SSE relay |
 | **Execution plane** | GCP Cloud Run | `exec-worker/` | SSH/WinRM/SMTP execution, NDJSON streaming |
 
-Plus the **Autobot service** at `autobot/` (FastAPI) — live on the same OCI A1 host as Django, routed by nginx at `/api/ai/*`. Chat surface (SSE streaming, tool-using script + workflow generation, conversation summarization, BYO LLM keys via `LLMConfig`, usage dashboard, archived chats) is shipped end-to-end. See Section 16 for the full Autobot reference.
+Plus the **Autobot service** at `autobot/` (FastAPI) — live on the same OCI A1 host as Django, routed by nginx at `/api/ai/*`. Chat surface (SSE streaming, tool-using script + workflow generation, conversation summarization, BYO LLM keys via `LLMConfig`, usage dashboard, archived chats) is shipped end-to-end. **Autobot v2 (Pillar B)** adds an execution copilot: execution mode (BYO-only), rich tabbed RunPanel (Graph + Logs), `run_workflow` / `run_script` / `rerun_workflow` tools, a failure-investigation loop, past-execution investigation tools, and a secure password side-channel for workflows that require run-time secrets. See Section 16 for the full Autobot reference.
 
 External managed services:
 
@@ -81,14 +81,17 @@ server/
     │   ├── params.py
     │   ├── gcs.py
     │   ├── redis_pubsub.py
-    │   ├── run_builder.py
+    │   ├── run_builder.py        # enqueue_workflow_run() — all trigger sources converge here;
+    │   │                         #   autobot trigger path drops password-typed inputs
     │   ├── notifications/
     │   └── script_execution/  # worker.py, executor.py, utils.py
     ├── templates/email/
-    ├── views_workflow.py
-    ├── views_script.py
+    ├── views_workflow.py         # trigger_workflow_run (trigger_source="autobot" + Idempotency-Key),
+    │                             #   rerun_workflow_run, create_run_intent, fulfill_run_intent
+    ├── views_script.py           # run_script_async_view — fire-and-forget POST /run/async/
     ├── tasks.py        # Celery: execute_workflow
-    └── models.py       # ScriptExecution, WorkflowRun, WorkflowNodeRun
+    └── models.py       # ScriptExecution, WorkflowRun, WorkflowNodeRun,
+                        #   WorkflowRunIdempotencyKey, WorkflowRunIntent
 ```
 
 Inside `exec-worker/`:
@@ -115,7 +118,20 @@ client/src/
 │   ├── workflow/           # ReactFlow builder, nodes, RightSidebar conf panels
 │   ├── Execution/          # Terminal, Nodes, History, Response, Parameters
 │   ├── ExecutionLogs/      # Table, filters, pagination
-│   ├── Chat/               # Autobot chat UI (currently mocked content)
+│   ├── Autobot/Chat/       # Autobot chat UI + v2 execution panel
+│   │   ├── Interface.tsx   # pendingSecret state; mounts SecretForm anchored at composer
+│   │   ├── ChatInput.tsx   # SecretForm positioned bottom-full above input box
+│   │   ├── ToolResultRenderer.tsx   # RunCard/PreviewCard/RunStatusInline/AwaitingSecretCard
+│   │   └── run/            # v2 RunPanel module
+│   │       ├── runStore.ts          # SSE/poll per run-id; useSyncExternalStore
+│   │       ├── RunPanelProvider.tsx # drawer state + requestSecret/pendingSecret context
+│   │       ├── RunGraph.tsx         # read-only ReactFlow status canvas (new)
+│   │       ├── RunPanel.tsx         # drawer: workflow → Graph/Logs/Response; script → Logs/Details
+│   │       ├── RunCard.tsx          # compact inline renderer + cancel
+│   │       ├── RunFields.tsx        # ParamGrid + SecretField (enabled) + ParamInput
+│   │       ├── SecretForm.tsx       # composer-anchored confirmation form; raw fetch to fulfill endpoint
+│   │       ├── intents.ts           # fulfillRunIntent() — raw fetch, no sanitizeInput
+│   │       └── runTypes.ts / runUi.tsx
 │   ├── vault/, auth/, ui/  # Vault modal, Clerk-aware routes, Radix-based UI
 │   └── Dashboard/          # Stats, recent items, sidebar
 └── contexts/, hooks/, sanitizers/, utils/
@@ -174,13 +190,23 @@ Celery worker  pops execute_workflow
 
 ## 5. Triggers — All Roads Lead to `enqueue_workflow_run()`
 
-Autosage supports three trigger sources. **All three converge on a single helper, `execution_engine/helpers/run_builder.py::enqueue_workflow_run()`** — the only place that validates the DAG, validates bindings, masks secrets, persists `WorkflowRun` + `WorkflowNodeRun` rows, and dispatches the Celery task.
+Autosage supports four trigger sources. **All four converge on a single helper, `execution_engine/helpers/run_builder.py::enqueue_workflow_run()`** — the only place that validates the DAG, validates bindings, masks secrets, persists `WorkflowRun` + `WorkflowNodeRun` rows, and dispatches the Celery task. When `trigger_source == "autobot"`, the helper additionally drops any password-typed inputs before passing them to the worker (Layer-3 backstop of the password safety guarantee).
 
-### 5.1 Manual trigger (UI)
+### 5.1 Manual trigger (UI) and Autobot trigger
 - `POST /api/execution-engine/workflows/<id>/run/`
 - Requires Clerk JWT.
-- Body: `{ inputs, send_email, user_email }`.
-- Returns **202** with `{ workflow_run_id, status: "queued" }`. Returns immediately — does not wait for execution.
+- Body: `{ inputs, send_email, user_email }`. Optional `Idempotency-Key` header (required by the Autobot path, optional for the builder).
+- `trigger_source` body field: `"manual"` (default, builder Run button) or `"autobot"` (Autobot tools). A forged `"http"` / `"schedule"` value returns 400.
+- Returns **202** with `{ workflow_run_id, status: "queued" }` (or `{ idempotent: true }` on a replay). Returns immediately — does not wait for execution.
+- **Dedup guard**: optional `Idempotency-Key` header is backed by `WorkflowRunIdempotencyKey` DB table (`unique(user, workflow, key)`). A duplicate key returns the original run id with `200 + idempotent: true`. Race-safe via `IntegrityError` catch — mirrors the HTTP-trigger dedup pattern but keyed on `(user, workflow)` rather than a trigger row.
+
+### 5.1b Autobot secure side-channel
+Used when a workflow has a `password`-typed parameter with no baked-in value; the secret travels **browser → Django directly**, never through Autobot.
+- `POST /api/execution-engine/workflows/<id>/run/intent/` — Autobot creates a `WorkflowRunIntent` (no `WorkflowRun` yet). Strips password inputs; returns `{ run_intent_id, needs_params }`. TTL 5 min, single-use.
+- `POST /api/execution-engine/workflows/runs/intents/<run_intent_id>/fulfill/` — browser posts the full confirmed params (including secrets) directly. Merges intent inputs + browser params, calls `enqueue_workflow_run(..., trigger_source="manual")` so the Layer-3 drop does NOT fire (secret came from the user, not the model). Marks intent fulfilled. Returns `{ workflow_run_id, status }`.
+
+### 5.1c Script async trigger
+- `POST /api/execution-engine/run/async/` — fire-and-forget async script run for the Autobot path. Returns `202 { execution_id, status: "pending" }`. A Celery task drains the stream and discards SSE frames; no live token streaming for chat-initiated scripts.
 
 ### 5.2 HTTP webhook (public)
 - `POST /api/execution-engine/triggers/http/<trigger_token>/`
@@ -341,11 +367,13 @@ Cloud Run service is `--no-allow-unauthenticated`, so IAM rejects any caller wit
 | `credentials` | `vault.Credential` | `id`, `vault`, `credential_type`, `username`, `password` (Fernet), `ssh_key` (Fernet), `key_passphrase` (Fernet), `cert_pem` (Fernet) |
 | `servers` | `vault.Server` | `id`, `vault`, `host`, `port`, `connection_method` (ssh/winrm) |
 | `script_executions` | `execution_engine.ScriptExecution` | `id (uuid)`, `status`, `stdout_log_url`, `stderr_log_url`, `logs_url`, `exit_code`, `started_at`, `completed_at`, `duration` |
-| `workflow_runs` | `execution_engine.WorkflowRun` | `id`, `workflow`, `user`, `status` (queued/running/success/failed/cancelled), `celery_task_id`, `inputs`, `send_email`, `notification_email`, `trigger_source` (manual/http/schedule), `trigger_node_id`, `started_at`, `finished_at` |
+| `workflow_runs` | `execution_engine.WorkflowRun` | `id`, `workflow`, `user`, `status` (queued/running/success/failed/cancelled), `celery_task_id`, `inputs`, `send_email`, `notification_email`, `trigger_source` (**manual/http/schedule/autobot**), `trigger_node_id`, `started_at`, `finished_at` |
 | `workflow_node_runs` | `execution_engine.WorkflowNodeRun` | `id`, `workflow_run`, `node_id`, `node_label`, `script_id`, `vault_id`, `server_id`, `credential_id`, `status`, `execution_order`, `stdout_log_url`, `stderr_log_url`, `logs_url`, `exit_code` |
 | `http_triggers` | `triggers.HttpTrigger` | `id`, `workflow`, `user`, `node_id`, `trigger_token`, `secret_hash` (bcrypt), `secret_last4`, `is_active`, `last_triggered_at` |
 | `http_trigger_idempotency_keys` | `triggers.HttpTriggerIdempotencyKey` | `id`, `trigger`, `key`, `workflow_run`, `created_at` — unique on (trigger, key) |
 | `schedule_triggers` | `triggers.ScheduleTrigger` | `id`, `workflow`, `node_id`, `cron_expression`, `timezone`, `is_active`, `periodic_task_name` (link to Beat), `last_run`, `last_triggered_at`, `last_error` |
+| `workflow_run_idempotency_keys` | `execution_engine.WorkflowRunIdempotencyKey` | `id (uuid)`, `user`, `workflow`, `key`, `workflow_run`, `created_at` — `unique(user, workflow, key)`; guards manual + autobot paths against duplicate runs |
+| `workflow_run_intents` | `execution_engine.WorkflowRunIntent` | `id (uuid)`, `user`, `workflow`, `inputs (JSON — non-secret)`, `send_email`, `notification_email`, `created_at`, `fulfilled_at`, `expires_at` — single-use, 5-min TTL; the secure side-channel "prepared but not yet enqueued" run |
 | `django_celery_beat_*` | (3rd party) | `PeriodicTask`, `CrontabSchedule` |
 
 ### Encryption at rest (Vault)
@@ -513,17 +541,21 @@ Root `urls.py`:
 /api/vault/                             Vault / Server / Credential CRUD
 
 /api/execution-engine/run/                                POST single-script run (SSE direct)
+/api/execution-engine/run/async/                          POST fire-and-forget async script run (Autobot path)
 /api/execution-engine/<uuid>/status/                      GET poll
 /api/execution-engine/history/                            GET paginated history (scripts)
-/api/execution-engine/executions/all/                     GET unified history (scripts + workflows)
+/api/execution-engine/executions/all/                     GET unified history (scripts + workflows, tag filter + pagination)
 /api/execution-engine/<uuid>/stop/                        POST stop
 /api/execution-engine/health/                             GET (proxies to exec-worker)
-/api/execution-engine/workflows/<id>/run/                 POST manual trigger
+/api/execution-engine/workflows/<id>/run/                 POST manual/autobot trigger (trigger_source + Idempotency-Key)
+/api/execution-engine/workflows/<id>/run/intent/          POST create run intent for secure side-channel
 /api/execution-engine/workflows/runs/                     GET list runs
 /api/execution-engine/workflows/runs/<run_id>/            GET run detail
 /api/execution-engine/workflows/runs/<run_id>/nodes/      GET node runs
 /api/execution-engine/workflows/runs/<run_id>/cancel/     POST cancel
-/api/execution-engine/workflows/runs/<run_id>/stream/     GET SSE (async view)
+/api/execution-engine/workflows/runs/<run_id>/rerun/      POST whole-workflow rerun
+/api/execution-engine/workflows/runs/<run_id>/stream/     GET SSE (async view — reused by Autobot RunPanel)
+/api/execution-engine/workflows/runs/intents/<id>/fulfill/ POST fulfill run intent with secrets (browser→Django)
 /api/execution-engine/triggers/http/<token>/              POST public webhook
 /api/execution-engine/triggers/http/<token>/runs/<id>/    GET public polling
 ```
@@ -572,7 +604,7 @@ DRF exceptions are reshaped by `server/server/exceptions.py::custom_exception_ha
 
 ## 16. Autobot (Live Service)
 
-Status: **shipped (Phase 1–5 of `autobot_implementation_v1.md`)**. Autobot is a live FastAPI service on the same OCI A1 host as Django, routed by nginx at `/api/ai/*`. The chat surface is fully wired end-to-end (SSE streaming, tool calls, conversation summarization, BYO LLM keys, usage dashboard, archived chats). v1 scope: chat + script/workflow tool calls. Workflow execution and cloud-infra tools remain explicitly out of scope.
+Status: **shipped — v1 (Phases 1–5) + v2 Pillar B**. Autobot is a live FastAPI service on the same OCI A1 host as Django, routed by nginx at `/api/ai/*`. v1 shipped: chat + script/workflow CRUD tool calls, conversation summarization, BYO LLM keys, usage dashboard, archived chats. v2 Pillar B shipped: execution copilot (run/rerun/investigate/fix), rich tabbed RunPanel (Graph + Logs), failure-investigation loop, and the secure password side-channel. Cloud-infra tools remain out of scope (→ v3).
 
 ### 16.1 Service topology
 
@@ -580,11 +612,21 @@ Status: **shipped (Phase 1–5 of `autobot_implementation_v1.md`)**. Autobot is 
 Browser ──HTTPS──▶ nginx ──HTTP──▶ autobot (FastAPI, :8030)
                        │                │
                        │                ├─▶ Clerk JWKS  (JWT verify, 1h LocMem cache)
-                       │                ├─▶ django:8000  (/api/autobot/*, /api/scripts/, /api/workflows/, /api/vault/* metadata)
-                       │                ├─▶ redis:6379/2  (hot ctx, TTL 7200s; admin-quota counter)
+                       │                ├─▶ django:8000  (/api/autobot/*, /api/scripts/, /api/workflows/,
+                       │                │                 /api/vault/* metadata, /api/execution-engine/*)
+                       │                ├─▶ redis:6379/2  (hot ctx, TTL 7200s; admin-quota counter;
+                       │                │                  exec-quota autobot:exec_quota:<sub>:<yyyymmdd>)
                        │                └─▶ litellm  (Gemini / Groq / OpenRouter; or BYO LLMConfig)
                        │
+                       ├──▶ autobot :8030  (/api/ai/* — Autobot chat + execution copilot)
+                       │
                        └──▶ django:8000  (everything else)
+
+RunPanel SSE (v2):
+Browser ──HTTPS──▶ nginx ──HTTP──▶ django:8000
+                                       └─▶ GET /api/execution-engine/workflows/runs/<id>/stream/
+                                           (the pre-existing workflow-run SSE — reused directly by the
+                                            RunPanel, independent of the chat SSE stream)
 ```
 
 Key invariants:
@@ -599,27 +641,36 @@ autobot/
 ├── Dockerfile               # arm64-compatible, slim Python 3.12, non-root, uvicorn --workers 2
 ├── requirements.txt
 ├── main.py                  # FastAPI app + CORS + lifespan + /health/ + /whoami/
-├── settings.py              # pydantic-settings env loader
+├── settings.py              # pydantic-settings env loader; AUTOBOT_EXEC_DAILY_LIMIT
 ├── auth.py                  # Clerk JWKS verify dependency + log-redaction filter
 ├── throttling.py            # slowapi limiter keyed on user_sub (falls back to remote_addr)
 ├── conversation/
-│   ├── cache.py             # aioredis client on DB /2; admin-quota helpers
+│   ├── cache.py             # aioredis client on DB /2; admin-quota helpers;
+│   │                        #   incr_exec_quota_for_today / get_exec_quota_for_today
 │   ├── persistence.py       # httpx client wrapping Django /api/autobot/*
 │   └── summarizer.py        # tiktoken counts, pre-compaction, summarization
 ├── llm/
 │   ├── client.py            # LiteLLM wrapper; LLMError(retryable); admin chain + BYO resolution
-│   ├── tools.py             # JSON-Schema tool registry + dispatcher (with timeout + error normalization)
-│   └── prompts.py           # base system prompt + tool-use guidance
+│   ├── tools.py             # JSON-Schema tool registry + dispatcher (timeout + error normalization);
+│   │                        #   ToolContext{user_sub, tool_call_id} ContextVar
+│   └── prompts.py           # system prompt; _MODE_ALLOWED_TOOLS / get_mode_allowed_tools;
+│                            #   rewritten execution/generation/research prompts + §0b + §12b
 ├── streaming/
 │   └── sse.py               # event:/data: SSE frame formatting
 ├── routers/
 │   ├── proxy.py             # thread / settings / llm-config CRUD passthroughs to Django
-│   ├── chat.py              # POST /chat/messages/stream/  ← the SSE chat endpoint
+│   ├── chat.py              # POST /chat/messages/stream/; _effective_allowed_tools;
+│   │                        #   _WRITE_TOOL_NAMES; _execution_mode_blocked
 │   └── analytics.py         # GET /dashboard/ (Django aggregation + Redis quota merge)
 └── tools/                   # side-effect imports register into llm/tools.py registry
     ├── scripts.py           # list/read/create/update script
-    ├── workflows.py         # list/read/create/update workflow
-    └── vault.py             # list_vault_resources (metadata only, never returns secrets)
+    ├── workflows.py         # list/read/create/update workflow; read_workflow masks password params
+    ├── vault.py             # list_vault_resources (metadata only, never returns secrets)
+    ├── execution.py         # v2 execution copilot tools:
+    │                        #   get_execution_histories, get_workflow_run, get_script_run,
+    │                        #   read_run_logs, preview_workflow_run, run_workflow,
+    │                        #   run_script, rerun_workflow
+    └── _security.py         # mask_password_params() + mask_inputs_by_keyname()
 ```
 
 ### 16.3 Endpoint surface
@@ -633,7 +684,7 @@ All routes are auth-required via `Depends(require_auth)` except `/health/`. Thro
 | GET/POST | `/api/ai/threads/` | List user threads / create thread (proxy to Django). |
 | GET/PATCH/DELETE | `/api/ai/threads/<id>/` | Thread detail / rename + archive / delete. |
 | GET | `/api/ai/threads/<id>/messages/` | Paginated message history (proxy — used by SPA on thread-open). |
-| POST | `/api/ai/chat/messages/stream/` | **The chat endpoint.** SSE response, emits `token`, `tool_call_start`, `tool_result`, `done`, `error`. |
+| POST | `/api/ai/chat/messages/stream/` | **The chat endpoint.** SSE response, emits `token`, `tool_call_start`, `tool_result`, `done`, `error`. Execution mode requires BYO key. |
 | POST | `/api/ai/threads/<id>/token-refresh/` | Mid-stream Clerk JWT refresh; remaps Bearer for in-flight tool dispatch. |
 | GET/PATCH | `/api/ai/settings/` | User-level autobot settings (default LLM config, tone, etc.). |
 | GET/POST | `/api/ai/llm-configs/` | List / create user BYO LLM configs (api key write-only). |
@@ -661,30 +712,41 @@ The `root_path="/api/ai"` setting on the FastAPI app means **internally** these 
 7. Resolve the LLM client (`llm/client.py::resolve_for_thread`) — returns a list:
    - If `UserSettings.default_llm_config_id` or `Thread.llm_config_id` is set → BYO: `POST /api/autobot/llm-configs/<id>/reveal/` once per request to get the plaintext api key, never cache it.
    - Else → admin chain: `[primary, *AUTOBOT_ADMIN_FALLBACKS]`. `LLMResolution.is_admin = True` enables the per-user daily quota.
-8. **Round-1 fallback** (T18a): try each `LLMResolution` in order on retryable errors (`RateLimitError`, `ServiceUnavailableError`, `Timeout`, `APIConnectionError`). Once any `event: token` has been written to the client, fallback is **suppressed** — mid-turn provider swaps would interleave deltas.
-9. **OpenRouter cascade** (T18b): when `resolution.provider == "openrouter"` and `OPENROUTER_FALLBACK_MODELS` is set, inject `extra_body={"models": [...], "route": "fallback"}` so OpenRouter tries multiple free models server-side in one round-trip.
+8. **Round-1 fallback**: try each `LLMResolution` in order on retryable errors (`RateLimitError`, `ServiceUnavailableError`, `Timeout`, `APIConnectionError`). Once any `event: token` has been written to the client, fallback is **suppressed** — mid-turn provider swaps would interleave deltas.
+9. **OpenRouter cascade**: when `resolution.provider == "openrouter"` and `OPENROUTER_FALLBACK_MODELS` is set, inject `extra_body={"models": [...], "route": "fallback"}` so OpenRouter tries multiple free models server-side in one round-trip.
 10. Stream deltas as `event: token`. On `tool_call`, emit `event: tool_call_start`, dispatch via `llm/tools.py::dispatch` (timeout, error normalization to `{"error": "..."}`), emit `event: tool_result`, append the tool message to context, loop. Hard cap `AUTOBOT_MAX_TOOL_ROUNDS=10`.
 11. On final assistant message: persist via Django with `prompt_tokens / completion_tokens / total_tokens / provider / model_name / is_byo`, refresh Redis cache + TTL, emit `event: done`. After any **write tool**, invalidate `autobot:thread:<id>:ctx`.
 
-### 16.6 Tools (v1)
+### 16.6 Tools (v1 + v2)
 
 JSON-Schema definitions in `autobot/llm/tools.py`; implementations in `autobot/tools/*.py` (side-effect imports register into the global registry via `import tools as _tools` in `main.py`).
 
-| Tool | Module | Calls Django at | Notes |
-|---|---|---|---|
-| `list_scripts`, `read_script`, `create_script`, `update_script` | `tools/scripts.py` | `/api/scripts/*` | Same surface the SPA Script Editor uses. |
-| `list_workflows`, `read_workflow`, `create_workflow`, `update_workflow` | `tools/workflows.py` | `/api/workflows/*` | Node/edge JSON shape documented in `llm/prompts.py`. |
-| `list_vault_resources` | `tools/vault.py` | `/api/vault/*` | **Metadata only** — returns `{vaults, servers, credentials}` with ids/names, never secret values. The LLM references resources by id. |
+**Mode floors** (`_MODE_ALLOWED_TOOLS` in `prompts.py`, intersected with `_PANEL_ALLOWED_TOOLS` in `chat.py`):
+- `research` — read tools only (incl. investigation tools).
+- `generation` — read + write tools (no execution).
+- `execution` — read + write + exec tools. **BYO-only** (shared-key turns refused upfront).
+
+| Tool | Module | Mode floor | Calls Django at | Notes |
+|---|---|---|---|---|
+| `list_scripts`, `read_script`, `create_script`, `update_script` | `tools/scripts.py` | read / write | `/api/scripts/*` | Same surface the SPA Script Editor uses. |
+| `list_workflows`, `read_workflow`, `create_workflow`, `update_workflow` | `tools/workflows.py` | read / write | `/api/workflows/*` | `read_workflow` masks `password`-typed param values before the JSON reaches the model. |
+| `list_vault_resources` | `tools/vault.py` | read | `/api/vault/*` | **Metadata only** — ids/names, never secret values. |
+| `get_execution_histories` | `tools/execution.py` | read | `/api/execution-engine/executions/all/` | Paginated unified history; strips signed URLs. |
+| `get_workflow_run` | `tools/execution.py` | read | `/api/execution-engine/workflows/runs/<id>/` + `/nodes/` | Merged run + nodes; used by investigation loop. |
+| `get_script_run` | `tools/execution.py` | read | `/api/execution-engine/<id>/status/` | Script run status. |
+| `read_run_logs` | `tools/execution.py` | read | signed GCS URLs (fetched server-side) | Fetches GCS log text, returns tailed stderr/stdout; signed URL never reaches model. |
+| `preview_workflow_run` | `tools/execution.py` | exec | `/api/workflows/<id>/` | Side-effect-free preview; returns `needs_params`, masks password values, flags unresolvable secrets. |
+| `run_workflow` | `tools/execution.py` | exec | `/api/execution-engine/workflows/<id>/run/` or `/run/intent/` | Ticks exec quota; sends `trigger_source="autobot"` + `Idempotency-Key`; drops password inputs; returns `{run_id, kind:"workflow", watch_url}` or `{status:"awaiting_secret", run_intent_id}` for param workflows. |
+| `run_script` | `tools/execution.py` | exec | `/api/execution-engine/run/async/` | Ticks exec quota; nested body with script/vault/server/credential ids; masks secret-looking input keys by name heuristic. |
+| `rerun_workflow` | `tools/execution.py` | exec | `/api/execution-engine/workflows/runs/<id>/rerun/` | Ticks exec quota; `Idempotency-Key`; optional inputs override. |
 
 Each tool wrapper:
 1. Validates inputs against its JSON Schema (LiteLLM also enforces — belt-and-braces).
 2. Calls Django with the **forwarded user JWT**.
-3. Catches non-2xx → `{"error": "<flattened field msg>"}` so the LLM can self-correct on the next round. Django 400 `errors: {field: msg}` payloads get flattened to a single string.
-4. Per-tool timeout default = 30s (set via `ToolDefinition.timeout_seconds`). 30s ceiling exists for slow GCS uploads on large script content; sub-second is normal.
+3. Catches non-2xx → `{"error": "<flattened field msg>"}` so the LLM can self-correct on the next round.
+4. Per-tool timeout: 30s for read tools; **600s for run tools** (`run_workflow`, `run_script`, `rerun_workflow`).
 
-**Workflow execution is NOT a tool in v1.** That's a higher-trust surface — ship after the chat surface has been observed in prod. If v2 adds a `run_workflow` tool, register it with `timeout_seconds=600` and leave CRUD tools at 30s.
-
-### 16.7 Admin pool resilience (T18a / T18b)
+### 16.7 Admin pool resilience
 
 Two-tier fallback:
 
@@ -729,7 +791,37 @@ REST surface mounted at `path('api/autobot/', include('autobot_api.urls'))`. All
 - First-time bootstrap: manually trigger `deploy-autobot.yml` via `workflow_dispatch` to seed the GHCR image **before** any `docker-compose.oci.yml` change that requires `docker compose pull` to succeed on the autobot service.
 - `ALLOWED_HOSTS` on Django **must include `django`** — autobot calls `http://django:8000/...` and Django checks the `Host` header. CORS does not need an autobot entry (server-to-server httpx calls carry no `Origin`).
 
-### 16.11 Architectural rules for autobot changes
+### 16.11 Execution copilot (v2 Pillar B)
+
+**Gating:** Execution tools (`preview_workflow_run`, `run_workflow`, `run_script`, `rerun_workflow`) are in `_EXEC_TOOLS` and only advertised + dispatched in `execution` mode. `execution` mode is BYO-only (`_execution_mode_blocked` in `chat.py`). Mode floor is enforced at BOTH advertise (`get_tool_schemas`) and dispatch (`dispatch_tool`) — double lock.
+
+**Quota:** `AUTOBOT_EXEC_DAILY_LIMIT` (per-user, per-day) tracked in Redis at `autobot:exec_quota:<sub>:<yyyymmdd>` (26h TTL, fail-open). Separate from the LLM admin quota so BYO users (uncapped LLM) are still bounded on real compute.
+
+**Password safety — 4 layers:**
+1. **L1 (tool boundary):** `read_workflow` + `preview_workflow_run` replace any `type=="password"` param `value` with `"*****"` before JSON reaches the model. Implemented in `tools/_security.py::mask_password_params`.
+2. **L2 (tool boundary):** `run_workflow` / `rerun_workflow` drop any input key that maps to a `password`-typed param before POSTing.
+3. **L3 (Django server):** `enqueue_workflow_run` drops password-typed inputs when `trigger_source=="autobot"`. Hard backstop; fires even if L1/L2 are bypassed.
+4. **L4 (product):** Workflows needing a run-time password use the secure side-channel — the secret travels browser→Django directly (never through Autobot).
+
+**RunPanel:** When a `tool_result` carries `{run_id, kind}`, `ToolResultRenderer.tsx` renders a `RunCard` that expands into a right-drawer `RunPanel`. The panel opens its **own** SSE connection to the pre-existing `/runs/<id>/stream/` endpoint (independent of the chat SSE). Workflow runs get Graph + Logs + Response tabs; script runs get Logs + Details. History rehydration is supported (past run messages re-render as RunCards).
+
+**Investigation loop:** Post-run, the execution prompt directs the model to: call `get_workflow_run` (which node failed, exit code) → `read_run_logs` (GCS stderr/stdout text, fetched server-side) → diagnose → propose ONE fix → `update_script`/`update_workflow` → `rerun_workflow` ONCE → ask if still failing.
+
+**Dedup:** `run_workflow` and `rerun_workflow` always send an `Idempotency-Key` header (= per-tool-call id). A duplicate call returns the original run id (`idempotent: true`) instead of launching a second run.
+
+### 16.11b Secure password side-channel
+
+Flow for a workflow that needs a run-time password:
+1. `preview_workflow_run` returns `needs_params: [{param_id, name, type, has_default, is_secret, source}]`.
+2. `run_workflow` detects password params without baked-in values → calls `POST /run/intent/` → returns `{status:"awaiting_secret", run_intent_id, needs_params}`. No `WorkflowRun` yet.
+3. `ToolResultRenderer` renders an `AwaitingSecretCard`; `Interface.tsx` captures `pendingSecret` state and mounts `<SecretForm>` anchored above the chat input (`bottom-full`).
+4. User fills ALL params (password rendered as `<input type=password>`, node-references as read-only chips, others as editable inputs). On submit, `SecretForm` POSTs `{ params: { param_id: value } }` directly to `/runs/intents/<id>/fulfill/` using a **raw `fetch`** (NOT `apiRequest` — `sanitizeInput` must not run on the password body).
+5. Django `fulfill` endpoint merges intent inputs + browser params, calls `enqueue_workflow_run(..., trigger_source="manual")` — L3 drop does NOT fire (secret came from the user). Password is masked on the persisted row and in logs (same as a builder run).
+6. `SecretForm.onSubmitted` opens the RunPanel drawer watching the new run. Autobot never sees the value; it polls by `run_id` only.
+
+**Invariant:** secret travels **browser → Django over TLS**, never browser → Autobot → Django.
+
+### 16.13 Architectural rules for autobot changes
 
 When touching autobot code, preserve:
 
@@ -747,7 +839,9 @@ When touching autobot code, preserve:
 - Write directly to Postgres from autobot. Go through Django.
 - Cache plaintext BYO api keys beyond the request lifecycle.
 - Mix autobot keys onto Redis DB `/0` — that's Celery's namespace.
-- Add tool calls for workflow execution in v1.
+- Add execution tools outside the `_EXEC_TOOLS` floor or advertise them in non-execution modes.
+- Allow execution mode for shared/admin-key users — the BYO gate is enforced in `chat.py::_execution_mode_blocked` and must not be bypassed.
+- Let a password value reach the model — `mask_password_params()` in L1, input drop in L2, and Django drop in L3 are all required.
 - Change the `is_byo` flag's meaning — the dashboard depends on it to split admin vs BYO tokens after the fact (provider names overlap).
 
 ### Do

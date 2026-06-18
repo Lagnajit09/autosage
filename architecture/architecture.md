@@ -159,7 +159,7 @@ flowchart TD
 
 | Component                             | Where it runs               | What it does                                                                                   | v1 → v2 delta                                                                                  |
 | ------------------------------------- | --------------------------- | ---------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
-| **React client**                      | Firebase Hosting            | UI, Clerk sign-in, EventSource for SSE                                                         | `VITE_API_URL` points at DuckDNS instead of GCP IP                                             |
+| **React client**                      | Firebase Hosting            | UI, Clerk sign-in, EventSource for SSE; v2: RunPanel (Graph/Logs drawer), SecretForm, ToolResultRenderer | `VITE_API_URL` points at DuckDNS instead of GCP IP                                             |
 | **nginx**                             | OCI A1, in `docker compose` | TLS terminator (real Let's Encrypt), HTTP→HTTPS redirect, SSE-safe proxy, ACME http-01 webroot | New — was on GCP VM directly with a self-signed cert                                           |
 | **Django (Uvicorn ASGI)**             | OCI A1, in `docker compose` | Control plane: REST API, SSE relay, Clerk JWT verify, Celery dispatcher                        | Moved from GCP e2-micro (Gunicorn) to OCI A1 (Uvicorn). New `SECURE_PROXY_SSL_HEADER` setting. |
 | **Celery worker (`celery` queue)**    | OCI A1                      | `execute_workflow` task — DAG traversal, exec-worker dispatch, log streaming                   | Now a separate container in compose (was in-process or unscaled on GCP)                        |
@@ -168,7 +168,8 @@ flowchart TD
 | **certbot one-shot**                  | OCI A1 (profile `tools`)    | Initial cert issuance + 90-day auto-renewal via cron                                           | New                                                                                            |
 | **exec-worker (FastAPI)**             | Cloud Run (autoscale 0→2)   | SSH/WinRM/SMTP execution, NDJSON streaming                                                     | Unchanged                                                                                      |
 | **Supabase Postgres**                 | Supabase Cloud              | Workflows, runs, node_runs, Vault (Fernet-encrypted), Celery Beat tables                       | Unchanged                                                                                      |
-| **Upstash Redis**                     | Upstash Cloud               | Celery broker + result + Pub/Sub log relay                                                     | Unchanged                                                                                      |
+| **Autobot service (FastAPI)**         | OCI A1, in `docker compose` | AI chat (SSE), tool-using script/workflow CRUD; v2: execution copilot, RunPanel, secure password side-channel | v2 Pillar B adds execution tools + mode floors; separate `autobot` compose service, `/api/ai/*` via nginx |
+| **Upstash Redis**                     | Upstash Cloud               | Celery broker + result + Pub/Sub log relay; Redis DB `/2` for Autobot hot-ctx + exec-quota   | Unchanged structure; Autobot exec-quota key added on DB /2                                    |
 | **GCS `autosagex-drive`**             | Google Cloud Storage        | Script bodies (`scripts/{user}/{id}/...`)                                                      | Unchanged                                                                                      |
 | **GCS `autosagex-logs`**              | Google Cloud Storage        | Per-execution stdout/stderr/`logs.json`                                                        | Unchanged                                                                                      |
 | **Clerk**                             | Clerk Cloud                 | OAuth-style JWT issuance                                                                       | Unchanged                                                                                      |
@@ -200,19 +201,24 @@ The numbers on the arrows in the diagram trace this flow:
 flowchart LR
     classDef trigger fill:#fff3e0,stroke:#ef6c00,color:#bf360c
     classDef internal fill:#e3f2fd,stroke:#1e88e5,color:#0d47a1
+    classDef autobot fill:#e8d5ff,stroke:#7c3aed,color:#3b0764
 
     Manual["Manual<br/>POST /workflows/<id>/run/<br/>Clerk JWT required"]:::trigger
     HTTP["HTTP Webhook<br/>POST /triggers/http/<token>/<br/>X-Trigger-Secret + Idempotency-Key"]:::trigger
     Cron["Schedule<br/>celery beat (cron expr)<br/>via django_celery_beat"]:::trigger
+    Autobot["Autobot (chat)<br/>run_workflow / rerun_workflow<br/>trigger_source='autobot'<br/>+ Idempotency-Key header<br/>(drops password inputs server-side)"]:::autobot
+    AutobotIntent["Autobot secure side-channel<br/>POST /run/intent/ → fulfill/<br/>secret: browser → Django (never Autobot)<br/>trigger_source='manual'"]:::autobot
 
-    Manual --> RB["enqueue_workflow_run()<br/>(server/execution_engine/helpers/run_builder.py)<br/>• DAG validate<br/>• Binding validate<br/>• WorkflowRun + WorkflowNodeRuns<br/>• password masking<br/>• execute_workflow.delay()"]:::internal
+    Manual --> RB["enqueue_workflow_run()<br/>(server/execution_engine/helpers/run_builder.py)<br/>• DAG validate<br/>• Binding validate<br/>• WorkflowRun + WorkflowNodeRuns<br/>• password masking<br/>• drops password inputs when trigger_source='autobot'<br/>• execute_workflow.delay()"]:::internal
     HTTP --> RB
     Cron --> Fire["triggers.fire_scheduled_workflow<br/>(scheduler queue)<br/>• overlap policy check<br/>• calls RB"]:::internal
     Fire --> RB
+    Autobot --> RB
+    AutobotIntent --> RB
     RB --> Exec["workflows.execute_workflow<br/>(celery queue)<br/>actual DAG execution"]:::internal
 ```
 
-The key point: **all three trigger paths funnel through `enqueue_workflow_run()`** — single source of truth for validation, persistence, and dispatch. Scheduled triggers also go through a lightweight dispatcher (`fire_scheduled_workflow`) on a dedicated `scheduler` queue so cron firing is never blocked behind hour-long workflow runs.
+The key point: **all four trigger paths (manual, webhook, schedule, autobot) funnel through `enqueue_workflow_run()`** — single source of truth for validation, persistence, and dispatch. Scheduled triggers go through a lightweight dispatcher (`fire_scheduled_workflow`) on a dedicated `scheduler` queue. The Autobot secure side-channel (`run/intent/` → `fulfill/`) also converges here with `trigger_source="manual"` so the password drop does not fire (the secret came from the user's browser). Duplicate-run protection on the manual + autobot paths uses a DB `unique(user, workflow, key)` idempotency table (mirrors the webhook dedup pattern).
 
 ---
 
@@ -230,5 +236,8 @@ The key point: **all three trigger paths funnel through `enqueue_workflow_run()`
 | Django ↔ Redis                     | Upstash `rediss://` (TLS), `socket_timeout=30`, keepalive, retry on timeout.                                                                         |
 | Vault secrets at rest              | Fernet (`cryptography`) with key derived from `VAULT_ENCRYPTION_KEY` via SHA-256. Per-field encryption on `Credential` model.                        |
 | HTTP-trigger secret at rest        | bcrypt hash. Plaintext shown to user exactly once on create/rotate.                                                                                  |
+| Autobot → Django (execution)       | Clerk JWT forwarded on every call. `trigger_source="autobot"` restricts the run endpoint to `{manual, autobot}` choices; forged `http`/`schedule` returns 400. |
+| Password param safety              | 4-layer defence: (L1) `mask_password_params()` in read tools; (L2) `run_workflow` drops password inputs before POST; (L3) `enqueue_workflow_run` drops them again for `autobot` source; (L4) secure side-channel routes secrets browser→Django, never through Autobot. |
+| Secure side-channel fulfill endpoint | Owner-scoped to `intent.user`. Intent is single-use (fulfilled_at) and expires after 5 min. `trigger_source="manual"` so L3 drop does NOT fire (secret came from user's browser). |
 
 ---
