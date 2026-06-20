@@ -67,3 +67,6 @@ celery==5.6.3
 redis==7.4.0
 django-redis==5.4.0
 django-celery-beat==2.8.1
+# Docs RAG (Pillar A): pgvector column + cosine queries; frontmatter parsing for ingestion
+pgvector==0.3.6
+python-frontmatter==1.1.0

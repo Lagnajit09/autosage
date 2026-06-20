@@ -4,8 +4,14 @@ from django.conf import settings
 from django.db import models
 from django.db.models import Q, UniqueConstraint
 from django.utils.translation import gettext_lazy as _
+from pgvector.django import HnswIndex, VectorField
 
 from vault.fields import EncryptedCharField
+
+# Gemini text-embedding-004 returns 768-dimensional vectors. Ingestion (doc
+# chunks) and query embedding MUST use this same model, or cosine distances are
+# meaningless. Centralized in autobot_api/embeddings.py — see that module.
+DOC_EMBEDDING_DIMENSIONS = 768
 
 
 class LLMConfig(models.Model):
@@ -379,3 +385,112 @@ class UserSettings(models.Model):
 
     def __str__(self) -> str:
         return f"Autobot settings for {self.user.username}"
+
+
+# ── Docs RAG ────────────────────────────────────────────────
+#
+# DocChunk powers the PUBLIC documentation assistant on the Docusaurus site.
+# It is deliberately DIFFERENT from the conversation models above:
+#
+#   • NO user FK. Documentation is global — identical for every visitor —
+#     so the per-user authorization scoping that governs Thread/Message does
+#     NOT apply here. Access control happens at the endpoint layer instead:
+#     the search view is gated by an internal shared secret (only the autobot
+#     service calls it), and the public chat endpoint is IP-throttled +
+#     daily-capped + restricted to the single `search_docs` tool.
+#   • The source of truth is the markdown in the separate `autosage-docs`
+#     repo. Rows here are a derived, re-buildable index — wiped and
+#     re-populated by the `ingest_docs` management command. Nothing
+#     user-authored lives here, so loss is recoverable by re-ingesting.
+
+
+class DocChunk(models.Model):
+    """A single embedded chunk of the Autosage documentation, for RAG retrieval.
+
+    One source markdown file is split into multiple chunks (by heading, with a
+    token cap). Each chunk carries its own embedding so similarity search can
+    return the most relevant *section* rather than a whole page.
+
+    Re-ingestion identity is `(source, doc_path, chunk_index)` — the stable
+    "slot" a chunk occupies. `content_hash` lets the ingester skip re-embedding
+    a slot whose text is unchanged (embedding calls are the expensive step).
+    """
+
+    class Source(models.TextChoices):
+        DOCS = 'docs', _('Docs')
+        TUTORIALS = 'tutorials', _('Tutorials')
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+
+    # Which Docusaurus content plugin this came from. Maps to the routeBasePath
+    # in autosage-docs/docusaurus.config.ts (/docs vs /tutorials).
+    source = models.CharField(max_length=16, choices=Source.choices)
+
+    # Path of the source markdown file relative to its content root, e.g.
+    # "workflows/nodes-and-edges/trigger-nodes.md". Part of the chunk identity.
+    doc_path = models.CharField(max_length=512)
+
+    # Human-facing page title (from frontmatter), surfaced to the model + UI.
+    title = models.CharField(max_length=512, blank=True)
+
+    # Resolved site URL for this chunk's page (frontmatter slug or derived from
+    # source + doc_path). Returned to the model so answers can cite a link.
+    url = models.CharField(max_length=1024, blank=True)
+
+    # Breadcrumb of the heading trail this chunk sits under, e.g.
+    # "Workflows › Nodes and edges › Trigger nodes". Gives the model context
+    # about where in the docs a snippet came from.
+    heading_path = models.CharField(max_length=1024, blank=True)
+
+    # The chunk's plain-text content (MDX/JSX stripped). This is what gets
+    # embedded and what a snippet is sliced from for the search response.
+    content = models.TextField()
+
+    # sha256 of `content`. Drives idempotent re-ingest: unchanged hash → skip
+    # the (expensive) embedding call for this slot. Not unique — identical text
+    # can legitimately appear in more than one place.
+    content_hash = models.CharField(max_length=64)
+
+    # 0-based position of this chunk within its source file.
+    chunk_index = models.PositiveIntegerField(default=0)
+
+    # Approximate token count of `content`, recorded at ingest for budgeting.
+    token_count = models.PositiveIntegerField(null=True, blank=True)
+
+    # The vector embedding (Gemini text-embedding-004, 768-dim). Cosine
+    # distance is the search metric — see the HnswIndex below.
+    embedding = VectorField(dimensions=DOC_EMBEDDING_DIMENSIONS)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['source', 'doc_path', 'chunk_index']
+        indexes = [
+            # Re-ingest lookup: "all chunks for this file" when reconciling.
+            models.Index(fields=['source', 'doc_path']),
+            # Approximate-nearest-neighbour index for cosine similarity search.
+            # vector_cosine_ops matches the CosineDistance() used by the search
+            # view. Requires the pgvector extension (enabled in migration 0004).
+            HnswIndex(
+                name='doc_chunk_embedding_hnsw',
+                fields=['embedding'],
+                m=16,
+                ef_construction=64,
+                opclasses=['vector_cosine_ops'],
+            ),
+        ]
+        constraints = [
+            # A chunk slot is uniquely identified by its position in a file.
+            # Lets the ingester update_or_create per slot for idempotent runs.
+            UniqueConstraint(
+                fields=['source', 'doc_path', 'chunk_index'],
+                name='unique_doc_chunk_slot',
+            ),
+        ]
+        db_table = 'autobot_doc_chunks'
+        verbose_name = 'Documentation Chunk'
+        verbose_name_plural = 'Documentation Chunks'
+
+    def __str__(self) -> str:
+        return f"DocChunk {self.source}/{self.doc_path}#{self.chunk_index}"
