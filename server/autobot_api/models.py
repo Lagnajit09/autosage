@@ -8,9 +8,9 @@ from pgvector.django import HnswIndex, VectorField
 
 from vault.fields import EncryptedCharField
 
-# Gemini text-embedding-004 returns 768-dimensional vectors. Ingestion (doc
-# chunks) and query embedding MUST use this same model, or cosine distances are
-# meaningless. Centralized in autobot_api/embeddings.py — see that module.
+# Local embedding model: fastembed "BAAI/bge-base-en-v1.5" → 768-dim vectors.
+# Ingestion (doc chunks) and query embedding MUST use this same model, or cosine
+# distances are meaningless. Centralized in autobot_api/embeddings.py.
 DOC_EMBEDDING_DIMENSIONS = 768
 
 
@@ -457,7 +457,7 @@ class DocChunk(models.Model):
     # Approximate token count of `content`, recorded at ingest for budgeting.
     token_count = models.PositiveIntegerField(null=True, blank=True)
 
-    # The vector embedding (Gemini text-embedding-004, 768-dim). Cosine
+    # The vector embedding (local fastembed bge-base-en-v1.5, 768-dim). Cosine
     # distance is the search metric — see the HnswIndex below.
     embedding = VectorField(dimensions=DOC_EMBEDDING_DIMENSIONS)
 
