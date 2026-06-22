@@ -58,3 +58,18 @@ class HttpTriggerThrottle(SimpleRateThrottle):
         if not token:
             return None
         return self.cache_format % {'scope': self.scope, 'ident': token}
+
+
+class DocsSearchThrottle(SimpleRateThrottle):
+    """Throttle the public docs-search endpoint per client IP (no auth user).
+
+    Defense-in-depth on top of the X-Internal-Secret gate: even a leaked secret
+    can't be used to hammer the endpoint. Keyed by IP via the throttle base's
+    `get_ident` (honors XFF when configured)."""
+    scope = 'docs_search'
+
+    def get_cache_key(self, request, view):
+        return self.cache_format % {
+            'scope': self.scope,
+            'ident': self.get_ident(request),
+        }

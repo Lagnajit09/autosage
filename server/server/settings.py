@@ -39,6 +39,12 @@ EXEC_WORKER_URL_EMAIL = config('EXEC_WORKER_URL_EMAIL', default='')
 WORKER_API_KEY = config('WORKER_API_KEY', default='')
 EXEC_WORKER_AUDIENCE = config('EXEC_WORKER_AUDIENCE', default='')
 
+# Shared secret gating the public docs-search endpoint (/api/autobot/docs/search/).
+# Only the autobot service calls that endpoint, over the internal compose bridge,
+# presenting this in X-Internal-Secret. Keeps it off the open internet even though
+# the docs content itself is public. Must match AUTOBOT_INTERNAL_SECRET on autobot.
+AUTOBOT_INTERNAL_SECRET = config('AUTOBOT_INTERNAL_SECRET', default='')
+
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = config('DEBUG', default=False, cast=bool)
 
@@ -113,6 +119,8 @@ REST_FRAMEWORK = {
         'autobot_burst': '30/minute',
         'autobot_sustained': '500/day',
         'autobot_message_create': '60/minute',
+        # Public docs-search endpoint, keyed per client IP (no auth user).
+        'docs_search': '60/minute',
     }
 }
 

@@ -59,4 +59,13 @@ urlpatterns = [
         views.DashboardView.as_view(),
         name='dashboard',
     ),
+
+    # ── Docs RAG search (Pillar A) ─────────────────────────────────────────
+    # Public-permission, gated by X-Internal-Secret. Called by the autobot
+    # search_docs tool over the internal bridge — no Clerk auth.
+    path(
+        'docs/search/',
+        views.docs_search,
+        name='docs-search',
+    ),
 ]

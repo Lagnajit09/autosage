@@ -1,17 +1,33 @@
+import hmac
 import logging
 from datetime import timedelta
 
+from django.conf import settings as django_settings
 from django.core.paginator import EmptyPage, Paginator
 from django.db import IntegrityError, transaction
 from django.db.models import Count, Q, Sum
 from django.utils import timezone
+from pgvector.django import CosineDistance
 from rest_framework import generics, status
+from rest_framework.decorators import (
+    api_view,
+    permission_classes,
+    throttle_classes,
+)
 from rest_framework.exceptions import NotFound
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from autobot_api.models import LLMConfig, Message, Summary, Thread, UserSettings
+from autobot_api import embeddings
+from autobot_api.models import (
+    DocChunk,
+    LLMConfig,
+    Message,
+    Summary,
+    Thread,
+    UserSettings,
+)
 from autobot_api.serializers import (
     LLMConfigRevealSerializer,
     LLMConfigSerializer,
@@ -20,10 +36,23 @@ from autobot_api.serializers import (
     ThreadSerializer,
     UserSettingsSerializer,
 )
-from server.rate_limiters import AutobotBurstThrottle, AutobotSustainedThrottle
+from server.rate_limiters import (
+    AutobotBurstThrottle,
+    AutobotSustainedThrottle,
+    DocsSearchThrottle,
+)
 from server.utils import api_response
 
 logger = logging.getLogger(__name__)
+
+# Bounds on the docs-search request, defending the public endpoint against
+# pathological inputs even behind the internal-secret gate + throttle.
+_DOCS_SEARCH_MAX_QUERY_CHARS = 1000
+_DOCS_SEARCH_DEFAULT_TOP_K = 5
+_DOCS_SEARCH_MAX_TOP_K = 10
+# Snippet length returned to the model — enough context to ground an answer
+# without flooding the LLM with whole pages.
+_DOCS_SEARCH_SNIPPET_CHARS = 600
 
 
 class LLMConfigListCreateView(generics.ListCreateAPIView):
@@ -757,3 +786,88 @@ class DashboardView(APIView):
             data=payload,
             status_code=status.HTTP_200_OK,
         )
+
+
+# ── Docs RAG search (Pillar A) ─────────────────────────────────────────────
+#
+# Public-permission endpoint, but NOT openly callable: gated by a shared
+# X-Internal-Secret that only the autobot service knows (it calls this over the
+# internal compose bridge on behalf of the public docs widget). The docs content
+# is public, so leaking a snippet is not sensitive — the gate exists to keep the
+# endpoint off the open internet and bound abuse. No Clerk user is involved, so
+# there is no per-user scoping here (DocChunk is global by design).
+
+
+def _docs_secret_ok(request) -> bool:
+    """Constant-time compare of the presented X-Internal-Secret.
+
+    Fails closed if the server secret is unset, so a misconfigured deploy can
+    never accidentally expose the endpoint without a secret.
+    """
+    expected = getattr(django_settings, 'AUTOBOT_INTERNAL_SECRET', '') or ''
+    presented = request.headers.get('X-Internal-Secret', '') or ''
+    if not expected or not presented:
+        return False
+    return hmac.compare_digest(presented, expected)
+
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+@throttle_classes([DocsSearchThrottle])
+def docs_search(request):
+    """POST /api/autobot/docs/search/ — semantic search over the docs corpus.
+
+    Auth: ``X-Internal-Secret`` header (autobot → Django, internal bridge).
+    Body: ``{"query": "...", "top_k": 5}``.
+    Returns the top-k most similar chunks by cosine distance:
+    ``[{title, url, heading_path, snippet}, ...]``.
+    """
+    if not _docs_secret_ok(request):
+        # Same generic 401 whether the secret is missing or wrong — no oracle.
+        return api_response(
+            success=False,
+            message='Invalid or missing internal secret.',
+            status_code=status.HTTP_401_UNAUTHORIZED,
+        )
+
+    data = request.data if isinstance(request.data, dict) else {}
+    query = (data.get('query') or '').strip()
+    if not query:
+        return api_response(
+            success=False,
+            message='`query` is required.',
+            status_code=status.HTTP_400_BAD_REQUEST,
+        )
+    query = query[:_DOCS_SEARCH_MAX_QUERY_CHARS]
+
+    try:
+        top_k = int(data.get('top_k', _DOCS_SEARCH_DEFAULT_TOP_K))
+    except (TypeError, ValueError):
+        top_k = _DOCS_SEARCH_DEFAULT_TOP_K
+    top_k = max(1, min(top_k, _DOCS_SEARCH_MAX_TOP_K))
+
+    query_vector = embeddings.embed_query(query)
+
+    # CosineDistance matches the HNSW index opclass (vector_cosine_ops); smaller
+    # distance = more similar, so ascending order gives the best matches first.
+    results = (
+        DocChunk.objects
+        .order_by(CosineDistance('embedding', query_vector))[:top_k]
+    )
+
+    payload = [
+        {
+            'title': chunk.title,
+            'url': chunk.url,
+            'heading_path': chunk.heading_path,
+            'snippet': chunk.content[:_DOCS_SEARCH_SNIPPET_CHARS],
+        }
+        for chunk in results
+    ]
+
+    return api_response(
+        success=True,
+        message='Docs search completed.',
+        data={'results': payload},
+        status_code=status.HTTP_200_OK,
+    )
