@@ -45,6 +45,11 @@ EXEC_WORKER_AUDIENCE = config('EXEC_WORKER_AUDIENCE', default='')
 # the docs content itself is public. Must match AUTOBOT_INTERNAL_SECRET on autobot.
 AUTOBOT_INTERNAL_SECRET = config('AUTOBOT_INTERNAL_SECRET', default='')
 
+# Filesystem path to the autosage-docs repo root (contains docs/ and tutorials/).
+# Default for `ingest_docs` when --docs-path is not passed. Empty in prod unless
+# the docs repo is mounted/checked out next to the server during ingestion.
+AUTOSAGE_DOCS_PATH = config('AUTOSAGE_DOCS_PATH', default='')
+
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = config('DEBUG', default=False, cast=bool)
 

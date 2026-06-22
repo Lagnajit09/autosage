@@ -13,6 +13,13 @@ from vault.fields import EncryptedCharField
 # distances are meaningless. Centralized in autobot_api/embeddings.py.
 DOC_EMBEDDING_DIMENSIONS = 768
 
+# Max characters of chunk content. Kept safely under the embedding model's
+# 512-token input limit (bge-base-en-v1.5 silently truncates beyond that), so a
+# chunk's whole text is captured by its vector. Single source of truth: the
+# ingester splits any longer section to this bound, and the search view returns
+# chunk content up to this bound (so the model sees exactly what was embedded).
+DOC_CHUNK_MAX_CHARS = 1800
+
 
 class LLMConfig(models.Model):
     """A user's BYO LLM provider configuration for Autobot.

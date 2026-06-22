@@ -21,6 +21,7 @@ from rest_framework.views import APIView
 
 from autobot_api import embeddings
 from autobot_api.models import (
+    DOC_CHUNK_MAX_CHARS,
     DocChunk,
     LLMConfig,
     Message,
@@ -50,9 +51,6 @@ logger = logging.getLogger(__name__)
 _DOCS_SEARCH_MAX_QUERY_CHARS = 1000
 _DOCS_SEARCH_DEFAULT_TOP_K = 5
 _DOCS_SEARCH_MAX_TOP_K = 10
-# Snippet length returned to the model — enough context to ground an answer
-# without flooding the LLM with whole pages.
-_DOCS_SEARCH_SNIPPET_CHARS = 600
 
 
 class LLMConfigListCreateView(generics.ListCreateAPIView):
@@ -855,12 +853,15 @@ def docs_search(request):
         .order_by(CosineDistance('embedding', query_vector))[:top_k]
     )
 
+    # Return the FULL chunk content (defensively capped at the same bound the
+    # ingester enforces). The chunk is the retrieval unit, so the model must see
+    # all of what was embedded — truncating here would hide ranked-on content.
     payload = [
         {
             'title': chunk.title,
             'url': chunk.url,
             'heading_path': chunk.heading_path,
-            'snippet': chunk.content[:_DOCS_SEARCH_SNIPPET_CHARS],
+            'content': chunk.content[:DOC_CHUNK_MAX_CHARS],
         }
         for chunk in results
     ]
