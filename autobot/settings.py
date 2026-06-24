@@ -76,6 +76,27 @@ class AutobotSettings(BaseSettings):
     # quota so BYO users (uncapped LLM) are still bounded on real compute.
     # Set to 0 to disable. Django Execution throttles are the backstop.
     AUTOBOT_EXEC_DAILY_LIMIT: int = 25
+
+    # ── Public docs chat (Pillar A) ──────────────────────────────────────
+    # Per-IP daily cap on the no-Clerk docs widget, tracked in Redis at
+    # `autobot:docs_quota:<ip>:<yyyymmdd>` (26h TTL, fail-open). Bounds
+    # free-LLM-key abuse on the public endpoint independently of the slowapi
+    # burst throttle. Set to 0 to disable.
+    AUTOBOT_DOCS_DAILY_LIMIT: int = 50
+    # TTL (seconds) on an anonymous docs chat session in Redis
+    # (`autobot:docs_session:<session_id>`). ~2h keeps a visitor's thread
+    # warm across page navigation without persisting anything in Django.
+    AUTOBOT_DOCS_SESSION_TTL: int = 7200
+    # Burst rate limit (slowapi) on the public docs-chat endpoint, IP-keyed.
+    AUTOBOT_DOCS_RATE_LIMIT: str = "10/minute"
+    # Bounds on a single docs-chat request, defending the public path.
+    AUTOBOT_DOCS_MAX_MESSAGE_CHARS: int = 2000
+    # How many prior turns of anon history to replay into the model context.
+    AUTOBOT_DOCS_MAX_HISTORY_TURNS: int = 12
+    # Cap on tool-call rounds for the docs loop — search is the only tool,
+    # so a couple of rounds is plenty; bounds runaway loops on free keys.
+    AUTOBOT_DOCS_MAX_TOOL_ROUNDS: int = 3
+
     AUTOBOT_CTX_TTL_SECONDS: int = 7200
     AUTOBOT_CONTEXT_TARGET_RATIO: float = 0.6
     AUTOBOT_KEEP_LAST_N: int = 8

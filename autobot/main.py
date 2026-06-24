@@ -16,6 +16,7 @@ from conversation.persistence import close_django_client
 from llm.tools import list_tool_names
 from routers import analytics as analytics_router
 from routers import chat as chat_router
+from routers import docs_chat as docs_chat_router
 from routers import proxy as proxy_router
 from settings import get_settings
 from throttling import limiter
@@ -89,6 +90,9 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 app.include_router(proxy_router.router)
 app.include_router(chat_router.router)
 app.include_router(analytics_router.router)
+
+# Public, no-Clerk docs assistant for the Docusaurus widget (Pillar A).
+app.include_router(docs_chat_router.router)
 
 
 @app.get("/health/")

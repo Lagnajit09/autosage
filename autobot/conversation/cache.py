@@ -10,6 +10,8 @@ Key namespace:
   autobot:thread:<id>:summary   — plain text rolling summary
   autobot:admin_quota:<sub>:<yyyymmdd> — per-user admin-key counter
   autobot:exec_quota:<sub>:<yyyymmdd>  — per-user chat-execution counter
+  autobot:docs_quota:<ip>:<yyyymmdd>   — per-IP public-docs-chat counter
+  autobot:docs_session:<session_id>    — anon docs-chat history (JSON list)
 """
 
 from __future__ import annotations
@@ -243,6 +245,101 @@ class ConversationCache:
             return int(raw)
         except (TypeError, ValueError):
             return 0
+
+
+    # ── Public docs chat (Pillar A) ──────────────────────────────────────
+    #
+    # The docs widget is anonymous (no Clerk user). State lives ONLY in Redis
+    # /2: a per-IP daily counter (abuse bound) and a per-session history list
+    # (conversation memory). Nothing is persisted in Django — the session_id
+    # is client-generated and untrusted, so it never addresses a DB row.
+
+    async def incr_docs_quota_for_today(
+        self,
+        client_ip: str,
+        daily_limit: int,
+    ) -> tuple[bool, int]:
+        """Increment the per-IP daily docs-chat counter and check the cap.
+
+        Mirrors :meth:`incr_admin_quota_for_today` but keyed by client IP
+        (the public path has no user). Ticks once per docs-chat turn. Keyed
+        by UTC date at ``autobot:docs_quota:<ip>:<yyyymmdd>`` with a 26h TTL.
+        ``daily_limit=0`` disables the cap.
+
+        Returns ``(allowed, count)``. Redis errors fail-OPEN — the slowapi
+        burst throttle is the backstop, so a Redis outage shouldn't take the
+        whole docs widget offline.
+        """
+        if daily_limit <= 0:
+            return True, 0
+
+        from datetime import datetime, timezone
+        today = datetime.now(timezone.utc).strftime("%Y%m%d")
+        key = f"autobot:docs_quota:{client_ip}:{today}"
+
+        try:
+            count = await self._client.incr(key)
+            if count == 1:
+                await self._client.expire(key, 60 * 60 * 26)
+        except Exception as e:
+            logger.warning(
+                "Docs-quota counter unavailable for ip=%s (%s); fail-open",
+                client_ip, e,
+            )
+            return True, 0
+
+        allowed = count <= daily_limit
+        if not allowed:
+            logger.info(
+                "Docs-quota exceeded: ip=%s count=%d limit=%d",
+                client_ip, count, daily_limit,
+            )
+        return allowed, int(count)
+
+    async def get_docs_session(self, session_id: str) -> list[dict[str, Any]]:
+        """Return the anon docs-chat history for ``session_id``.
+
+        A JSON list of ``{"role": "user"|"assistant", "content": str}``.
+        Returns ``[]`` on miss, corruption, or any Redis error (fail-open —
+        a fresh conversation is the safe degradation). Refreshes the TTL on
+        a hit so an active visitor's thread stays warm.
+        """
+        key = f"autobot:docs_session:{session_id}"
+        try:
+            raw = await self._client.get(key)
+        except Exception as e:
+            logger.warning(
+                "Docs-session read failed for session=%s (%s); fail-open",
+                session_id, e,
+            )
+            return []
+        if raw is None:
+            return []
+        await self._client.expire(key, self._default_ttl)
+        try:
+            data = json.loads(raw)
+        except json.JSONDecodeError:
+            logger.warning("Corrupt docs-session at %s; deleting", key)
+            await self._client.delete(key)
+            return []
+        return data if isinstance(data, list) else []
+
+    async def set_docs_session(
+        self,
+        session_id: str,
+        history: list[dict[str, Any]],
+        ttl: int | None = None,
+    ) -> None:
+        """Persist the anon docs-chat history, replacing the prior value.
+
+        Best-effort: a Redis failure just means this turn isn't remembered —
+        it must never break the response, so the caller swallows errors.
+        """
+        await self._client.set(
+            f"autobot:docs_session:{session_id}",
+            json.dumps(history, default=str),
+            ex=ttl if ttl is not None else self._default_ttl,
+        )
 
 
 @lru_cache
