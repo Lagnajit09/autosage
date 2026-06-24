@@ -194,22 +194,30 @@ async def require_auth(request: Request) -> AuthContext:
 
 
 class AuthorizationRedactor(logging.Filter):
-    """Scrubs `Authorization: Bearer <token>` substrings from log records.
+    """Scrubs auth credentials from log records.
 
     Catches raw header logs and dict-repr forms like
-    `{'Authorization': 'Bearer abc'}` that httpx dumps at DEBUG.
+    `{'Authorization': 'Bearer abc'}` that httpx dumps at DEBUG, plus the
+    `X-Internal-Secret` header carried on the public docs-search path (a
+    long-lived shared secret that must never surface in logs).
     """
 
     _PATTERN = re.compile(
         r"(authorization['\"]?\s*[:=]\s*['\"]?)(bearer\s+[^\s'\";,)]+)",
         flags=re.IGNORECASE,
     )
+    _SECRET_PATTERN = re.compile(
+        r"(x-internal-secret['\"]?\s*[:=]\s*['\"]?)([^\s'\";,)]+)",
+        flags=re.IGNORECASE,
+    )
     _REDACTED = "Bearer [REDACTED]"
+    _SECRET_REDACTED = r"\1[REDACTED]"
 
     def _redact(self, text: str) -> str:
-        return self._PATTERN.sub(
+        text = self._PATTERN.sub(
             lambda m: m.group(1) + self._REDACTED, text
         )
+        return self._SECRET_PATTERN.sub(self._SECRET_REDACTED, text)
 
     def filter(self, record: logging.LogRecord) -> bool:
         try:

@@ -27,6 +27,13 @@ class AutobotSettings(BaseSettings):
     # Redis DB index /2 is reserved for autobot; /0 is Celery.
     REDIS_URL: str = "redis://redis:6379/2"
 
+    # Shared secret presented as `X-Internal-Secret` on the public docs path's
+    # Django call (`/api/autobot/docs/search/`). MUST match Django's
+    # `AUTOBOT_INTERNAL_SECRET`. Empty default → the docs tool fails closed
+    # (Django rejects an empty/absent secret), so a misconfigured deploy can
+    # never expose the endpoint. No user JWT is involved on this path.
+    AUTOBOT_INTERNAL_SECRET: str = ""
+
     GEMINI_API_KEY: str = ""
     GROQ_API_KEY: str = ""
     OPENROUTER_API_KEY: str = ""
