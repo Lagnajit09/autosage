@@ -37,7 +37,19 @@ COPY . .
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     DJANGO_SETTINGS_MODULE=server.settings \
-    PORT=8000
+    PORT=8000 \
+    FASTEMBED_CACHE_PATH=/opt/fastembed-cache
+
+# ── Pre-bake the docs-RAG embedding model (Pillar A / plan 4.2b) ──────────────
+# autobot_api/embeddings.py lazily loads fastembed's BAAI/bge-base-en-v1.5 on
+# the first docs-search query (and during `manage.py ingest_docs`). Without
+# baking it in, that first call would block on a ~200MB HuggingFace download —
+# bad for cold starts and impossible in egress-restricted runtimes. Downloading
+# it here (into FASTEMBED_CACHE_PATH, which the running process also reads) makes
+# startup deterministic. This image runs django + celery + beat; only the web
+# worker and the ingestion command ever load the model, but baking is harmless
+# for the others (cache files just sit unused). Adds ~250MB to the image.
+RUN python -c "from fastembed import TextEmbedding; TextEmbedding(model_name='BAAI/bge-base-en-v1.5')"
 
 # Expose the ASGI port
 EXPOSE 8000

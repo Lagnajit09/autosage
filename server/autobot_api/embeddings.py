@@ -20,10 +20,17 @@ Resource model — who actually loads the ~300MB model:
 
 from __future__ import annotations
 
+import os
 import threading
 
 # fastembed model id. bge-base-en-v1.5 → 768-dim (matches DOC_EMBEDDING_DIMENSIONS).
 EMBEDDING_MODEL_NAME = "BAAI/bge-base-en-v1.5"
+
+# Where fastembed stores/looks up the ONNX model. The Docker image pre-bakes the
+# model here (see server/Dockerfile, plan 4.2b) so the first runtime embed finds
+# it locally instead of downloading. Unset in local dev → fastembed's own default
+# cache (~/.cache), so no behavior change off-container.
+EMBEDDING_CACHE_DIR = os.environ.get("FASTEMBED_CACHE_PATH") or None
 
 # bge retrieval is asymmetric: the QUERY gets an instruction prefix, passages do
 # not. fastembed 0.8.0 does NOT auto-apply this for bge-base-en-v1.5 (its
@@ -51,7 +58,10 @@ def _get_model():
             if _model is None:
                 from fastembed import TextEmbedding
 
-                _model = TextEmbedding(model_name=EMBEDDING_MODEL_NAME)
+                kwargs = {"model_name": EMBEDDING_MODEL_NAME}
+                if EMBEDDING_CACHE_DIR:
+                    kwargs["cache_dir"] = EMBEDDING_CACHE_DIR
+                _model = TextEmbedding(**kwargs)
     return _model
 
 

@@ -1,0 +1,9 @@
+# Dev/test-only dependencies for autobot. Not installed in the runtime image.
+# Install alongside the app for local testing:
+#   pip install -r requirements.txt -r requirements-dev.txt
+#
+# The test suite uses FastAPI's TestClient (Starlette), which needs httpx —
+# already pinned in requirements.txt for the Django/LLM clients, so it's
+# reused here rather than re-pinned.
+
+pytest==9.1.1
