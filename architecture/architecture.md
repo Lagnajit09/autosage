@@ -2,11 +2,9 @@
 
 > **What changed since v1**: The Django control plane was moved from a GCP
 > e2-micro VM to an **OCI Ampere A1** VM running a multi-container
-> `docker compose` stack (django + celery + beat + scheduler-worker + nginx
->
-> - certbot). HTTPS is now real Let's Encrypt against a DuckDNS subdomain
->   instead of the GCP self-signed cert. The exec-worker (FastAPI) is
->   unchanged — still on Cloud Run.
+> `docker compose` stack (django + celery + beat + scheduler-worker + nginx + certbot). HTTPS is now real Let's Encrypt against a DuckDNS subdomain
+> instead of the GCP self-signed cert. The exec-worker (FastAPI) is
+> unchanged — still on Cloud Run.
 >
 > v1 docs are archived in [./v1/](./v1/).
 
@@ -157,23 +155,23 @@ flowchart TD
 
 ## Component summary
 
-| Component                             | Where it runs               | What it does                                                                                   | v1 → v2 delta                                                                                  |
-| ------------------------------------- | --------------------------- | ---------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
-| **React client**                      | Firebase Hosting            | UI, Clerk sign-in, EventSource for SSE; v2: RunPanel (Graph/Logs drawer), SecretForm, ToolResultRenderer | `VITE_API_URL` points at DuckDNS instead of GCP IP                                             |
-| **nginx**                             | OCI A1, in `docker compose` | TLS terminator (real Let's Encrypt), HTTP→HTTPS redirect, SSE-safe proxy, ACME http-01 webroot | New — was on GCP VM directly with a self-signed cert                                           |
-| **Django (Uvicorn ASGI)**             | OCI A1, in `docker compose` | Control plane: REST API, SSE relay, Clerk JWT verify, Celery dispatcher                        | Moved from GCP e2-micro (Gunicorn) to OCI A1 (Uvicorn). New `SECURE_PROXY_SSL_HEADER` setting. |
-| **Celery worker (`celery` queue)**    | OCI A1                      | `execute_workflow` task — DAG traversal, exec-worker dispatch, log streaming                   | Now a separate container in compose (was in-process or unscaled on GCP)                        |
-| **Celery Beat**                       | OCI A1                      | Cron dispatcher using `django_celery_beat.DatabaseScheduler`                                   | Now a separate container                                                                       |
-| **Celery worker (`scheduler` queue)** | OCI A1                      | `fire_scheduled_workflow` — never blocked by long workflow runs                                | Now a separate container                                                                       |
-| **certbot one-shot**                  | OCI A1 (profile `tools`)    | Initial cert issuance + 90-day auto-renewal via cron                                           | New                                                                                            |
-| **exec-worker (FastAPI)**             | Cloud Run (autoscale 0→2)   | SSH/WinRM/SMTP execution, NDJSON streaming                                                     | Unchanged                                                                                      |
-| **Supabase Postgres**                 | Supabase Cloud              | Workflows, runs, node_runs, Vault (Fernet-encrypted), Celery Beat tables                       | Unchanged                                                                                      |
+| Component                             | Where it runs               | What it does                                                                                                  | v1 → v2 delta                                                                                             |
+| ------------------------------------- | --------------------------- | ------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| **React client**                      | Firebase Hosting            | UI, Clerk sign-in, EventSource for SSE; v2: RunPanel (Graph/Logs drawer), SecretForm, ToolResultRenderer      | `VITE_API_URL` points at DuckDNS instead of GCP IP                                                        |
+| **nginx**                             | OCI A1, in `docker compose` | TLS terminator (real Let's Encrypt), HTTP→HTTPS redirect, SSE-safe proxy, ACME http-01 webroot                | New — was on GCP VM directly with a self-signed cert                                                      |
+| **Django (Uvicorn ASGI)**             | OCI A1, in `docker compose` | Control plane: REST API, SSE relay, Clerk JWT verify, Celery dispatcher                                       | Moved from GCP e2-micro (Gunicorn) to OCI A1 (Uvicorn). New `SECURE_PROXY_SSL_HEADER` setting.            |
+| **Celery worker (`celery` queue)**    | OCI A1                      | `execute_workflow` task — DAG traversal, exec-worker dispatch, log streaming                                  | Now a separate container in compose (was in-process or unscaled on GCP)                                   |
+| **Celery Beat**                       | OCI A1                      | Cron dispatcher using `django_celery_beat.DatabaseScheduler`                                                  | Now a separate container                                                                                  |
+| **Celery worker (`scheduler` queue)** | OCI A1                      | `fire_scheduled_workflow` — never blocked by long workflow runs                                               | Now a separate container                                                                                  |
+| **certbot one-shot**                  | OCI A1 (profile `tools`)    | Initial cert issuance + 90-day auto-renewal via cron                                                          | New                                                                                                       |
+| **exec-worker (FastAPI)**             | Cloud Run (autoscale 0→2)   | SSH/WinRM/SMTP execution, NDJSON streaming                                                                    | Unchanged                                                                                                 |
+| **Supabase Postgres**                 | Supabase Cloud              | Workflows, runs, node_runs, Vault (Fernet-encrypted), Celery Beat tables                                      | Unchanged                                                                                                 |
 | **Autobot service (FastAPI)**         | OCI A1, in `docker compose` | AI chat (SSE), tool-using script/workflow CRUD; v2: execution copilot, RunPanel, secure password side-channel | v2 Pillar B adds execution tools + mode floors; separate `autobot` compose service, `/api/ai/*` via nginx |
-| **Upstash Redis**                     | Upstash Cloud               | Celery broker + result + Pub/Sub log relay; Redis DB `/2` for Autobot hot-ctx + exec-quota   | Unchanged structure; Autobot exec-quota key added on DB /2                                    |
-| **GCS `autosagex-drive`**             | Google Cloud Storage        | Script bodies (`scripts/{user}/{id}/...`)                                                      | Unchanged                                                                                      |
-| **GCS `autosagex-logs`**              | Google Cloud Storage        | Per-execution stdout/stderr/`logs.json`                                                        | Unchanged                                                                                      |
-| **Clerk**                             | Clerk Cloud                 | OAuth-style JWT issuance                                                                       | Unchanged                                                                                      |
-| **DuckDNS**                           | DuckDNS service             | Free dynamic DNS for the A1 public IP — enables real LE cert                                   | New                                                                                            |
+| **Upstash Redis**                     | Upstash Cloud               | Celery broker + result + Pub/Sub log relay; Redis DB `/2` for Autobot hot-ctx + exec-quota                    | Unchanged structure; Autobot exec-quota key added on DB /2                                                |
+| **GCS `autosagex-drive`**             | Google Cloud Storage        | Script bodies (`scripts/{user}/{id}/...`)                                                                     | Unchanged                                                                                                 |
+| **GCS `autosagex-logs`**              | Google Cloud Storage        | Per-execution stdout/stderr/`logs.json`                                                                       | Unchanged                                                                                                 |
+| **Clerk**                             | Clerk Cloud                 | OAuth-style JWT issuance                                                                                      | Unchanged                                                                                                 |
+| **DuckDNS**                           | DuckDNS service             | Free dynamic DNS for the A1 public IP — enables real LE cert                                                  | New                                                                                                       |
 
 ---
 
@@ -224,20 +222,20 @@ The key point: **all four trigger paths (manual, webhook, schedule, autobot) fun
 
 ## Security boundaries
 
-| Boundary                           | Mechanism                                                                                                                                            |
-| ---------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Internet → nginx                   | TCP 80, 443 only. OCI VCN Security List + host iptables both must allow.                                                                             |
-| nginx → Django                     | Internal docker bridge. Django uses `expose: ["8000"]` only — never host-mapped.                                                                     |
-| Browser → Django (auth)            | Clerk JWT in `Authorization: Bearer`, verified against JWKS (1h LocMem cache) by `ClerkAuthMiddleware`. DRF default permission is `IsAuthenticated`. |
-| Public webhook → Django (no Clerk) | `trigger_token` (URL slug) + bcrypt-verified `X-Trigger-Secret` header + required `Idempotency-Key`. Per-token rate limit.                           |
-| Django → Cloud Run worker          | `X-API-Key` header + (in PROD) Google OIDC ID token whose `aud` matches `EXEC_WORKER_AUDIENCE`. Cloud Run service is `--no-allow-unauthenticated`.   |
-| Django/worker → GCS                | Service-account JSON key (mounted as `/app/creds/service-account.json:ro`), or ADC in PROD on Cloud Run.                                             |
-| Django ↔ Supabase                  | Standard TLS Postgres conn string, `conn_max_age=600`, `conn_health_checks=True`.                                                                    |
-| Django ↔ Redis                     | Upstash `rediss://` (TLS), `socket_timeout=30`, keepalive, retry on timeout.                                                                         |
-| Vault secrets at rest              | Fernet (`cryptography`) with key derived from `VAULT_ENCRYPTION_KEY` via SHA-256. Per-field encryption on `Credential` model.                        |
-| HTTP-trigger secret at rest        | bcrypt hash. Plaintext shown to user exactly once on create/rotate.                                                                                  |
-| Autobot → Django (execution)       | Clerk JWT forwarded on every call. `trigger_source="autobot"` restricts the run endpoint to `{manual, autobot}` choices; forged `http`/`schedule` returns 400. |
-| Password param safety              | 4-layer defence: (L1) `mask_password_params()` in read tools; (L2) `run_workflow` drops password inputs before POST; (L3) `enqueue_workflow_run` drops them again for `autobot` source; (L4) secure side-channel routes secrets browser→Django, never through Autobot. |
-| Secure side-channel fulfill endpoint | Owner-scoped to `intent.user`. Intent is single-use (fulfilled_at) and expires after 5 min. `trigger_source="manual"` so L3 drop does NOT fire (secret came from user's browser). |
+| Boundary                             | Mechanism                                                                                                                                                                                                                                                              |
+| ------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Internet → nginx                     | TCP 80, 443 only. OCI VCN Security List + host iptables both must allow.                                                                                                                                                                                               |
+| nginx → Django                       | Internal docker bridge. Django uses `expose: ["8000"]` only — never host-mapped.                                                                                                                                                                                       |
+| Browser → Django (auth)              | Clerk JWT in `Authorization: Bearer`, verified against JWKS (1h LocMem cache) by `ClerkAuthMiddleware`. DRF default permission is `IsAuthenticated`.                                                                                                                   |
+| Public webhook → Django (no Clerk)   | `trigger_token` (URL slug) + bcrypt-verified `X-Trigger-Secret` header + required `Idempotency-Key`. Per-token rate limit.                                                                                                                                             |
+| Django → Cloud Run worker            | `X-API-Key` header + (in PROD) Google OIDC ID token whose `aud` matches `EXEC_WORKER_AUDIENCE`. Cloud Run service is `--no-allow-unauthenticated`.                                                                                                                     |
+| Django/worker → GCS                  | Service-account JSON key (mounted as `/app/creds/service-account.json:ro`), or ADC in PROD on Cloud Run.                                                                                                                                                               |
+| Django ↔ Supabase                    | Standard TLS Postgres conn string, `conn_max_age=600`, `conn_health_checks=True`.                                                                                                                                                                                      |
+| Django ↔ Redis                       | Upstash `rediss://` (TLS), `socket_timeout=30`, keepalive, retry on timeout.                                                                                                                                                                                           |
+| Vault secrets at rest                | Fernet (`cryptography`) with key derived from `VAULT_ENCRYPTION_KEY` via SHA-256. Per-field encryption on `Credential` model.                                                                                                                                          |
+| HTTP-trigger secret at rest          | bcrypt hash. Plaintext shown to user exactly once on create/rotate.                                                                                                                                                                                                    |
+| Autobot → Django (execution)         | Clerk JWT forwarded on every call. `trigger_source="autobot"` restricts the run endpoint to `{manual, autobot}` choices; forged `http`/`schedule` returns 400.                                                                                                         |
+| Password param safety                | 4-layer defence: (L1) `mask_password_params()` in read tools; (L2) `run_workflow` drops password inputs before POST; (L3) `enqueue_workflow_run` drops them again for `autobot` source; (L4) secure side-channel routes secrets browser→Django, never through Autobot. |
+| Secure side-channel fulfill endpoint | Owner-scoped to `intent.user`. Intent is single-use (fulfilled_at) and expires after 5 min. `trigger_source="manual"` so L3 drop does NOT fire (secret came from user's browser).                                                                                      |
 
 ---

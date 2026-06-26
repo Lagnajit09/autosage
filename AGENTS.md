@@ -1,8 +1,8 @@
 # AGENT GUIDELINES FOR AUTOSAGE REPOSITORY
 
-This document is the authoritative architectural and operational reference for **Autosage**. It explains what the system does, how the services fit together, how requests flow end-to-end, how state is stored, how deployments happen, and what conventions agents must preserve when making changes.
+Authoritative architectural + operational reference for **Autosage**: what the system does, how services fit together, request flow, state storage, deployment, and conventions agents must preserve.
 
-No secrets, tokens, keys, hostnames, or vendor account IDs are recorded here. Use environment variables / secret managers for those.
+No secrets, tokens, keys, hostnames, or vendor account IDs here — those live in env vars / secret managers.
 
 ---
 
@@ -31,7 +31,7 @@ Autosage splits into three independently-deployed planes:
 | **Control plane** | OCI Ampere A1 VM, in `docker compose` | `server/` + `nginx/` | API, auth, orchestration, SSE relay |
 | **Execution plane** | GCP Cloud Run | `exec-worker/` | SSH/WinRM/SMTP execution, NDJSON streaming |
 
-Plus the **Autobot service** at `autobot/` (FastAPI) — live on the same OCI A1 host as Django, routed by nginx at `/api/ai/*`. Chat surface (SSE streaming, tool-using script + workflow generation, conversation summarization, BYO LLM keys via `LLMConfig`, usage dashboard, archived chats) is shipped end-to-end. **Autobot v2 (Pillar B)** adds an execution copilot: execution mode (BYO-only), rich tabbed RunPanel (Graph + Logs), `run_workflow` / `run_script` / `rerun_workflow` tools, a failure-investigation loop, past-execution investigation tools, and a secure password side-channel for workflows that require run-time secrets. See Section 16 for the full Autobot reference.
+Plus the **Autobot service** at `autobot/` (FastAPI) — live on the same OCI A1 host as Django, routed by nginx at `/api/ai/*`. Shipped: chat (SSE streaming, tool-using script/workflow generation, summarization, BYO LLM keys via `LLMConfig`, usage dashboard, archived chats); **v2 Pillar B** execution copilot (BYO-only execution mode, tabbed RunPanel, `run_workflow`/`run_script`/`rerun_workflow`, failure-investigation loop, secure password side-channel); **Pillar A** public docs-RAG assistant. Full reference in §16.
 
 External managed services:
 
@@ -141,7 +141,7 @@ client/src/
 
 ## 4. End-to-End Workflow Execution Flow
 
-This is the canonical happy path that every agent must understand before touching execution code.
+Canonical happy path — understand before touching execution code.
 
 ```
 Browser ──HTTPS──▶ nginx ──HTTP──▶ Django (Uvicorn ASGI)
@@ -174,17 +174,12 @@ Celery worker  pops execute_workflow
 
 ### 4.1 Numbered request flow
 
-1. **Frontend load** — Browser fetches the SPA from Firebase CDN.
-2. **Auth** — Clerk SDK issues a JWT to the browser.
-3. **Hostname resolution** — `autosagex-api.duckdns.org` → A1 public IP.
-4. **API request** — Browser POSTs `/api/execution-engine/workflows/<id>/run/` with `Authorization: Bearer <JWT>`. nginx terminates TLS, sets `X-Forwarded-Proto: https`, forwards to `http://django:8000`. Django's `SECURE_PROXY_SSL_HEADER` makes `request.scheme == 'https'`.
-5. **Persist** — Django creates `WorkflowRun` + N×`WorkflowNodeRun` rows in Supabase.
-6. **Enqueue + subscribe** — Django publishes the `execute_workflow` task to the Redis `celery` queue and returns 202 with the run id. The client opens an `EventSource` to `/api/execution-engine/workflows/runs/<id>/stream/`. That async view subscribes to `workflow_run:<id>:logs`.
-7. **Script fetch + render** — The Celery worker pops the task, downloads each script body from `autosagex-drive`, and resolves `{{param}}` placeholders.
-8. **Execute** — Celery streams an NDJSON POST to Cloud Run exec-worker (`X-API-Key` + Google OIDC bearer). The worker SSHes / WinRMs into the target VM, runs the script, and streams stdout/stderr line-by-line back to Django.
-9. **Stream relay** — For every NDJSON chunk Django publishes a Pub/Sub event on the per-run channel. The SSE async view picks it up and emits an SSE frame to the browser. nginx is configured with `proxy_buffering off` so chunks flush instantly.
-10. **Persist final logs** — When the workflow finishes, Celery uploads the stdout/stderr/`logs.json` bundle to GCS `autosagex-logs` and writes final status onto WorkflowRun.
-11. **Optional email** — If `send_email=True` was set when the run was triggered, Django dispatches a completion email via Gmail SMTP.
+1. **Load + auth** — Browser fetches the SPA from Firebase CDN; Clerk SDK issues a JWT. `autosagex-api.duckdns.org` → A1 public IP.
+2. **API request** — POST `/api/execution-engine/workflows/<id>/run/` with `Authorization: Bearer <JWT>`. nginx terminates TLS, sets `X-Forwarded-Proto: https`; Django's `SECURE_PROXY_SSL_HEADER` makes `request.scheme == 'https'`.
+3. **Persist + enqueue** — Django creates `WorkflowRun` + N×`WorkflowNodeRun`, publishes `execute_workflow` to the Redis `celery` queue, returns **202** with the run id. Client opens an `EventSource` to `/runs/<id>/stream/`; that async view subscribes to `workflow_run:<id>:logs`.
+4. **Fetch + execute** — Worker downloads each script body from `autosagex-drive`, resolves `{{param}}`, streams an NDJSON POST to Cloud Run exec-worker (`X-API-Key` + Google OIDC bearer). Worker SSH/WinRMs the target VM and streams stdout/stderr line-by-line back.
+5. **Relay** — Each NDJSON chunk → Pub/Sub event → SSE async view → SSE frame to browser (nginx `proxy_buffering off` flushes instantly).
+6. **Finalize** — On completion Celery uploads the stdout/stderr/`logs.json` bundle to GCS `autosagex-logs`, writes final status, and (if `send_email=True`) sends a completion email via Gmail SMTP.
 
 ---
 
@@ -442,10 +437,8 @@ Centralised in `server/server/rate_limiters.py` and `settings.py::REST_FRAMEWORK
 ## 13. Production Deployment
 
 ### 13.1 Frontend — Firebase Hosting
-- Built by GitHub Actions (`.github/workflows/firebase-hosting.yml`) on push to `client/**`.
-- Node 20 → `npm ci` → write `.env.production` from `VITE_*` secrets → `vite build` → `firebase deploy`.
-- Production channel on push to `main`; PR previews on pull requests (7-day TTL).
-- Public URL: `https://autosagex.web.app`.
+- **SPA** (`client/`): GitHub Actions (`.github/workflows/firebase-hosting.yml`) on push to `client/**`. Node 20 → `npm ci` → write `.env.production` from `VITE_*` secrets → `vite build` → `firebase deploy`. Production channel on push to `main`; PR previews (7-day TTL). Default Hosting site `autosagex` → `https://autosagex.web.app`.
+- **Docs site** (separate repo `Lagnajit09/autosage-docs`, Docusaurus): its own GitHub Actions workflow on push to `main`. `npm ci` → build with `AUTOBOT_API_URL` injected (baked into the bundle via `customFields.autobotApiUrl`) → `firebase deploy` to a **second** Hosting target `docs` (site `autosagexdocs`) in the same `autosagex` project. PR → preview channel. The widget calls autobot cross-origin, so the docs origin must be in autobot `CORS_ALLOWED_ORIGINS`.
 
 ### 13.2 Control plane — OCI Ampere A1 (docker compose)
 - Host: OCI Ampere A1 VM, Ubuntu 22.04 aarch64, 4 OCPU / 24 GB quota.
@@ -604,7 +597,7 @@ DRF exceptions are reshaped by `server/server/exceptions.py::custom_exception_ha
 
 ## 16. Autobot (Live Service)
 
-Status: **shipped — v1 (Phases 1–5) + v2 Pillar B**. Autobot is a live FastAPI service on the same OCI A1 host as Django, routed by nginx at `/api/ai/*`. v1 shipped: chat + script/workflow CRUD tool calls, conversation summarization, BYO LLM keys, usage dashboard, archived chats. v2 Pillar B shipped: execution copilot (run/rerun/investigate/fix), rich tabbed RunPanel (Graph + Logs), failure-investigation loop, and the secure password side-channel. Cloud-infra tools remain out of scope (→ v3).
+Status: **shipped — v1 (Phases 1–5) + v2 Pillar B + Pillar A (Docs RAG)**. Autobot is a live FastAPI service on the same OCI A1 host as Django, routed by nginx at `/api/ai/*`. v1 shipped: chat + script/workflow CRUD tool calls, conversation summarization, BYO LLM keys, usage dashboard, archived chats. v2 Pillar B shipped: execution copilot (run/rerun/investigate/fix), rich tabbed RunPanel (Graph + Logs), failure-investigation loop, and the secure password side-channel. **Pillar A shipped: a public (no-Clerk) documentation assistant** — pgvector RAG over the docs corpus, exposed as a streaming chat endpoint and embedded as a side panel on the Docusaurus site (§16.12). Cloud-infra tools remain out of scope (→ v3).
 
 ### 16.1 Service topology
 
@@ -704,18 +697,16 @@ The `root_path="/api/ai"` setting on the FastAPI app means **internally** these 
 ### 16.5 Chat flow (`routers/chat.py`)
 
 1. Verify JWT → `auth.user_sub` + `raw_jwt`.
-2. POST the user message to Django (`/api/autobot/threads/<id>/messages/`). This **also serves as the authorization check** — Django's `_get_thread_or_404` 404s on a thread the caller doesn't own, no separate pre-fetch needed.
-3. `asyncio.gather(get_thread, get_history)` — parallel round-trip. Thread payload carries `system_prompt_override` + optional `llm_config_id`. History page size = 20.
-4. Hydrate hot context from Redis (`autobot:thread:<id>:ctx`); on miss, build from the history just fetched + latest Summary row.
-5. **Pre-compaction** of any `tool` messages > 2 KB to one-line digests in-context (raw payloads stay in Postgres). Defers summarization 5–10 turns.
-6. Tiktoken count. If `tokens > AUTOBOT_CONTEXT_TARGET_RATIO × context_window`, run `conversation/summarizer.py` to collapse all-but-the-last-N messages into a `system`-role summary, persist a `Summary` row via Django, replace those messages in-context.
-7. Resolve the LLM client (`llm/client.py::resolve_for_thread`) — returns a list:
-   - If `UserSettings.default_llm_config_id` or `Thread.llm_config_id` is set → BYO: `POST /api/autobot/llm-configs/<id>/reveal/` once per request to get the plaintext api key, never cache it.
-   - Else → admin chain: `[primary, *AUTOBOT_ADMIN_FALLBACKS]`. `LLMResolution.is_admin = True` enables the per-user daily quota.
-8. **Round-1 fallback**: try each `LLMResolution` in order on retryable errors (`RateLimitError`, `ServiceUnavailableError`, `Timeout`, `APIConnectionError`). Once any `event: token` has been written to the client, fallback is **suppressed** — mid-turn provider swaps would interleave deltas.
-9. **OpenRouter cascade**: when `resolution.provider == "openrouter"` and `OPENROUTER_FALLBACK_MODELS` is set, inject `extra_body={"models": [...], "route": "fallback"}` so OpenRouter tries multiple free models server-side in one round-trip.
-10. Stream deltas as `event: token`. On `tool_call`, emit `event: tool_call_start`, dispatch via `llm/tools.py::dispatch` (timeout, error normalization to `{"error": "..."}`), emit `event: tool_result`, append the tool message to context, loop. Hard cap `AUTOBOT_MAX_TOOL_ROUNDS=10`.
-11. On final assistant message: persist via Django with `prompt_tokens / completion_tokens / total_tokens / provider / model_name / is_byo`, refresh Redis cache + TTL, emit `event: done`. After any **write tool**, invalidate `autobot:thread:<id>:ctx`.
+2. POST the user message to Django (`/api/autobot/threads/<id>/messages/`) — this **doubles as the authz check** (`_get_thread_or_404` 404s a thread the caller doesn't own; no separate pre-fetch).
+3. `asyncio.gather(get_thread, get_history)` — parallel. Thread payload carries `system_prompt_override` + optional `llm_config_id`; history page = 20.
+4. Hydrate hot context from Redis (`autobot:thread:<id>:ctx`); on miss, rebuild from the fetched history + latest Summary row.
+5. **Pre-compaction**: `tool` messages > 2 KB → one-line in-context digests (raw stays in Postgres); defers summarization 5–10 turns.
+6. Tiktoken count; if `> AUTOBOT_CONTEXT_TARGET_RATIO × context_window`, `conversation/summarizer.py` collapses all-but-last-N into a `system`-role summary, persists a `Summary` row, replaces those in-context.
+7. Resolve LLM (`llm/client.py::resolve_for_thread`) → a list: **BYO** if `UserSettings.default_llm_config_id`/`Thread.llm_config_id` set (`POST .../llm-configs/<id>/reveal/` per request, key never cached); else **admin chain** `[primary, *AUTOBOT_ADMIN_FALLBACKS]` (`is_admin=True` → per-user daily quota).
+8. **Round-1 fallback** on retryable errors (`RateLimitError`/`ServiceUnavailableError`/`Timeout`/`APIConnectionError`); **suppressed** once any `event: token` is written (mid-turn swaps interleave deltas).
+9. **OpenRouter cascade**: provider `openrouter` + `OPENROUTER_FALLBACK_MODELS` set → `extra_body={"models":[...],"route":"fallback"}` (server-side multi-model in one round-trip).
+10. Stream `event: token`. On `tool_call`: emit `tool_call_start` → dispatch (`llm/tools.py::dispatch`, timeout + error→`{"error":...}`) → emit `tool_result` → append to context → loop. Cap `AUTOBOT_MAX_TOOL_ROUNDS=10`.
+11. Final message: persist via Django (`prompt/completion/total_tokens`, `provider`, `model_name`, `is_byo`), refresh Redis + TTL, emit `done`. After any **write tool**, invalidate `autobot:thread:<id>:ctx`.
 
 ### 16.6 Tools (v1 + v2)
 
@@ -821,6 +812,42 @@ Flow for a workflow that needs a run-time password:
 
 **Invariant:** secret travels **browser → Django over TLS**, never browser → Autobot → Django.
 
+### 16.12 Docs RAG + public docs assistant (Pillar A)
+
+Status: **shipped.** A public, **no-Clerk** docs assistant: answers grounded in the Autosage docs via pgvector RAG, exposed as a streaming endpoint on autobot and embedded as a side panel on the Docusaurus site (separate repo `Lagnajit09/autosage-docs`). The **first and only unauthenticated surface** on autobot — bounded on every axis.
+
+```
+Docusaurus site (public) ──HTTPS──▶ nginx ──▶ autobot
+  AutobotWidget side panel              POST /api/ai/docs/chat/stream/   (PUBLIC, IP-throttled)
+                                          ├─ redis:6379/2  anon session (autobot:docs_session:<sid>, TTL)
+                                          │                + per-IP daily cap (autobot:docs_quota:<ip>:<day>)
+                                          ├─ admin LLM chain ONLY — one tool advertised: search_docs
+                                          └─ search_docs ──(X-Internal-Secret, NO JWT)──▶ django:8000
+                                                            POST /api/autobot/docs/search/
+                                                              ├─ embed query LOCALLY (fastembed/bge-base-en-v1.5)
+                                                              └─ pgvector cosine top-k over DocChunk
+
+Ingestion (offline / one-off): autosage-docs/{docs,tutorials}/*.md
+   └─▶ server: manage.py ingest_docs ──▶ chunk + embed ──▶ DocChunk (Supabase pgvector)
+```
+
+**Django side (`server/autobot_api/`):**
+- `DocChunk` — global docs (NO `user` FK), 768-dim `VectorField`, `content_hash` for idempotent re-ingest. A migration enables the Postgres `vector` extension before the table.
+- `embeddings.py` — **local** `fastembed` `BAAI/bge-base-en-v1.5` (768-dim ONNX, no API key/rate limit). **Lazy** process-local singleton: only the web process (query embed) and `ingest_docs` (passage embed) ever load it — celery/beat/scheduler never do, so they never pay the ~300MB RAM. bge query/passage asymmetry: prepend the query instruction once. Reads `FASTEMBED_CACHE_PATH` (the image-baked model).
+- `POST /api/autobot/docs/search/` — `AllowAny`, gated by an **`X-Internal-Secret`** header (constant-time vs `AUTOBOT_INTERNAL_SECRET`, **fails closed** when unset) + IP-keyed `DocsSearchThrottle`. Body `{query, top_k}` → embed → cosine top-k → chunks with resolved `url`s.
+- `manage.py ingest_docs` — parse frontmatter, strip MDX/JSX, chunk by heading (size cap), resolve Docusaurus URLs, embed, upsert by hash.
+
+**Autobot side:**
+- `conversation/persistence.py::DjangoClient.request` — **two mutually-exclusive auth modes**: `jwt=` (Bearer) XOR `internal_secret=` (`X-Internal-Secret`, no Authorization). **Neither → raises** (fail-closed), so an authed tool can't silently go out unauthenticated.
+- `tools/docs.py::search_docs` — the ONLY tool on the public path; runs with **no JWT**, presents the secret; `{"error": ...}` contract.
+- `llm/prompts.py::DOCS_SYSTEM_PROMPT` — **standalone** (not `get_system_prompt`, which layers write/exec floors). Docs Q&A only, cite `url`s, never invent, states its limits, treats retrieved passages as **data not instructions**.
+- `routers/docs_chat.py::POST /docs/chat/stream/` — no `require_auth`; IP-keyed burst limit + per-IP daily cap (fail-open); **admin chain only** (no BYO); `allowed_names={"search_docs"}` enforced at advertise AND dispatch; bounded message/history/rounds. Anon history in Redis keyed by a **client-generated `session_id`** — untrusted: clamped `[A-Za-z0-9_-]{8,128}`, only ever a Redis key, never a DB row, no authz weight. SSE vocabulary unchanged; `done` carries `{content}` (no Message row on this path).
+- Settings: `AUTOBOT_INTERNAL_SECRET`, `AUTOBOT_DOCS_*`. Docs origin must be in autobot `CORS_ALLOWED_ORIGINS` (browser calls autobot directly). Tests: `autobot/tests/test_docs_chat.py` (no Redis/Django/LLM); pytest in `autobot/requirements-dev.txt`.
+
+**Why the secret can't bypass auth on protected routes:** authz is decided **server-side per route** (`permission_classes`). `IsAuthenticated` routes never read `X-Internal-Secret` (→ 401); only the `AllowAny` `docs_search` view checks it (and ignores Bearer). The gates are **disjoint** and the client can't pick which applies — sending the secret at a protected route is just rejected, it unlocks nothing. Secret is redacted from logs alongside `Authorization`.
+
+**Model baked into the Django image** (`server/Dockerfile`): a build-time `RUN python -c "...TextEmbedding(...)"` into `FASTEMBED_CACHE_PATH` so a fresh container doesn't block on a ~200MB download. Cost is **disk only** (shared layer); RAM stays guarded by the lazy load. Rollout + build record: `plans/auto_docs_rag_deployment_runbook.md`, `plans/auto_docs_rag_implementation.md`.
+
 ### 16.13 Architectural rules for autobot changes
 
 When touching autobot code, preserve:
@@ -843,6 +870,7 @@ When touching autobot code, preserve:
 - Allow execution mode for shared/admin-key users — the BYO gate is enforced in `chat.py::_execution_mode_blocked` and must not be bypassed.
 - Let a password value reach the model — `mask_password_params()` in L1, input drop in L2, and Django drop in L3 are all required.
 - Change the `is_byo` flag's meaning — the dashboard depends on it to split admin vs BYO tokens after the fact (provider names overlap).
+- **Docs path (Pillar A):** advertise/dispatch any tool other than `search_docs`, use BYO or a JWT, trust `session_id` as anything but a clamped Redis key, or send a Django call with neither `jwt` nor `internal_secret` (the `DjangoClient` fail-closed guard must stay).
 
 ### Do
 - Add new tools by creating a module under `autobot/tools/`, registering via `tool_registry.register(...)`, and importing it (side-effect) in `tools/__init__.py`.
