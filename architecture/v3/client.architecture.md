@@ -81,7 +81,7 @@ flowchart TD
     ES -.->|"events → UI"| SPA
     SPA -->|"fetch SSE /api/ai/chat/"| AutobotES
     AutobotES -.->|"token events"| SPA
-    SecretFetch -->|"POST /intents/<id>/fulfill/<br/>Bearer JWT<br/>(password in body — TLS only)"]| Backend
+    SecretFetch -->|"POST /intents/<id>/fulfill/<br/>Bearer JWT<br/>(password in body — TLS only)"| Backend
     SPA -.->|"open docs link<br/>window.open / anchor"| DocsSite
 ```
 

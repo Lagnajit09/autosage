@@ -461,28 +461,28 @@ flowchart TD
     DocsUser -->|"GET /docs"| DocsWidget
 
     %% ── Docs widget → OCI (new in v3, Pillar A) ─────────────────────────
-    DocsWidget -->|"POST /api/ai/docs/chat/stream/<br/>no auth · IP-throttled<br/>session-id in body"]| Nginx
+    DocsWidget -->|"POST /api/ai/docs/chat/stream/<br/>no auth · IP-throttled<br/>session-id in body"| Nginx
 
     %% ── nginx routing ────────────────────────────────────────────────────
     Nginx -->|"/api/* → django:8000<br/>X-Forwarded-Proto:https"| Django
     Nginx -->|"/api/ai/* → autobot:8030<br/>(strips /api/ai prefix)"| Autobot
 
     %% ── Autobot → Django: two auth modes ────────────────────────────────
-    Autobot -->|"Bearer JWT forwarded<br/>CRUD + run + rerun endpoints<br/>(all tool calls except docs search)"]| Django
-    Autobot -->|"X-Internal-Secret header<br/>POST /api/autobot/docs/search/<br/>(no user token — public path)"]| Django
+    Autobot -->|"Bearer JWT forwarded<br/>CRUD + run + rerun endpoints<br/>(all tool calls except docs search)"| Django
+    Autobot -->|"X-Internal-Secret header<br/>POST /api/autobot/docs/search/<br/>(no user token — public path)"| Django
 
     %% ── Django data plane ────────────────────────────────────────────────
-    Django <-->|"ORM  conn_max_age 600s<br/>+ pgvector cosine search<br/>(DocChunk top-k)"]| Supabase
-    Django <-->|"Celery enqueue<br/>+ PUBLISH workflow_run:{id}:logs"]| LocalRedis
-    Django <-->|"download scripts<br/>upload logs"]| GCS_D
+    Django <-->|"ORM  conn_max_age 600s<br/>+ pgvector cosine search<br/>(DocChunk top-k)"| Supabase
+    Django <-->|"Celery enqueue<br/>+ PUBLISH workflow_run:{id}:logs"| LocalRedis
+    Django <-->|"download scripts<br/>upload logs"| GCS_D
 
     %% ── Autobot ↔ Redis (ctx, quotas, docs sessions) ────────────────────
-    Autobot <-->|"DB/2: thread ctx · exec quota<br/>admin quota · docs anon sessions"]| LocalRedis
+    Autobot <-->|"DB/2: thread ctx · exec quota<br/>admin quota · docs anon sessions"| LocalRedis
 
     %% ── Celery workers ────────────────────────────────────────────────────
     CeleryW <-->|"BRPOP celery queue"| LocalRedis
     SchedW  <-->|"BRPOP scheduler queue"| LocalRedis
-    Beat    -->|"RPUSH scheduler queue<br/>fire_scheduled_workflow"]| LocalRedis
+    Beat    -->|"RPUSH scheduler queue<br/>fire_scheduled_workflow"| LocalRedis
     Beat    -->|"read PeriodicTask rows"| Supabase
 
     %% ── Auth verify ──────────────────────────────────────────────────────
@@ -490,8 +490,8 @@ flowchart TD
     Autobot -.->|"JWKS verify (1h cache)"| ClerkSvc
 
     %% ── Execution dispatch ───────────────────────────────────────────────
-    Django  -->|"8. streaming POST /api/worker/execute<br/>X-API-Key + OIDC bearer"]| ExecWorker
-    CeleryW -->|"same path as Django<br/>X-API-Key + OIDC bearer"]| ExecWorker
+    Django  -->|"8. streaming POST /api/worker/execute<br/>X-API-Key + OIDC bearer"| ExecWorker
+    CeleryW -->|"same path as Django<br/>X-API-Key + OIDC bearer"| ExecWorker
 
     %% ── Exec-worker internals ────────────────────────────────────────────
     ExecWorker -->|"SSH / WinRM"| TargetVM
