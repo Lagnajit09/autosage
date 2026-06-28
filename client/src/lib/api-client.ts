@@ -4,6 +4,8 @@ export const API_BASE_URL =
   import.meta.env.VITE_API_URL || "http://localhost:8000";
 export const AI_API_BASE_URL =
   import.meta.env.VITE_AI_API_URL || "http://localhost:3001";
+export const DOCS_BASE_URL =
+  import.meta.env.VITE_DOCS_URL || "http://localhost:3000";
 
 export const apiRequest = async (
   endpoint: string,

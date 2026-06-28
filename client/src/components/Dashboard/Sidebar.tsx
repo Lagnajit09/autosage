@@ -8,10 +8,12 @@ import {
   Plus,
   ListPlus,
   FileClock,
+  BookText,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useNavigate, useLocation } from "react-router-dom";
 import { AutobotIcon } from "../AutobotIcon";
+import { DOCS_BASE_URL } from "@/lib/api-client";
 import {
   Sidebar,
   SidebarContent,
@@ -85,13 +87,23 @@ export const DashboardSidebar = () => {
         </SidebarMenu>
       </SidebarContent>
 
-      <div className="mt-4 mb-2 px-2">
+      <div className="mt-4 mb-2 px-2 flex flex-col gap-2">
         <Button
           onClick={() => navigate("/workflow/new")}
           className="w-full bg-gray-800 hover:bg-gray-800/90 text-primary-foreground"
         >
           <Plus className="w-4 h-4 mr-2" />
           New Workflow
+        </Button>
+        <Button
+          variant="outline"
+          asChild
+          className="w-full border-2 border-[#a768d0]/50 text-[#7429a7] bg-transparent hover:bg-[#a768d0]/10 dark:border-[#a768d0]/50 dark:text-[#d4b0eb] dark:bg-transparent dark:hover:bg-[#a768d0]/20 dark:hover:text-[#e8ccf5]"
+        >
+          <a href={DOCS_BASE_URL} target="_blank" rel="noopener noreferrer">
+            <BookText className="w-4 h-4 mr-2" />
+            Documentation
+          </a>
         </Button>
       </div>
       <SidebarFooter className="border-t border-sidebar-border p-4">

@@ -26,6 +26,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import {
+  BookText,
   File,
   FilePlus,
   Folder,
@@ -41,6 +42,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScriptFile } from "@/utils/types";
+import { DOCS_BASE_URL } from "@/lib/api-client";
 
 interface FileExplorerSidebarProps {
   files: ScriptFile[];
@@ -323,7 +325,7 @@ export const FileExplorerSidebar: React.FC<FileExplorerSidebarProps> = ({
                 !isLoadingScripts &&
                 !isCreatingFile &&
                 state === "expanded" && (
-                  <div className="px-4 py-8 text-center">
+                  <div className="px-4 py-8 text-center space-y-2">
                     <p className="text-xs text-muted-foreground mb-2">
                       No files found
                     </p>
@@ -334,6 +336,21 @@ export const FileExplorerSidebar: React.FC<FileExplorerSidebarProps> = ({
                       className="w-full dark:bg-gray-950 dark:border-gray-950 dark:hover:bg-gray-950/50 dark:hover:text-gray-100"
                     >
                       Create File
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      asChild
+                      className="w-full text-[#7429a7] dark:text-[#d4b0eb] hover:bg-[#a768d0]/10"
+                    >
+                      <a
+                        href={DOCS_BASE_URL}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        <BookText className="mr-2 h-3.5 w-3.5" />
+                        Read Docs
+                      </a>
                     </Button>
                   </div>
                 )}

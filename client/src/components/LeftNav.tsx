@@ -4,6 +4,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import {
+  BookText,
   CodeXml,
   FileClock,
   Home,
@@ -21,6 +22,7 @@ import { useTheme } from "@/contexts/theme/theme-context";
 import { useNavigate } from "react-router-dom";
 import { AutobotIcon } from "./AutobotIcon";
 import { cn } from "@/lib/utils";
+import { DOCS_BASE_URL } from "@/lib/api-client";
 
 export const NavItems = ({ mobile = false }: { mobile?: boolean }) => {
   const { isDark, toggleTheme } = useTheme();
@@ -71,6 +73,13 @@ export const NavItems = ({ mobile = false }: { mobile?: boolean }) => {
   ];
 
   const bottomItems = [
+    {
+      icon: (
+        <BookText className={cn("w-6 h-6", mobile ? "w-5 h-5 mr-2" : "")} />
+      ),
+      label: "Documentation",
+      onClick: () => window.open(DOCS_BASE_URL, "_blank", "noopener,noreferrer"),
+    },
     {
       icon: isDark ? (
         <Sun

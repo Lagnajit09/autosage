@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { Plus, Loader2 } from "lucide-react";
+import { Plus, Loader2, BookText } from "lucide-react";
 import { DashboardSidebar } from "@/components/Dashboard/Sidebar";
 import TopNav from "@/components/Dashboard/TopNav";
 import { SidebarProvider } from "@/components/ui/sidebar";
@@ -18,7 +18,7 @@ import {
 } from "@/components/Dashboard/RecentActions";
 import { useAuth, useUser } from "@clerk/clerk-react";
 import { motion, AnimatePresence } from "framer-motion";
-import { apiRequest } from "@/lib/api-client";
+import { apiRequest, DOCS_BASE_URL } from "@/lib/api-client";
 
 const Dashboard = () => {
   const { getToken, isSignedIn } = useAuth();
@@ -283,14 +283,31 @@ const Dashboard = () => {
                           workflow.
                         </p>
                       </div>
-                      <Button
-                        size="lg"
-                        className="bg-blue-600 hover:bg-blue-700 text-white gap-2"
-                        onClick={() => navigate("/workflow")}
-                      >
-                        <Plus className="w-5 h-5" />
-                        Start Building Your First Workflow
-                      </Button>
+                      <div className="flex flex-col sm:flex-row gap-3">
+                        <Button
+                          size="lg"
+                          className="bg-blue-600 hover:bg-blue-700 text-white gap-2"
+                          onClick={() => navigate("/workflow")}
+                        >
+                          <Plus className="w-5 h-5" />
+                          Build Your First Workflow
+                        </Button>
+                        <Button
+                          size="lg"
+                          variant="outline"
+                          className="border-2 gap-2"
+                          asChild
+                        >
+                          <a
+                            href={DOCS_BASE_URL}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                          >
+                            <BookText className="w-5 h-5" />
+                            Read Docs
+                          </a>
+                        </Button>
+                      </div>
                     </div>
                   ) : (
                     <div className="lg:col-span-3 space-y-8">
