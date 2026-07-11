@@ -92,6 +92,7 @@ INSTALLED_APPS = [
     'execution_engine.apps.ExecutionEngineConfig',
     'triggers.apps.TriggersConfig',
     'autobot_api.apps.AutobotApiConfig',
+    'users.apps.UsersConfig',
 ]
 
 REST_FRAMEWORK = {

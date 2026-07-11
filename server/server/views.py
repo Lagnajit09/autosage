@@ -1,6 +1,5 @@
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
-from rest_framework.response import Response
 from rest_framework import status
 import logging
 
@@ -23,47 +22,6 @@ def format_duration(duration_delta):
     hours = minutes / 60
     return f"{hours:.1f}h"
 
-@api_view(['POST'])
-@permission_classes([IsAuthenticated])
-def update_user(request):
-    """
-    Update the current authenticated user's profile information.
-    Expected payload: { first_name?: string, last_name?: string, email?: string }
-    """
-    user = request.user
-    data = request.data
-
-    first_name = data.get('first_name')
-    last_name = data.get('last_name')
-    email = data.get('email')
-
-    updated_fields = []
-
-    if first_name is not None:
-        user.first_name = first_name
-        updated_fields.append('first_name')
-    
-    if last_name is not None:
-        user.last_name = last_name
-        updated_fields.append('last_name')
-    
-    if email is not None:
-        user.email = email
-        updated_fields.append('email')
-
-    if updated_fields:
-        user.save(update_fields=updated_fields)
-        logger.info(f"User {user.username} updated fields: {', '.join(updated_fields)}")
-        return Response({
-            "message": "User updated successfully",
-            "updated_fields": updated_fields
-        }, status=status.HTTP_200_OK)
-    
-    return Response({
-        "message": "No fields provided to update"
-    }, status=status.HTTP_400_BAD_REQUEST)
-
-
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def dashboard_summary(request):
@@ -71,9 +29,9 @@ def dashboard_summary(request):
     Get the total workflows, scripts, and executions (both script executions and workflow runs)
     owned by the current authenticated user, and retrieve the 3 most recent records of each.
     """
-    from django.db.models import Q
+    from django.db.models import Count, Q
     from django.utils import timezone
-    
+
     user = request.user
     now = timezone.now()
     start_of_month = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
@@ -128,7 +86,41 @@ def dashboard_summary(request):
             'date': sc.updated_at.isoformat(),
         })
 
-    # 4. Recent 3 Executions (by created_at)
+    # 4. Failure counts and success rate
+    script_execs_failed = ScriptExecution.objects.filter(
+        user=user, status__in=['failed', 'cancelled']
+    ).count()
+    workflow_runs_failed = WorkflowRun.objects.filter(
+        user=user, status__in=['failed', 'cancelled']
+    ).count()
+    total_failed = script_execs_failed + workflow_runs_failed
+    success_rate = round(
+        ((total_executions - total_failed) / total_executions * 100), 1
+    ) if total_executions > 0 else 100.0
+
+    # 5. Top workflows by run count (up to 5)
+    top_workflows_qs = (
+        WorkflowRun.objects.filter(user=user)
+        .values('workflow_id', 'workflow__name')
+        .annotate(
+            run_count=Count('id'),
+            success_count=Count('id', filter=Q(status='success')),
+        )
+        .order_by('-run_count')[:3]
+    )
+    top_workflows = [
+        {
+            'id': str(item['workflow_id']),
+            'name': item['workflow__name'] or 'Unnamed Workflow',
+            'executions': item['run_count'],
+            'successRate': round(
+                (item['success_count'] / item['run_count']) * 100
+            ) if item['run_count'] > 0 else 0,
+        }
+        for item in top_workflows_qs
+    ]
+
+    # 6. Recent 3 Executions (by created_at)
     latest_script_execs = ScriptExecution.objects.filter(user=user).order_by('-created_at')[:3]
     latest_workflow_runs = WorkflowRun.objects.filter(user=user).order_by('-created_at')[:3]
 
@@ -166,10 +158,12 @@ def dashboard_summary(request):
             'scripts_current_month': scripts_current_month,
             'executions': total_executions,
             'executions_current_month': executions_current_month,
+            'success_rate': success_rate,
         },
         'recentWorkflows': recent_workflows,
         'recentScripts': recent_scripts,
         'recentExecutions': recent_executions,
+        'topWorkflows': top_workflows,
     }
 
     return api_response(

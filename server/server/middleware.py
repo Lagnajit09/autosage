@@ -77,8 +77,11 @@ class ClerkAuthMiddleware:
                     # 'last_name': last_name,
                 }
             )
-            
-            request.user = user
+
+            if not user.is_active:
+                request.user = AnonymousUser()
+            else:
+                request.user = user
 
         except Exception as e:
             print(f"Auth Error: {e}")
