@@ -5,3 +5,5 @@ export { MostUsedWorkflows } from "./MostUsedWorkflows";
 export { PlanSubscription } from "./PlanSubscription";
 export { QuickLinks } from "./QuickLinks";
 export { EditProfileModal } from "./EditProfileModal";
+export { AutobotInsights } from "./AutobotInsights";
+export { DangerZone } from "./DangerZone";

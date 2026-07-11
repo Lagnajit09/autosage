@@ -76,7 +76,7 @@ const Dashboard = () => {
             const token = await getToken();
             if (token) {
               await apiRequest(
-                "/api/user/update/",
+                "/api/users/update/",
                 {
                   method: "POST",
                   body: JSON.stringify({

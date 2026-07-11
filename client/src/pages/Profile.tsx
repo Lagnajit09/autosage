@@ -1,3 +1,5 @@
+import { useEffect, useState, useCallback } from "react";
+import { useUser, useAuth } from "@clerk/clerk-react";
 import LeftNav, { NavItems } from "@/components/LeftNav";
 import { SidebarProvider } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
@@ -16,65 +18,71 @@ import {
   MostUsedWorkflows,
   PlanSubscription,
   QuickLinks,
+  AutobotInsights,
+  DangerZone,
 } from "@/components/profile";
+import { getDashboardStats, getUserProfile } from "@/lib/api/user";
+import { getSettings, getDashboard, listLLMConfigs } from "@/lib/api/autobot";
+import type { DashboardData, UserProfile } from "@/lib/api/user";
+import type { UserSettings, AutobotDashboardData, LLMConfig } from "@/lib/api/autobot";
+
+const planFeatures = [
+  "Unlimited workflows",
+  "Unlimited script executions",
+  "Autobot AI assistant",
+  "Vault credential management",
+  "Scheduled & HTTP triggers",
+];
 
 const Profile = () => {
-  // Mock User Data
-  const user = {
-    name: "John Doe",
-    email: "john.doe@example.com",
-    joinDate: "January 15, 2024",
-    plan: "Pro Plan",
-    planStatus: "Active",
-    nextBilling: "December 25, 2025",
-    avatar: "JD",
-  };
+  const { user, isLoaded: clerkLoaded } = useUser();
+  const { getToken } = useAuth();
 
-  // Mock Statistics
-  const stats = {
-    workflows: { total: 12, trend: "+2 this week" },
-    scripts: { total: 45, trend: "+5 new scripts" },
-    executions: { total: 128, trend: "+12% this month" },
-    successRate: 94.5,
-  };
+  const [dashboard, setDashboard] = useState<DashboardData | null>(null);
+  const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
+  const [autobotSettings, setAutobotSettings] = useState<UserSettings | null>(null);
+  const [autobotDashboard, setAutobotDashboard] = useState<AutobotDashboardData | null>(null);
+  const [llmConfigs, setLlmConfigs] = useState<LLMConfig[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
 
-  // Mock Recent Activity
-  const recentActivity = [
-    {
-      action: "Created workflow",
-      name: "Data Scraper Pro",
-      time: "2 hours ago",
-      status: "success" as const,
-    },
-    {
-      action: "Executed script",
-      name: "Email Automator",
-      time: "5 hours ago",
-      status: "success" as const,
-    },
-    {
-      action: "Execution failed",
-      name: "Backup DB",
-      time: "2 days ago",
-      status: "failed" as const,
-    },
-  ];
+  const fetchAll = useCallback(async () => {
+    const token = await getToken();
+    if (!token) return;
+    setIsLoading(true);
+    try {
+      const [dash, profile, abSettings, abDash, configs] = await Promise.all([
+        getDashboardStats(token),
+        getUserProfile(token),
+        getSettings(token),
+        getDashboard(token),
+        listLLMConfigs(token),
+      ]);
+      setDashboard(dash);
+      setUserProfile(profile);
+      setAutobotSettings(abSettings);
+      setAutobotDashboard(abDash);
+      setLlmConfigs(configs);
+    } catch {
+      // individual components fall back to empty/zero states
+    } finally {
+      setIsLoading(false);
+    }
+  }, [getToken]);
 
-  // Mock Most Used Workflows
-  const mostUsedWorkflows = [
-    { name: "Data Scraper Pro", executions: 45, successRate: 98 },
-    { name: "Email Automator", executions: 32, successRate: 95 },
-    { name: "Report Generator", executions: 28, successRate: 92 },
-  ];
+  useEffect(() => {
+    if (clerkLoaded) fetchAll();
+  }, [clerkLoaded, fetchAll]);
 
-  // Plan Features
-  const planFeatures = [
-    "Unlimited workflows",
-    "Advanced AI features",
-    "Priority support",
-    "Custom integrations",
-    "Team collaboration",
-  ];
+  const handleProfileUpdate = useCallback(async () => {
+    const token = await getToken();
+    if (!token) return;
+    try {
+      const profile = await getUserProfile(token);
+      setUserProfile(profile);
+    } catch {
+      // silent
+    }
+  }, [getToken]);
 
   return (
     <SidebarProvider>
@@ -87,7 +95,6 @@ const Profile = () => {
               {/* Header */}
               <div className="flex flex-col gap-4">
                 <div className="flex items-center gap-3">
-                  {/* Mobile Menu */}
                   <div className="md:hidden">
                     <Sheet>
                       <SheetTrigger asChild>
@@ -99,7 +106,6 @@ const Profile = () => {
                           <Menu className="h-6 w-6 text-gray-800 dark:text-gray-200" />
                         </Button>
                       </SheetTrigger>
-
                       <SheetContent
                         side="left"
                         className="w-[250px] sm:w-[300px] bg-gray-100 dark:bg-gray-900 dark:border-gray-800"
@@ -142,23 +148,63 @@ const Profile = () => {
 
               <Separator className="bg-gray-200 dark:bg-gray-800" />
 
-              {/* User Information Section */}
-              <UserInfo user={user} />
+              {/* User Information */}
+              <UserInfo
+                name={user?.fullName ?? user?.firstName ?? ""}
+                email={user?.primaryEmailAddress?.emailAddress ?? ""}
+                avatarUrl={user?.imageUrl ?? null}
+                joinDate={
+                  user?.createdAt
+                    ? user.createdAt.toLocaleDateString("en-US", {
+                        year: "numeric",
+                        month: "long",
+                        day: "numeric",
+                      })
+                    : ""
+                }
+                bio={userProfile?.bio ?? ""}
+                isLoading={!clerkLoaded}
+                onProfileUpdated={handleProfileUpdate}
+              />
 
               {/* Statistics Overview */}
-              <StatsOverview stats={stats} />
+              <StatsOverview
+                stats={dashboard?.stats ?? null}
+                isLoading={isLoading}
+              />
 
               {/* Activity & Usage Section */}
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <RecentActivity activities={recentActivity} />
-                <MostUsedWorkflows workflows={mostUsedWorkflows} />
+                <RecentActivity
+                  recentExecutions={dashboard?.recentExecutions ?? []}
+                  isLoading={isLoading}
+                />
+                <MostUsedWorkflows
+                  workflows={dashboard?.topWorkflows ?? []}
+                  isLoading={isLoading}
+                />
               </div>
 
-              {/* Plan & Subscription Section */}
-              <PlanSubscription user={user} planFeatures={planFeatures} />
+              {/* Autobot AI Insights */}
+              <AutobotInsights
+                settings={autobotSettings}
+                llmConfigs={llmConfigs}
+                todayStats={autobotDashboard?.today ?? null}
+                isLoading={isLoading}
+              />
+
+              {/* Plan & Subscription */}
+              <PlanSubscription
+                stats={dashboard?.stats ?? null}
+                planFeatures={planFeatures}
+                isLoading={isLoading}
+              />
 
               {/* Quick Links */}
               <QuickLinks />
+
+              {/* Danger Zone */}
+              <DangerZone />
             </div>
           </main>
         </div>

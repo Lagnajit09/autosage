@@ -4,21 +4,23 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Crown, CreditCard, CheckCircle2 } from "lucide-react";
+import type { DashboardStats } from "@/lib/api/user";
 
 interface PlanSubscriptionProps {
-  user: {
-    plan: string;
-    planStatus: string;
-    nextBilling: string;
-  };
+  stats: DashboardStats | null;
   planFeatures: string[];
+  isLoading?: boolean;
 }
 
 export const PlanSubscription = ({
-  user,
+  stats,
   planFeatures,
+  isLoading = false,
 }: PlanSubscriptionProps) => {
   const navigate = useNavigate();
+
+  const workflows = stats?.workflows ?? 0;
+  const executions = stats?.executions_current_month ?? 0;
 
   return (
     <section className="space-y-4">
@@ -37,10 +39,10 @@ export const PlanSubscription = ({
                 <div>
                   <h3 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
                     <Crown className="w-6 h-6 text-yellow-500" />
-                    {user.plan}
+                    Free Plan
                   </h3>
                   <Badge className="mt-2 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 border-green-200 dark:border-green-800">
-                    {user.planStatus}
+                    Active
                   </Badge>
                 </div>
               </div>
@@ -48,7 +50,7 @@ export const PlanSubscription = ({
               <div className="space-y-2">
                 <p className="text-sm text-gray-600 dark:text-gray-300 flex items-center gap-2">
                   <CreditCard className="w-4 h-4" />
-                  Next billing: {user.nextBilling}
+                  Subscription management coming soon
                 </p>
               </div>
 
@@ -64,7 +66,7 @@ export const PlanSubscription = ({
                       key={index}
                       className="text-sm text-gray-600 dark:text-gray-300 flex items-center gap-2"
                     >
-                      <CheckCircle2 className="w-4 h-4 text-green-500 dark:text-green-400" />
+                      <CheckCircle2 className="w-4 h-4 text-green-500 dark:text-green-400 shrink-0" />
                       {feature}
                     </li>
                   ))}
@@ -72,60 +74,67 @@ export const PlanSubscription = ({
               </div>
             </div>
 
-            {/* Usage Limits */}
+            {/* Usage */}
             <div className="flex-1 space-y-4">
               <h4 className="text-lg font-semibold text-gray-900 dark:text-white">
-                Usage & Limits
+                Your Usage
               </h4>
-              <div className="space-y-3">
-                <div>
-                  <div className="flex justify-between text-sm mb-1">
-                    <span className="text-gray-600 dark:text-gray-300">
-                      Workflows
-                    </span>
-                    <span className="text-gray-900 dark:text-white font-medium">
-                      12 / Unlimited
-                    </span>
-                  </div>
-                  <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
-                    <div className="bg-gradient-to-r from-purple-600 to-blue-600 h-2 rounded-full w-[12%]" />
-                  </div>
+              {isLoading ? (
+                <div className="space-y-4 animate-pulse">
+                  {[1, 2].map((i) => (
+                    <div key={i} className="space-y-1.5">
+                      <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-full" />
+                      <div className="h-2 bg-gray-200 dark:bg-gray-700 rounded-full w-full" />
+                    </div>
+                  ))}
                 </div>
+              ) : (
+                <div className="space-y-3">
+                  <div>
+                    <div className="flex justify-between text-sm mb-1">
+                      <span className="text-gray-600 dark:text-gray-300">
+                        Workflows
+                      </span>
+                      <span className="text-gray-900 dark:text-white font-medium">
+                        {workflows} / Unlimited
+                      </span>
+                    </div>
+                    <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                      <div
+                        className="bg-gradient-to-r from-purple-600 to-blue-600 h-2 rounded-full"
+                        style={{
+                          width: `${Math.min((workflows / 50) * 100, 100)}%`,
+                        }}
+                      />
+                    </div>
+                  </div>
 
-                <div>
-                  <div className="flex justify-between text-sm mb-1">
-                    <span className="text-gray-600 dark:text-gray-300">
-                      Executions (Monthly)
-                    </span>
-                    <span className="text-gray-900 dark:text-white font-medium">
-                      128 / Unlimited
-                    </span>
-                  </div>
-                  <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
-                    <div className="bg-gradient-to-r from-purple-600 to-blue-600 h-2 rounded-full w-[25%]" />
-                  </div>
-                </div>
-
-                <div>
-                  <div className="flex justify-between text-sm mb-1">
-                    <span className="text-gray-600 dark:text-gray-300">
-                      API Calls (Monthly)
-                    </span>
-                    <span className="text-gray-900 dark:text-white font-medium">
-                      2,450 / 10,000
-                    </span>
-                  </div>
-                  <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
-                    <div className="bg-gradient-to-r from-purple-600 to-blue-600 h-2 rounded-full w-[24.5%]" />
+                  <div>
+                    <div className="flex justify-between text-sm mb-1">
+                      <span className="text-gray-600 dark:text-gray-300">
+                        Executions (This Month)
+                      </span>
+                      <span className="text-gray-900 dark:text-white font-medium">
+                        {executions} / Unlimited
+                      </span>
+                    </div>
+                    <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                      <div
+                        className="bg-gradient-to-r from-purple-600 to-blue-600 h-2 rounded-full"
+                        style={{
+                          width: `${Math.min((executions / 500) * 100, 100)}%`,
+                        }}
+                      />
+                    </div>
                   </div>
                 </div>
-              </div>
+              )}
 
               <Button
                 onClick={() => navigate("/billing")}
                 className="w-full bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white border-none mt-4"
               >
-                Manage Subscription
+                View Billing
               </Button>
             </div>
           </div>

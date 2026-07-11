@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useUser, useAuth } from "@clerk/clerk-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -9,69 +10,88 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { User, Mail } from "lucide-react";
+import { User, FileText } from "lucide-react";
+import { updateUserProfile } from "@/lib/api/user";
 
 interface EditProfileModalProps {
   isOpen: boolean;
   onClose: () => void;
-  user: {
-    name: string;
-    email: string;
-    avatar: string;
-  };
-  onSave: (updatedUser: { name: string; email: string }) => void;
+  initialName: string;
+  initialBio: string;
+  onSaved: () => void;
 }
 
 export const EditProfileModal = ({
   isOpen,
   onClose,
-  user,
-  onSave,
+  initialName,
+  initialBio,
+  onSaved,
 }: EditProfileModalProps) => {
-  const [name, setName] = useState(user.name);
-  const [email, setEmail] = useState(user.email);
-  const [isLoading, setIsLoading] = useState(false);
+  const { user } = useUser();
+  const { getToken } = useAuth();
 
-  // Reset form when user prop changes or modal opens
+  const [name, setName] = useState(initialName);
+  const [bio, setBio] = useState(initialBio);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
   useEffect(() => {
     if (isOpen) {
-      setName(user.name);
-      setEmail(user.email);
+      setName(initialName);
+      setBio(initialBio);
+      setError(null);
     }
-  }, [user, isOpen]);
+  }, [isOpen, initialName, initialBio]);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!user) return;
     setIsLoading(true);
+    setError(null);
 
-    // Simulate API call
-    setTimeout(() => {
-      onSave({ name, email });
+    try {
+      const nameParts = name.trim().split(/\s+/);
+      const firstName = nameParts[0] ?? "";
+      const lastName = nameParts.slice(1).join(" ");
+
+      const token = await getToken();
+
+      await Promise.all([
+        user.update({ firstName, lastName }),
+        token
+          ? updateUserProfile({ bio: bio.trim() }, token)
+          : Promise.resolve(),
+      ]);
+
+      onSaved();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to save changes.");
+    } finally {
       setIsLoading(false);
-      onClose();
-    }, 1000);
+    }
   };
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-[425px] bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800">
+      <DialogContent className="sm:max-w-[460px] bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800">
         <DialogHeader>
           <DialogTitle className="text-xl font-semibold text-gray-900 dark:text-white">
             Edit Profile
           </DialogTitle>
           <DialogDescription className="text-gray-500 dark:text-gray-400">
-            Make changes to your profile here. Click save when you're done.
+            Update your display name and bio.
           </DialogDescription>
         </DialogHeader>
+
         <form onSubmit={handleSubmit}>
-          <div className="grid gap-6 py-4">
+          <div className="grid gap-5 py-4">
+            {/* Display Name */}
             <div className="grid gap-2">
-              <Label
-                htmlFor="name"
-                className="text-gray-700 dark:text-gray-300"
-              >
-                Name
+              <Label htmlFor="name" className="text-gray-700 dark:text-gray-300">
+                Display Name
               </Label>
               <div className="relative">
                 <User className="absolute left-3 top-2.5 h-4 w-4 text-gray-500 dark:text-gray-400" />
@@ -79,31 +99,37 @@ export const EditProfileModal = ({
                   id="name"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  className="pl-9 bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-900 dark:text-white focus:ring-purple-500 dark:focus:ring-purple-400"
-                  placeholder="Your name"
+                  className="pl-9 bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-900 dark:text-white focus:ring-purple-500"
+                  placeholder="Your full name"
                 />
               </div>
             </div>
+
+            {/* Bio */}
             <div className="grid gap-2">
-              <Label
-                htmlFor="email"
-                className="text-gray-700 dark:text-gray-300"
-              >
-                Email
+              <Label htmlFor="bio" className="text-gray-700 dark:text-gray-300">
+                Bio{" "}
+                <span className="text-xs text-gray-400">
+                  ({bio.length}/500)
+                </span>
               </Label>
               <div className="relative">
-                <Mail className="absolute left-3 top-2.5 h-4 w-4 text-gray-500 dark:text-gray-400" />
-                <Input
-                  id="email"
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="pl-9 bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-900 dark:text-white focus:ring-purple-500 dark:focus:ring-purple-400"
-                  placeholder="Your email"
+                <FileText className="absolute left-3 top-2.5 h-4 w-4 text-gray-500 dark:text-gray-400" />
+                <Textarea
+                  id="bio"
+                  value={bio}
+                  onChange={(e) => setBio(e.target.value.slice(0, 500))}
+                  className="pl-9 bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-900 dark:text-white focus:ring-purple-500 resize-none min-h-[80px]"
+                  placeholder="A short bio about yourself"
                 />
               </div>
             </div>
+
+            {error && (
+              <p className="text-sm text-red-500 dark:text-red-400">{error}</p>
+            )}
           </div>
+
           <DialogFooter>
             <Button
               type="button"
@@ -116,7 +142,7 @@ export const EditProfileModal = ({
             <Button
               type="submit"
               disabled={isLoading}
-              className="bg-purple-600 hover:bg-purple-700 text-white dark:bg-purple-600 dark:hover:bg-purple-700"
+              className="bg-purple-600 hover:bg-purple-700 text-white"
             >
               {isLoading ? "Saving..." : "Save changes"}
             </Button>
