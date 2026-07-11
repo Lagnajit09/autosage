@@ -361,6 +361,10 @@ EMAIL_HOST_USER = GMAIL_USERNAME
 EMAIL_HOST_PASSWORD = GMAIL_APP_PASSWORD
 DEFAULT_FROM_EMAIL = GMAIL_USERNAME or 'noreply@autosage.local'
 
+# Admin inbox for account-management notifications (e.g. reactivation requests
+# from deactivated users). Defaults to the project support mailbox.
+ADMIN_NOTIFICATION_EMAIL = config('ADMIN_NOTIFICATION_EMAIL', default='autosagex@gmail.com')
+
 # Public frontend base URL for email deep-links. The notification email's
 # "View execution" link is built against this. Falls back to the first
 # CORS-allowed origin so DEV setups still produce a clickable link.

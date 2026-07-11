@@ -88,6 +88,9 @@ export function VerifyEmail({
             title: "Welcome back!",
             description: "Successfully signed in.",
           });
+          // ProtectedRoute gates on the Django account status and redirects
+          // deactivated users to the reactivation page, so we can route into
+          // the app normally here regardless of sign-in method.
           onSuccess();
         } else {
           console.log("Sign in status:", result.status);

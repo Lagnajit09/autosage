@@ -31,6 +31,7 @@ import { ClerkProvider } from "@clerk/clerk-react";
 import PublicRoute from "./components/auth/PublicRoute";
 import LimitExceed from "./pages/LimitExceed";
 import ExecutionLogs from "./pages/ExecutionLogs";
+import AccountReactivationRequest from "./pages/AccountReactivationRequest";
 
 const queryClient = new QueryClient();
 
@@ -107,6 +108,10 @@ const App = () => {
                     <Route path="/profile" element={<Profile />} />
                     <Route path="/plans" element={<Plans />} />
                     <Route path="/billing" element={<Billing />} />
+                    <Route
+                      path="/account-activation-request"
+                      element={<AccountReactivationRequest />}
+                    />
                   </Route>
 
                   {/* Public Routes - redirect to dashboard if authenticated */}

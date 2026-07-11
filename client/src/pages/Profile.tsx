@@ -24,7 +24,11 @@ import {
 import { getDashboardStats, getUserProfile } from "@/lib/api/user";
 import { getSettings, getDashboard, listLLMConfigs } from "@/lib/api/autobot";
 import type { DashboardData, UserProfile } from "@/lib/api/user";
-import type { UserSettings, AutobotDashboardData, LLMConfig } from "@/lib/api/autobot";
+import type {
+  UserSettings,
+  AutobotDashboardData,
+  LLMConfig,
+} from "@/lib/api/autobot";
 
 const planFeatures = [
   "Unlimited workflows",
@@ -40,8 +44,11 @@ const Profile = () => {
 
   const [dashboard, setDashboard] = useState<DashboardData | null>(null);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
-  const [autobotSettings, setAutobotSettings] = useState<UserSettings | null>(null);
-  const [autobotDashboard, setAutobotDashboard] = useState<AutobotDashboardData | null>(null);
+  const [autobotSettings, setAutobotSettings] = useState<UserSettings | null>(
+    null,
+  );
+  const [autobotDashboard, setAutobotDashboard] =
+    useState<AutobotDashboardData | null>(null);
   const [llmConfigs, setLlmConfigs] = useState<LLMConfig[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -132,13 +139,20 @@ const Profile = () => {
                     </Sheet>
                   </div>
 
-                  <div>
-                    <h1 className="text-3xl font-bold text-gray-900 dark:text-white tracking-tight">
-                      Profile
-                    </h1>
-                    <p className="text-gray-500 dark:text-gray-400 mt-2 text-lg hidden md:block">
-                      Manage your account and view your activity.
-                    </p>
+                  <div className="flex items-center gap-4">
+                    <img
+                      src="/logo.png"
+                      alt="AutoSage Logo"
+                      className="h-10 md:h-12 w-auto rounded-full object-contain"
+                    />
+                    <div>
+                      <h1 className="text-3xl font-bold text-gray-900 dark:text-white tracking-tight">
+                        Profile
+                      </h1>
+                      <p className="text-gray-500 dark:text-gray-400 mt-2 text-lg hidden md:block">
+                        Manage your account and view your activity.
+                      </p>
+                    </div>
                   </div>
                 </div>
                 <p className="text-gray-500 dark:text-gray-400 text-sm md:hidden">
