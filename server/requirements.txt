@@ -72,3 +72,4 @@ django-celery-beat==2.8.1
 pgvector==0.3.6
 python-frontmatter==1.1.0
 fastembed==0.8.0
+razorpay==2.0.1

@@ -6,6 +6,7 @@ from .models import Vault, Credential, Server
 from .serializers import VaultSerializer, CredentialSerializer, CredentialRevealSerializer, ServerSerializer
 from server.utils import api_response
 from server.rate_limiters import VaultBurstThrottle, VaultSustainedThrottle, VaultCreateThrottle
+from billing.enforcement import check_plan_limit
 
 class VaultListCreateView(generics.ListCreateAPIView):
     """
@@ -22,6 +23,14 @@ class VaultListCreateView(generics.ListCreateAPIView):
     def get_queryset(self):
         return Vault.objects.filter(owner=self.request.user)
 
+    @check_plan_limit(
+        'max_vault_entries',
+        lambda user: (
+            Vault.objects.filter(owner=user).count()
+            + Credential.objects.filter(vault__owner=user).count()
+            + Server.objects.filter(vault__owner=user).count()
+        )
+    )
     def perform_create(self, serializer):
         serializer.save(owner=self.request.user)
 
@@ -98,6 +107,14 @@ class CredentialListCreateView(generics.ListCreateAPIView):
         # Only return credentials if the user owns the vault they belong to
         return Credential.objects.filter(vault__owner=self.request.user)
 
+    @check_plan_limit(
+        'max_vault_entries',
+        lambda user: (
+            Vault.objects.filter(owner=user).count()
+            + Credential.objects.filter(vault__owner=user).count()
+            + Server.objects.filter(vault__owner=user).count()
+        )
+    )
     def perform_create(self, serializer):
         # Validate that the vault belongs to the user
         vault = serializer.validated_data.get('vault')
@@ -217,13 +234,21 @@ class ServerListCreateView(generics.ListCreateAPIView):
         # Only return servers if the user owns the vault they belong to
         return Server.objects.filter(vault__owner=self.request.user)
 
+    @check_plan_limit(
+        'max_vault_entries',
+        lambda user: (
+            Vault.objects.filter(owner=user).count()
+            + Credential.objects.filter(vault__owner=user).count()
+            + Server.objects.filter(vault__owner=user).count()
+        )
+    )
     def perform_create(self, serializer):
         # Validate that the vault belongs to the user
         vault = serializer.validated_data.get('vault')
         if vault.owner != self.request.user:
             from rest_framework.exceptions import PermissionDenied
             raise PermissionDenied("You do not have permission to add servers to this vault.")
-        
+
         # Validate that the credential (if provided) belongs to a vault owned by the user
         # AND belongs to the same vault as the server
         credential = serializer.validated_data.get('credential')
@@ -231,11 +256,11 @@ class ServerListCreateView(generics.ListCreateAPIView):
             if credential.vault.owner != self.request.user:
                 from rest_framework.exceptions import PermissionDenied
                 raise PermissionDenied("The selected credential does not belong to you.")
-            
+
             if credential.vault != vault:
                 from rest_framework.exceptions import ValidationError
                 raise ValidationError({"credential": ["The credential must belong to the same vault as the server."]})
-            
+
         serializer.save()
 
     def list(self, request, *args, **kwargs):

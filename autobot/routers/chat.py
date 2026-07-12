@@ -155,6 +155,46 @@ def _envelope(
     )
 
 
+async def _get_admin_daily_limit(user_sub: str, raw_jwt: str, settings) -> int:
+    """Return the per-plan admin daily limit for a user.
+
+    Hits Django's /api/billing/internal/plan/ endpoint and caches the result
+    in Redis for 1 hour. Falls back to AUTOBOT_ADMIN_DAILY_LIMIT on any error.
+    """
+    import json as _json_mod
+
+    cache_key = f"autobot:billing_plan:{user_sub}"
+    cache = get_cache()
+
+    try:
+        cached = await cache._client.get(cache_key)
+        if cached:
+            data = _json_mod.loads(cached)
+            return int(data.get('admin_daily_limit', settings.AUTOBOT_ADMIN_DAILY_LIMIT))
+    except Exception:
+        pass
+
+    try:
+        client = get_django_client()
+        status_code, body = await client.request(
+            method='GET',
+            path='/api/billing/internal/plan/',
+            internal_secret=settings.AUTOBOT_INTERNAL_SECRET,
+            params={'user_sub': user_sub},
+        )
+        if status_code == 200 and isinstance(body, dict):
+            limit = int(body.get('admin_daily_limit', settings.AUTOBOT_ADMIN_DAILY_LIMIT))
+            try:
+                await cache._client.set(cache_key, _json_mod.dumps(body), ex=3600)
+            except Exception:
+                pass
+            return limit
+    except Exception as e:
+        logger.warning('billing plan lookup failed for %s: %s; using default', user_sub, e)
+
+    return settings.AUTOBOT_ADMIN_DAILY_LIMIT
+
+
 async def _read_message_body(request: Request) -> dict[str, Any]:
     """Validate the inbound JSON body; raise 400 on shape errors."""
     body = await request.body()
@@ -640,24 +680,25 @@ async def post_message_stream(
         # Per-user daily quota — admin only. BYO turns don't count.
         # Ticks once per chat turn regardless of tool-call rounds.
         settings = get_settings()
-        if resolution.is_admin and settings.AUTOBOT_ADMIN_DAILY_LIMIT > 0:
-            allowed, count = await get_cache().incr_admin_quota_for_today(
-                auth_handle.user_sub,
-                settings.AUTOBOT_ADMIN_DAILY_LIMIT,
-            )
-            if not allowed:
-                yield sse_error(
-                    f"You've used your daily allocation of "
-                    f"{settings.AUTOBOT_ADMIN_DAILY_LIMIT} free LLM "
-                    "calls. Add a personal LLM key in Customize to continue.",
-                    code="admin_quota_exhausted",
+        if resolution.is_admin:
+            daily_limit = await _get_admin_daily_limit(auth_handle.user_sub, auth_handle.raw_jwt, settings)
+            if daily_limit > 0:
+                allowed, count = await get_cache().incr_admin_quota_for_today(
+                    auth_handle.user_sub,
+                    daily_limit,
                 )
-                return
-            logger.info(
-                "Admin quota tick: user_sub=%s count=%d/%d",
-                auth_handle.user_sub, count,
-                settings.AUTOBOT_ADMIN_DAILY_LIMIT,
-            )
+                if not allowed:
+                    yield sse_error(
+                        f"You've used your daily allocation of "
+                        f"{daily_limit} free LLM "
+                        "calls. Add a personal LLM key in Customize to continue.",
+                        code="admin_quota_exhausted",
+                    )
+                    return
+                logger.info(
+                    "Admin quota tick: user_sub=%s count=%d/%d",
+                    auth_handle.user_sub, count, daily_limit,
+                )
 
         # Context-window management: load summary → drop messages it
         # covers → precompact tool results → maybe summarize older

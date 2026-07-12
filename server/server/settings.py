@@ -93,6 +93,7 @@ INSTALLED_APPS = [
     'triggers.apps.TriggersConfig',
     'autobot_api.apps.AutobotApiConfig',
     'users.apps.UsersConfig',
+    'billing.apps.BillingConfig',
 ]
 
 REST_FRAMEWORK = {
@@ -372,3 +373,10 @@ FRONTEND_URL = config(
     'FRONTEND_URL',
     default=(CORS_ALLOWED_ORIGINS[0] if CORS_ALLOWED_ORIGINS else 'http://localhost:5173'),
 )
+
+# Razorpay
+RAZORPAY_KEY_ID = config('RAZORPAY_KEY_ID', default='')
+RAZORPAY_KEY_SECRET = config('RAZORPAY_KEY_SECRET', default='')
+RAZORPAY_WEBHOOK_SECRET = config('RAZORPAY_WEBHOOK_SECRET', default='')
+RAZORPAY_PRO_MONTHLY_PLAN_ID = config('RAZORPAY_PRO_MONTHLY_PLAN_ID', default='')
+RAZORPAY_PRO_YEARLY_PLAN_ID = config('RAZORPAY_PRO_YEARLY_PLAN_ID', default='')

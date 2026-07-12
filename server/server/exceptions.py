@@ -13,6 +13,22 @@ def custom_exception_handler(exc, context):
     response = exception_handler(exc, context)
 
     if response is not None:
+        # Plan-limit exceptions carry a structured payload (limit_key, current,
+        # limit, plan, upgrade_required). Surface their human-readable message
+        # at the top level instead of the generic 403 text so the frontend can
+        # show a contextual "upgrade to Pro" prompt.
+        payload = response.data
+        if isinstance(payload, dict) and payload.get("limit_key"):
+            response.data = {
+                "success": False,
+                "status": "error",
+                "status_code": response.status_code,
+                "message": payload.get("detail") or "Plan limit reached. Upgrade to Pro for higher limits.",
+                "data": None,
+                "errors": payload,
+            }
+            return response
+
         # User-friendly message based on status code
         message = "An error occurred during the request."
         if response.status_code == 400:

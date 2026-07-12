@@ -16,6 +16,7 @@ from server.rate_limiters import (
     ExecutionSustainedThrottle,
     HttpTriggerThrottle,
 )
+from billing.limits import get_limits, get_plan
 from workflows.models import Workflow
 from execution_engine.models import (
     WorkflowRun,
@@ -49,6 +50,18 @@ logger = logging.getLogger(__name__)
 @throttle_classes([ExecutionBurstThrottle, ExecutionSustainedThrottle])
 def trigger_workflow_run(request, workflow_id):
     logger.info(f"Triggering workflow run for ID: {workflow_id}")
+
+    if not request.user.is_staff:
+        from django.utils import timezone as tz
+        limits = get_limits(request.user)
+        cap = limits.get('max_workflow_runs_per_month')
+        if cap is not None:
+            month_start = tz.now().replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+            count = WorkflowRun.objects.filter(user=request.user, created_at__gte=month_start).count()
+            if count >= cap:
+                from billing.enforcement import PlanLimitExceeded
+                raise PlanLimitExceeded('max_workflow_runs_per_month', count, cap, get_plan(request.user))
+
     try:
         workflow = Workflow.objects.get(id=workflow_id, user=request.user)
     except Workflow.DoesNotExist:

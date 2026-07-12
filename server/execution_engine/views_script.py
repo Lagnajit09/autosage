@@ -30,6 +30,7 @@ from execution_engine.helpers.script_execution.utils import (
     RunTargetError,
 )
 from execution_engine.helpers.script_execution.executor import stream_execution
+from billing.limits import get_limits, get_plan
 
 import httpx
 
@@ -61,6 +62,24 @@ async def execute_script(request):
         return json_response(False, "Rate limit exceeded.", status_code=429)
     if not await check_sustained(request, ExecutionSustainedThrottle):
         return json_response(False, "Rate limit exceeded.", status_code=429)
+
+    # ── Plan limit check ─────────────────────────────────────────────────
+    if not user.is_staff:
+        from django.utils import timezone as tz
+        limits = get_limits(user)
+        cap = limits.get('max_script_executions_per_month')
+        if cap is not None:
+            month_start = tz.now().replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+            count = await sync_to_async(
+                lambda: ScriptExecution.objects.filter(user=user, created_at__gte=month_start).count()
+            )()
+            if count >= cap:
+                return json_response(
+                    False,
+                    "You've reached your monthly script execution limit on the Free plan. Upgrade to Pro for 500 executions/month.",
+                    errors={'limit_key': 'max_script_executions_per_month', 'limit': cap, 'plan': get_plan(user), 'upgrade_required': True},
+                    status_code=403,
+                )
 
     # ── Parse & validate request body ────────────────────────────────────
     try:

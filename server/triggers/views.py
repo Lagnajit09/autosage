@@ -10,6 +10,7 @@ from server.rate_limiters import (
     ExecutionSustainedThrottle,
 )
 from server.utils import api_response
+from billing.limits import get_limits, get_plan
 from triggers.models import HttpTrigger, ScheduleTrigger
 from triggers.serializers import (
     HttpTriggerCreateSerializer,
@@ -87,6 +88,15 @@ def create_http_trigger(request, workflow_id):
     new_token = generate_trigger_token()
 
     existed = HttpTrigger.objects.filter(workflow=workflow, node_id=node_id).exists()
+
+    if not existed and not request.user.is_staff:
+        limits = get_limits(request.user)
+        cap = limits.get('max_http_triggers')
+        if cap is not None:
+            count = HttpTrigger.objects.filter(workflow__user=request.user, is_active=True).count()
+            if count >= cap:
+                from billing.enforcement import PlanLimitExceeded
+                raise PlanLimitExceeded('max_http_triggers', count, cap, get_plan(request.user))
 
     trigger, created = HttpTrigger.objects.update_or_create(
         workflow=workflow,
@@ -239,6 +249,16 @@ def upsert_schedule_trigger(request, workflow_id):
     cron_expression = serializer.validated_data["cron_expression"]
 
     existed = ScheduleTrigger.objects.filter(workflow=workflow, node_id=node_id).exists()
+
+    if not existed and not request.user.is_staff:
+        limits = get_limits(request.user)
+        cap = limits.get('max_schedule_triggers')
+        if cap is not None:
+            count = ScheduleTrigger.objects.filter(workflow__user=request.user, is_active=True).count()
+            if count >= cap:
+                from rest_framework.exceptions import PermissionDenied
+                from billing.enforcement import PlanLimitExceeded
+                raise PlanLimitExceeded('max_schedule_triggers', count, cap, get_plan(request.user))
 
     schedule, created = ScheduleTrigger.objects.update_or_create(
         workflow=workflow,

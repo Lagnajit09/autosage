@@ -5,6 +5,8 @@ from rest_framework import status, generics
 from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.exceptions import ValidationError, PermissionDenied
+from billing.enforcement import check_plan_limit
+from billing.limits import get_limits
 from scripts.models import Script
 from scripts.serializers import (
     ScriptSerializer,
@@ -65,6 +67,16 @@ class ScriptListCreateView(generics.ListCreateAPIView):
 
         GCS path: scripts/<user_id>/<script_id>/<name>.<ext>
         """
+        if not request.user.is_staff:
+            limits = get_limits(request.user)
+            cap = limits.get('max_scripts')
+            if cap is not None:
+                current = Script.objects.filter(owner=request.user).count()
+                if current >= cap:
+                    from billing.enforcement import PlanLimitExceeded
+                    from billing.limits import get_plan
+                    raise PlanLimitExceeded('max_scripts', current, cap, get_plan(request.user))
+
         # Validate input data
         create_serializer = ScriptCreateSerializer(data=request.data)
         if not create_serializer.is_valid():

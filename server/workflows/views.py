@@ -4,6 +4,7 @@ from .models import Workflow
 from .serializers import WorkflowSerializer
 from server.utils import api_response
 from server.rate_limiters import WorkflowBurstThrottle, WorkflowSustainedThrottle, WorkflowCreateThrottle
+from billing.enforcement import check_plan_limit
 
 class WorkflowListCreateView(generics.ListCreateAPIView):
     """
@@ -20,6 +21,7 @@ class WorkflowListCreateView(generics.ListCreateAPIView):
     def get_queryset(self):
         return Workflow.objects.filter(user=self.request.user)
 
+    @check_plan_limit('max_workflows', lambda user: Workflow.objects.filter(user=user).count())
     def perform_create(self, serializer):
         serializer.save(user=self.request.user)
 

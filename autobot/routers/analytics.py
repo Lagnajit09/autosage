@@ -49,10 +49,17 @@ async def get_dashboard(
         return JSONResponse(content=body, status_code=upstream_status)
 
     settings = get_settings()
-    limit = int(getattr(settings, "AUTOBOT_ADMIN_DAILY_LIMIT", 0) or 0)
+    fallback_limit = int(getattr(settings, "AUTOBOT_ADMIN_DAILY_LIMIT", 0) or 0)
     used = 0
+    limit = fallback_limit
     try:
         cache = get_cache()
+        # Try to resolve the per-plan limit from billing cache
+        import json as _j
+        cached_plan = await cache._client.get(f"autobot:billing_plan:{auth.user_sub}")
+        if cached_plan:
+            plan_data = _j.loads(cached_plan)
+            limit = int(plan_data.get('admin_daily_limit', fallback_limit))
         used = await cache.get_admin_quota_for_today(auth.user_sub)
     except Exception as e:
         # `get_admin_quota_for_today` itself fails-open, but a config

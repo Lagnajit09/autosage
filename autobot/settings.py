@@ -68,7 +68,13 @@ class AutobotSettings(BaseSettings):
     # Per-user daily quota on admin-keyed chat turns. Tracked in Redis at
     # `autobot:admin_quota:<sub>:<yyyymmdd>`. Ticks once per chat turn (not
     # per tool-call round). BYO turns don't count. Set to 0 to disable.
+    # Kept as the fallback default (used when the billing lookup is unavailable).
     AUTOBOT_ADMIN_DAILY_LIMIT: int = 10
+
+    # Per-plan daily limits for admin-keyed turns. These override
+    # AUTOBOT_ADMIN_DAILY_LIMIT when billing info is available.
+    AUTOBOT_FREE_ADMIN_DAILY_LIMIT: int = 10
+    AUTOBOT_PRO_ADMIN_DAILY_LIMIT: int = 100
 
     # Per-user daily quota on chat-initiated executions (run_workflow /
     # run_script / rerun_workflow). Tracked in Redis at

@@ -43,6 +43,7 @@ from server.rate_limiters import (
     DocsSearchThrottle,
 )
 from server.utils import api_response
+from billing.enforcement import check_plan_limit
 
 logger = logging.getLogger(__name__)
 
@@ -234,6 +235,10 @@ class ThreadListCreateView(generics.ListCreateAPIView):
         ctx['request'] = self.request
         return ctx
 
+    @check_plan_limit(
+        'max_autobot_threads',
+        lambda user: Thread.objects.filter(user=user, is_archived=False).count()
+    )
     def perform_create(self, serializer):
         # CRITICAL: owner is set from request.user, NEVER from request body.
         serializer.save(user=self.request.user)
