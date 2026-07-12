@@ -28,6 +28,7 @@ import {
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { SignOutButton } from "@clerk/clerk-react";
 import { Vault } from "../vault/Vault";
+import { useNavigate } from "react-router";
 
 const TopNav = () => {
   const { isDark, toggleTheme } = useTheme();
@@ -141,6 +142,7 @@ const ToolTipIcon = ({
 };
 
 const UserMenu = () => {
+  const navigate = useNavigate();
   return (
     <DropdownMenu>
       <DropdownMenuTrigger>
@@ -159,7 +161,10 @@ const UserMenu = () => {
           </span>
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
-        <DropdownMenuItem className="cursor-pointer dark:text-gray-300 dark:hover:bg-gray-700">
+        <DropdownMenuItem
+          onClick={() => navigate("/billing")}
+          className="cursor-pointer dark:text-gray-300 dark:hover:bg-gray-700"
+        >
           <CreditCard />
           Subscription
         </DropdownMenuItem>

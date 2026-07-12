@@ -5,9 +5,31 @@ import { useEffect, useState } from "react";
 import { useAuth } from "@clerk/clerk-react";
 import { useNavigate } from "react-router-dom";
 import { type AutobotDashboardData, getDashboard } from "@/lib/api/autobot";
+import { getSubscription } from "@/lib/api/billing";
 
 // --- Banners ---
 export const ProBanner = () => {
+  const navigate = useNavigate();
+  const { getToken } = useAuth();
+  const [show, setShow] = useState<boolean | null>(null); // null = loading
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const token = await getToken();
+        if (!token) { if (!cancelled) setShow(false); return; }
+        const sub = await getSubscription(token);
+        if (!cancelled) setShow(sub.plan === "free" && !sub.is_admin);
+      } catch {
+        if (!cancelled) setShow(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [getToken]);
+
+  if (!show) return null;
+
   return (
     <Card className="bg-gradient-to-br from-purple-600 to-blue-600 border-none text-white overflow-hidden relative mb-6">
       <div className="absolute top-0 right-0 p-4 opacity-10">
@@ -23,7 +45,11 @@ export const ProBanner = () => {
         </CardDescription>
       </CardHeader>
       <CardContent>
-        <Button variant="secondary" className="w-full font-semibold text-purple-700 hover:bg-white/90">
+        <Button
+          variant="secondary"
+          className="w-full font-semibold text-purple-700 hover:bg-white/90"
+          onClick={() => navigate("/plans")}
+        >
           Get Pro Access
         </Button>
       </CardContent>

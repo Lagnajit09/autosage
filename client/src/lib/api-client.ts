@@ -59,8 +59,37 @@ export const apiRequest = async (
       }
 
       const errorData = await response.json().catch(() => ({}));
+
+      // Plan-limit responses come back as
+      //   { success:false, message:"<upgrade text>", errors:{ limit_key, ... } }
+      // The custom Django exception handler promotes the human-readable text to
+      // `message` and keeps the metadata under `errors`. Surface it as a
+      // dedicated event + throw the upgrade message.
+      const limitMeta =
+        errorData.errors && typeof errorData.errors === "object"
+          ? errorData.errors
+          : null;
+      if (limitMeta?.limit_key) {
+        window.dispatchEvent(
+          new CustomEvent("plan-limit-reached", { detail: limitMeta }),
+        );
+        throw new Error(
+          errorData.message ||
+            limitMeta.detail ||
+            "Plan limit reached. Upgrade to Pro for more.",
+        );
+      }
+
+      const detail = errorData.detail;
+      if (detail && typeof detail === "object") {
+        if (detail.limit_key) {
+          window.dispatchEvent(new CustomEvent("plan-limit-reached", { detail: detail }));
+          throw new Error(detail.detail || "Plan limit reached. Upgrade to Pro for more.");
+        }
+        throw new Error(errorData.message || "An error occurred");
+      }
       throw new Error(
-        errorData.detail || errorData.message || "An error occurred",
+        (typeof detail === "string" ? detail : null) || errorData.message || "An error occurred",
       );
     }
 

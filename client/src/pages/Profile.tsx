@@ -23,20 +23,14 @@ import {
 } from "@/components/profile";
 import { getDashboardStats, getUserProfile } from "@/lib/api/user";
 import { getSettings, getDashboard, listLLMConfigs } from "@/lib/api/autobot";
+import { getSubscription } from "@/lib/api/billing";
 import type { DashboardData, UserProfile } from "@/lib/api/user";
 import type {
   UserSettings,
   AutobotDashboardData,
   LLMConfig,
 } from "@/lib/api/autobot";
-
-const planFeatures = [
-  "Unlimited workflows",
-  "Unlimited script executions",
-  "Autobot AI assistant",
-  "Vault credential management",
-  "Scheduled & HTTP triggers",
-];
+import type { Subscription } from "@/lib/api/billing";
 
 const Profile = () => {
   const { user, isLoaded: clerkLoaded } = useUser();
@@ -50,6 +44,7 @@ const Profile = () => {
   const [autobotDashboard, setAutobotDashboard] =
     useState<AutobotDashboardData | null>(null);
   const [llmConfigs, setLlmConfigs] = useState<LLMConfig[]>([]);
+  const [subscription, setSubscription] = useState<Subscription | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   const fetchAll = useCallback(async () => {
@@ -57,18 +52,20 @@ const Profile = () => {
     if (!token) return;
     setIsLoading(true);
     try {
-      const [dash, profile, abSettings, abDash, configs] = await Promise.all([
+      const [dash, profile, abSettings, abDash, configs, sub] = await Promise.all([
         getDashboardStats(token),
         getUserProfile(token),
         getSettings(token),
         getDashboard(token),
         listLLMConfigs(token),
+        getSubscription(token),
       ]);
       setDashboard(dash);
       setUserProfile(profile);
       setAutobotSettings(abSettings);
       setAutobotDashboard(abDash);
       setLlmConfigs(configs);
+      setSubscription(sub);
     } catch {
       // individual components fall back to empty/zero states
     } finally {
@@ -209,8 +206,7 @@ const Profile = () => {
 
               {/* Plan & Subscription */}
               <PlanSubscription
-                stats={dashboard?.stats ?? null}
-                planFeatures={planFeatures}
+                subscription={subscription}
                 isLoading={isLoading}
               />
 

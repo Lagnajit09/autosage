@@ -115,7 +115,8 @@ export function CredentialsManager({
       }
     } catch (error) {
       console.error("Failed to save credential:", error);
-      toast.error("Failed to save credential");
+      const msg = error instanceof Error ? error.message : "Failed to save credential";
+      toast.error(msg);
     } finally {
       setIsSaving(false);
     }

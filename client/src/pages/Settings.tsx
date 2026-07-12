@@ -38,6 +38,8 @@ import type {
 } from "@/lib/api/user";
 import { getSettings } from "@/lib/api/autobot";
 import type { UserSettings } from "@/lib/api/autobot";
+import { getSubscription } from "@/lib/api/billing";
+import type { Subscription } from "@/lib/api/billing";
 
 const TONE_LABELS: Record<string, string> = {
   concise: "Concise",
@@ -62,6 +64,7 @@ const Settings = () => {
 
   const [notifs, setNotifs] = useState<UserNotificationSettings | null>(null);
   const [savingKey, setSavingKey] = useState<NotifKey | null>(null);
+  const [subscription, setSubscription] = useState<Subscription | null>(null);
 
   const name = user?.fullName ?? user?.firstName ?? "";
   const email = user?.primaryEmailAddress?.emailAddress ?? "";
@@ -72,9 +75,13 @@ const Settings = () => {
       const token = await getToken();
       if (!token) return;
       try {
-        const [notifData] = await Promise.all([getNotificationSettings(token)]);
+        const [notifData, subData] = await Promise.all([
+          getNotificationSettings(token),
+          getSubscription(token),
+        ]);
         if (!cancelled) {
           setNotifs(notifData);
+          setSubscription(subData);
         }
       } catch {
         // fall back to defaults; toggles stay disabled until loaded
@@ -254,15 +261,19 @@ const Settings = () => {
                         <h3 className="text-base font-medium text-gray-900 dark:text-white">
                           Current Plan:{" "}
                           <span className="text-purple-600 dark:text-purple-400">
-                            Free Plan
+                            {subscription?.is_admin
+                              ? "Enterprise (Admin)"
+                              : `${subscription?.plan_display.name ?? "Free"} Plan`}
                           </span>
                         </h3>
                         <span className="px-2 py-0.5 rounded-full bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 text-xs font-medium border border-green-200 dark:border-green-800">
-                          Active
+                          {subscription?.status === "cancelled" ? "Cancels soon" : "Active"}
                         </span>
                       </div>
                       <p className="text-gray-500 text-sm dark:text-gray-400 mt-1">
-                        Upgrade for higher limits and premium features.
+                        {subscription?.plan === "pro"
+                          ? "You're on Pro. Enjoy unlimited features."
+                          : "Upgrade for higher limits and premium features."}
                       </p>
                     </div>
                     <Button

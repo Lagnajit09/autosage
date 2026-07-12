@@ -98,7 +98,8 @@ export function Vault({
       }
     } catch (error) {
       console.error("Failed to create vault:", error);
-      toast.error("Failed to create vault");
+      const msg = error instanceof Error ? error.message : "Failed to create vault";
+      toast.error(msg);
     } finally {
       setIsLoading(false);
     }

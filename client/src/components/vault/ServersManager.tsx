@@ -99,7 +99,8 @@ export function ServersManager({
       }
     } catch (error) {
       console.error("Failed to save server:", error);
-      toast.error("Failed to save server");
+      const msg = error instanceof Error ? error.message : "Failed to save server";
+      toast.error(msg);
     } finally {
       setIsSaving(false);
     }

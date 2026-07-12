@@ -3,24 +3,53 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { Crown, CreditCard, CheckCircle2 } from "lucide-react";
-import type { DashboardStats } from "@/lib/api/user";
+import { Crown, CreditCard, CheckCircle2, Zap } from "lucide-react";
+import type { Subscription } from "@/lib/api/billing";
 
 interface PlanSubscriptionProps {
-  stats: DashboardStats | null;
-  planFeatures: string[];
+  subscription: Subscription | null;
   isLoading?: boolean;
 }
 
+function limitLabel(limit: number | null | undefined): string {
+  return limit == null ? "Unlimited" : String(limit);
+}
+
+function usagePct(used: number, limit: number | null | undefined): number {
+  if (!limit) return 0;
+  return Math.min(100, Math.round((used / limit) * 100));
+}
+
 export const PlanSubscription = ({
-  stats,
-  planFeatures,
+  subscription,
   isLoading = false,
 }: PlanSubscriptionProps) => {
   const navigate = useNavigate();
 
-  const workflows = stats?.workflows ?? 0;
-  const executions = stats?.executions_current_month ?? 0;
+  const planName = subscription?.is_admin
+    ? "Enterprise (Admin)"
+    : `${subscription?.plan_display?.name ?? "Free"} Plan`;
+
+  const isPro = subscription?.plan === "pro";
+
+  const features = subscription
+    ? [
+        `${limitLabel(subscription.limits.max_workflows)} workflows`,
+        `${limitLabel(subscription.limits.max_scripts)} scripts`,
+        `${limitLabel(subscription.limits.max_workflow_runs_per_month)} workflow runs / month`,
+        `${limitLabel(subscription.limits.max_script_executions_per_month)} script executions / month`,
+        subscription.execution_mode ? "Execution mode" : null,
+        "Autobot AI assistant",
+        "Vault credential management",
+        "Scheduled & HTTP triggers",
+      ].filter(Boolean) as string[]
+    : [
+        "Unlimited workflows",
+        "Unlimited script executions",
+        "Autobot AI assistant",
+        "Vault credential management",
+        "Scheduled & HTTP triggers",
+      ];
 
   return (
     <section className="space-y-4">
@@ -38,11 +67,15 @@ export const PlanSubscription = ({
               <div className="flex items-center justify-between">
                 <div>
                   <h3 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
-                    <Crown className="w-6 h-6 text-yellow-500" />
-                    Free Plan
+                    {isPro ? (
+                      <Zap className="w-6 h-6 text-purple-500" />
+                    ) : (
+                      <Crown className="w-6 h-6 text-yellow-500" />
+                    )}
+                    {planName}
                   </h3>
                   <Badge className="mt-2 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 border-green-200 dark:border-green-800">
-                    Active
+                    {subscription?.status === "cancelled" ? "Cancels at period end" : "Active"}
                   </Badge>
                 </div>
               </div>
@@ -50,7 +83,9 @@ export const PlanSubscription = ({
               <div className="space-y-2">
                 <p className="text-sm text-gray-600 dark:text-gray-300 flex items-center gap-2">
                   <CreditCard className="w-4 h-4" />
-                  Subscription management coming soon
+                  {isPro
+                    ? `${subscription?.billing_interval === "yearly" ? "$120/year" : "$15/month"} — manage in billing`
+                    : "Free tier — upgrade for higher limits"}
                 </p>
               </div>
 
@@ -61,7 +96,7 @@ export const PlanSubscription = ({
                   Plan Features:
                 </p>
                 <ul className="space-y-2">
-                  {planFeatures.map((feature, index) => (
+                  {features.map((feature, index) => (
                     <li
                       key={index}
                       className="text-sm text-gray-600 dark:text-gray-300 flex items-center gap-2"
@@ -81,60 +116,57 @@ export const PlanSubscription = ({
               </h4>
               {isLoading ? (
                 <div className="space-y-4 animate-pulse">
-                  {[1, 2].map((i) => (
+                  {[1, 2, 3].map((i) => (
                     <div key={i} className="space-y-1.5">
                       <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-full" />
                       <div className="h-2 bg-gray-200 dark:bg-gray-700 rounded-full w-full" />
                     </div>
                   ))}
                 </div>
-              ) : (
+              ) : subscription ? (
                 <div className="space-y-3">
-                  <div>
-                    <div className="flex justify-between text-sm mb-1">
-                      <span className="text-gray-600 dark:text-gray-300">
-                        Workflows
-                      </span>
-                      <span className="text-gray-900 dark:text-white font-medium">
-                        {workflows} / Unlimited
-                      </span>
+                  {[
+                    {
+                      label: "Workflows",
+                      used: subscription.usage.workflows,
+                      limit: subscription.limits.max_workflows,
+                    },
+                    {
+                      label: "Workflow runs (month)",
+                      used: subscription.usage.workflow_runs_this_month,
+                      limit: subscription.limits.max_workflow_runs_per_month,
+                    },
+                    {
+                      label: "Script executions (month)",
+                      used: subscription.usage.script_executions_this_month,
+                      limit: subscription.limits.max_script_executions_per_month,
+                    },
+                  ].map(({ label, used, limit }) => (
+                    <div key={label}>
+                      <div className="flex justify-between text-sm mb-1">
+                        <span className="text-gray-600 dark:text-gray-300">{label}</span>
+                        <span className="text-gray-900 dark:text-white font-medium">
+                          {used} / {limitLabel(limit)}
+                        </span>
+                      </div>
+                      <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                        <div
+                          className="bg-gradient-to-r from-purple-600 to-blue-600 h-2 rounded-full"
+                          style={{ width: `${usagePct(used, limit)}%` }}
+                        />
+                      </div>
                     </div>
-                    <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
-                      <div
-                        className="bg-gradient-to-r from-purple-600 to-blue-600 h-2 rounded-full"
-                        style={{
-                          width: `${Math.min((workflows / 50) * 100, 100)}%`,
-                        }}
-                      />
-                    </div>
-                  </div>
-
-                  <div>
-                    <div className="flex justify-between text-sm mb-1">
-                      <span className="text-gray-600 dark:text-gray-300">
-                        Executions (This Month)
-                      </span>
-                      <span className="text-gray-900 dark:text-white font-medium">
-                        {executions} / Unlimited
-                      </span>
-                    </div>
-                    <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
-                      <div
-                        className="bg-gradient-to-r from-purple-600 to-blue-600 h-2 rounded-full"
-                        style={{
-                          width: `${Math.min((executions / 500) * 100, 100)}%`,
-                        }}
-                      />
-                    </div>
-                  </div>
+                  ))}
                 </div>
-              )}
+              ) : null}
 
               <Button
                 onClick={() => navigate("/billing")}
                 className="w-full bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white border-none mt-4"
               >
-                View Billing
+                {subscription?.plan === "free" && !subscription.is_admin
+                  ? "Upgrade to Pro"
+                  : "View Billing"}
               </Button>
             </div>
           </div>
