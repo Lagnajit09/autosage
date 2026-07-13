@@ -2,13 +2,7 @@ import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import {
-  MessageSquare,
-  Zap,
-  BookOpen,
-  ArrowRight,
-  Star,
-} from "lucide-react";
+import { MessageSquare, Zap, BookOpen, ArrowRight, Star } from "lucide-react";
 import type {
   UserSettings,
   DashboardBucket,
@@ -17,11 +11,14 @@ import type {
 } from "@/lib/api/autobot";
 
 const PROVIDER_COLORS: Record<AutobotProvider | string, string> = {
-  openai: "bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400",
-  anthropic: "bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-400",
+  openai:
+    "bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400",
+  anthropic:
+    "bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-400",
   gemini: "bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400",
   groq: "bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400",
-  openrouter: "bg-gray-100 dark:bg-gray-700/60 text-gray-700 dark:text-gray-300",
+  openrouter:
+    "bg-gray-100 dark:bg-gray-700/60 text-gray-700 dark:text-gray-300",
   azure_openai: "bg-sky-100 dark:bg-sky-900/30 text-sky-700 dark:text-sky-400",
   custom: "bg-gray-100 dark:bg-gray-700/60 text-gray-700 dark:text-gray-300",
 };
@@ -95,7 +92,7 @@ export const AutobotInsights = ({
                       variant="outline"
                       size="sm"
                       onClick={() => navigate("/ai/autobot")}
-                      className="dark:border-gray-700 dark:text-gray-300"
+                      className="dark:border-gray-700 dark:text-gray-300 dark:bg-gray-900 dark:hover:bg-gray-800"
                     >
                       Set up AI model
                       <ArrowRight className="w-3.5 h-3.5 ml-1.5" />
@@ -157,7 +154,11 @@ export const AutobotInsights = ({
                         variant="secondary"
                         className="bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400 border-purple-200 dark:border-purple-800"
                       >
-                        {EXPERTISE_LABELS[settings?.expertise ?? "intermediate"]}
+                        {
+                          EXPERTISE_LABELS[
+                            settings?.expertise ?? "intermediate"
+                          ]
+                        }
                       </Badge>
                     </div>
                     {settings?.language && settings.language !== "en" && (

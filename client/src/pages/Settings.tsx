@@ -19,6 +19,8 @@ import {
   Bot,
   ArrowRight,
   Loader2,
+  HelpCircle,
+  Bug,
 } from "lucide-react";
 import { useTheme } from "@/contexts/theme/theme-context";
 import {
@@ -391,6 +393,36 @@ const Settings = () => {
                   </div>
                 </section>
               </div>
+
+              {/* Support Section */}
+              <section className="space-y-4">
+                <div className="flex items-center gap-2 mb-4">
+                  <HelpCircle className="w-5 h-5 text-purple-600 dark:text-purple-400" />
+                  <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
+                    Help & Support
+                  </h2>
+                </div>
+                <div className="bg-white dark:bg-gray-900/50 rounded-xl border border-gray-200 dark:border-gray-800 p-6 shadow-sm">
+                  <div className="flex flex-col sm:flex-row gap-3">
+                    <Button
+                      onClick={() => navigate("/faq")}
+                      variant="outline"
+                      className="flex-1 justify-start gap-2 dark:bg-gray-950 dark:border-gray-800 dark:hover:bg-gray-900 dark:text-gray-200"
+                    >
+                      <HelpCircle className="w-4 h-4 text-purple-500" />
+                      FAQ & Contact Us
+                    </Button>
+                    <Button
+                      onClick={() => navigate("/report-bug")}
+                      variant="outline"
+                      className="flex-1 justify-start gap-2 dark:bg-gray-950 dark:border-gray-800 dark:hover:bg-gray-900 dark:text-gray-200"
+                    >
+                      <Bug className="w-4 h-4 text-red-500" />
+                      Report a Bug
+                    </Button>
+                  </div>
+                </div>
+              </section>
 
               <div className="flex justify-end pt-6">
                 <Button

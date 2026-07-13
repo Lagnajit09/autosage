@@ -7,6 +7,7 @@ import {
   BookText,
   CodeXml,
   FileClock,
+  HelpCircle,
   Home,
   ListPlus,
   Moon,
@@ -79,6 +80,13 @@ export const NavItems = ({ mobile = false }: { mobile?: boolean }) => {
       ),
       label: "Documentation",
       onClick: () => window.open(DOCS_BASE_URL, "_blank", "noopener,noreferrer"),
+    },
+    {
+      icon: (
+        <HelpCircle className={cn("w-6 h-6", mobile ? "w-5 h-5 mr-2" : "")} />
+      ),
+      label: "Help & Support",
+      onClick: () => navigate("/faq"),
     },
     {
       icon: isDark ? (

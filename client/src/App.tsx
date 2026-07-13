@@ -32,6 +32,8 @@ import PublicRoute from "./components/auth/PublicRoute";
 import LimitExceed from "./pages/LimitExceed";
 import ExecutionLogs from "./pages/ExecutionLogs";
 import AccountReactivationRequest from "./pages/AccountReactivationRequest";
+import ReportBug from "./pages/ReportBug";
+import FaqContact from "./pages/FaqContact";
 
 const queryClient = new QueryClient();
 
@@ -112,6 +114,8 @@ const App = () => {
                       path="/account-activation-request"
                       element={<AccountReactivationRequest />}
                     />
+                    <Route path="/report-bug" element={<ReportBug />} />
+                    <Route path="/faq" element={<FaqContact />} />
                   </Route>
 
                   {/* Public Routes - redirect to dashboard if authenticated */}
