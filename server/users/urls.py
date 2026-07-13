@@ -7,6 +7,8 @@ from .views import (
     delete_account,
     account_status,
     request_reactivation,
+    report_bug,
+    contact_support,
 )
 
 urlpatterns = [
@@ -17,4 +19,6 @@ urlpatterns = [
     path('delete/', delete_account, name='user-delete'),
     path('account-status/', account_status, name='user-account-status'),
     path('request-reactivation/', request_reactivation, name='user-request-reactivation'),
+    path('report-bug/', report_bug, name='user-report-bug'),
+    path('contact/', contact_support, name='user-contact'),
 ]

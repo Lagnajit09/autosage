@@ -189,6 +189,118 @@ def request_reactivation(request):
     )
 
 
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def report_bug(request):
+    """Submit a bug report — emails autosagex@gmail.com with the details."""
+    title = (request.data.get('title') or '').strip()
+    description = (request.data.get('description') or '').strip()
+    severity = (request.data.get('severity') or 'medium').strip().lower()
+    page_url = (request.data.get('page_url') or '').strip()
+
+    if not title or not description:
+        return api_response(
+            success=False,
+            message='Title and description are required.',
+            data={},
+            status_code=status.HTTP_400_BAD_REQUEST,
+        )
+
+    valid_severities = ('low', 'medium', 'high', 'critical')
+    if severity not in valid_severities:
+        severity = 'medium'
+
+    user = request.user
+    email = user.email or 'unknown'
+
+    body = (
+        f"A user has submitted a bug report.\n\n"
+        f"Title: {title}\n"
+        f"Severity: {severity.upper()}\n"
+        f"Reporter email: {email}\n"
+        f"Reporter (Clerk sub): {user.username}\n"
+        f"Page URL: {page_url or '(not provided)'}\n\n"
+        f"Description:\n{description}\n"
+    )
+
+    try:
+        send_mail(
+            subject=f"[Bug Report] [{severity.upper()}] {title}",
+            message=body,
+            from_email=settings.DEFAULT_FROM_EMAIL,
+            recipient_list=['autosagex@gmail.com'],
+            fail_silently=False,
+        )
+    except Exception as e:  # noqa: BLE001
+        logger.exception("Failed to send bug report email for %s: %s", user.username, e)
+        return api_response(
+            success=False,
+            message='Failed to submit. Please email us directly at autosagex@gmail.com.',
+            data={},
+            status_code=status.HTTP_502_BAD_GATEWAY,
+        )
+
+    logger.info("Bug report submitted by %s: %s [%s]", user.username, title, severity)
+    return api_response(
+        success=True,
+        message='Bug report submitted. Thank you — we will look into it!',
+        data={},
+        status_code=status.HTTP_200_OK,
+    )
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def contact_support(request):
+    """Send a support/contact message — emails autosagex@gmail.com."""
+    subject = (request.data.get('subject') or '').strip()
+    message = (request.data.get('message') or '').strip()
+
+    if not subject or not message:
+        return api_response(
+            success=False,
+            message='Subject and message are required.',
+            data={},
+            status_code=status.HTTP_400_BAD_REQUEST,
+        )
+
+    user = request.user
+    email = user.email or 'unknown'
+
+    body = (
+        f"A user has sent a support message.\n\n"
+        f"From: {email}\n"
+        f"Clerk sub: {user.username}\n\n"
+        f"Subject: {subject}\n\n"
+        f"Message:\n{message}\n"
+    )
+
+    try:
+        send_mail(
+            subject=f"[Contact] {subject}",
+            message=body,
+            from_email=settings.DEFAULT_FROM_EMAIL,
+            recipient_list=['autosagex@gmail.com'],
+            fail_silently=False,
+        )
+    except Exception as e:  # noqa: BLE001
+        logger.exception("Failed to send contact email for %s: %s", user.username, e)
+        return api_response(
+            success=False,
+            message='Failed to send. Please email us directly at autosagex@gmail.com.',
+            data={},
+            status_code=status.HTTP_502_BAD_GATEWAY,
+        )
+
+    logger.info("Contact message sent by %s: %s", user.username, subject)
+    return api_response(
+        success=True,
+        message='Message sent! We will get back to you soon.',
+        data={},
+        status_code=status.HTTP_200_OK,
+    )
+
+
 class UserProfileView(generics.RetrieveUpdateAPIView):
     permission_classes = [IsAuthenticated]
     serializer_class = UserProfileSerializer
