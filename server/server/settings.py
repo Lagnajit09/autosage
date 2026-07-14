@@ -94,6 +94,7 @@ INSTALLED_APPS = [
     'autobot_api.apps.AutobotApiConfig',
     'users.apps.UsersConfig',
     'billing.apps.BillingConfig',
+    'library.apps.LibraryConfig',
 ]
 
 REST_FRAMEWORK = {
