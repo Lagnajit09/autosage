@@ -12,8 +12,8 @@ class LibraryItem(models.Model):
 
         workflow -> {"nodes": [...], "edges": [...]}   (references shared
                     library scripts; carries no vault credentials)
-        node     -> <NodeData dict>                    (a single pre-configured
-                    action node)
+        node     -> {"nodeType": "trigger|action|decision", "data": <NodeData>}
+                    (a single pre-configured node the builder can drop/paste)
         script   -> {"script_id": <int>}               (points at a shared
                     "scripts-library" Script row)
     """
