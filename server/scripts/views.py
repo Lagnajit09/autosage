@@ -1,6 +1,7 @@
 from django.shortcuts import get_object_or_404
 from django.conf import settings
 from django.db import transaction
+from django.db.models import Q
 from rest_framework import status, generics
 from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
@@ -46,7 +47,14 @@ class ScriptListCreateView(generics.ListCreateAPIView):
         return [ScriptBurstThrottle(), ScriptSustainedThrottle()]
 
     def get_queryset(self):
-        """Return only scripts owned by the authenticated user."""
+        """Return scripts for the authenticated user.
+
+        ``?scope=library`` returns the shared "scripts-library" (read-only,
+        used by the action-node picker to reference Autosage scripts); the
+        default scope returns only the user's own scripts.
+        """
+        if self.request.query_params.get('scope') == 'library':
+            return Script.objects.filter(is_library=True)
         return Script.objects.filter(owner=self.request.user)
 
     def list(self, request, *args, **kwargs):
@@ -234,9 +242,17 @@ class ScriptContentView(APIView):
     throttle_classes = [ScriptBurstThrottle, ScriptSustainedThrottle]
 
     def get(self, request, pk):
-        """Fetch script content from GCS."""
-        script = get_object_or_404(Script, pk=pk, owner=request.user)
-        blob_path = build_blob_path(request.user.id, script.id, script.name)
+        """Fetch script content from GCS.
+
+        Readable if the script is owned by the requester OR is a shared
+        library script. The blob path is built from the script's actual owner
+        (library scripts live under the system account).
+        """
+        script = get_object_or_404(
+            Script.objects.filter(Q(owner=request.user) | Q(is_library=True)),
+            pk=pk,
+        )
+        blob_path = build_blob_path(script.owner_id, script.id, script.name)
 
         try:
             content = download_script(blob_path)

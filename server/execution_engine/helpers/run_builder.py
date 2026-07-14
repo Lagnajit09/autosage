@@ -19,6 +19,8 @@ from execution_engine.helpers.graph import (
     topological_order,
     validate_executable_nodes,
 )
+from django.db.models import Q
+
 from execution_engine.models import WorkflowNodeRun, WorkflowRun
 from execution_engine.tasks import execute_workflow
 from scripts.models import Script
@@ -111,7 +113,9 @@ def enqueue_workflow_run(
             credential_id = vd.get("credentialId")
 
             try:
-                if not Script.objects.filter(id=script_id, owner=user).exists():
+                if not Script.objects.filter(id=script_id).filter(
+                    Q(owner=user) | Q(is_library=True)
+                ).exists():
                     raise ValueError(
                         f"Script ID {script_id} not found or access denied for node {node.get('id')}"
                     )

@@ -28,6 +28,7 @@ def resolve_run_targets(user, validated_data: dict):
     """
     # Local imports keep this module importable from both sync and async
     # contexts without pulling models at module load.
+    from django.db.models import Q
     from vault.models import Vault, Server, Credential
     from scripts.models import Script
 
@@ -53,7 +54,9 @@ def resolve_run_targets(user, validated_data: dict):
         raise RunTargetError("Credential not found in vault.")
 
     try:
-        script = Script.objects.get(id=script_details["script_id"], owner=user)
+        script = Script.objects.get(
+            Q(id=script_details["script_id"]) & (Q(owner=user) | Q(is_library=True))
+        )
     except Script.DoesNotExist:
         raise RunTargetError("Script not found or access denied.")
 

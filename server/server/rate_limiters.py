@@ -33,6 +33,15 @@ class ExecutionBurstThrottle(UserRateThrottle):
 class ExecutionSustainedThrottle(UserRateThrottle):
     scope = 'execution_sustained'
 
+class LibraryBurstThrottle(UserRateThrottle):
+    scope = 'library_burst'
+
+class LibrarySustainedThrottle(UserRateThrottle):
+    scope = 'library_sustained'
+
+class LibraryForkThrottle(UserRateThrottle):
+    scope = 'library_fork'
+
 
 # ── Autobot (T04+) ────────────────────────────────────────────────────────
 # Scopes apply to all /api/autobot/* endpoints. The dedicated

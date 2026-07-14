@@ -19,6 +19,11 @@ class Script(models.Model):
     # Ownership
     owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='scripts', null=True, blank=True)
 
+    # Shared "scripts-library" flag. Library scripts are owned by a dedicated
+    # system account and are readable/runnable by any authenticated user
+    # (they back Library workflows/nodes). Regular user scripts stay private.
+    is_library = models.BooleanField(default=False)
+
     # Metadata
     content_type = models.CharField(max_length=100, default='text/javascript')
     file_size = models.PositiveIntegerField()  # bytes

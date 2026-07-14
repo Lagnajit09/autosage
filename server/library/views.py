@@ -13,6 +13,11 @@ from billing.enforcement import PlanLimitExceeded
 from billing.limits import get_limits, get_plan
 from scripts.gcs import build_blob_path, copy_script
 from scripts.models import Script
+from server.rate_limiters import (
+    LibraryBurstThrottle,
+    LibraryForkThrottle,
+    LibrarySustainedThrottle,
+)
 from server.utils import api_response
 from workflows.models import Workflow
 
@@ -33,6 +38,7 @@ class LibraryListView(generics.ListAPIView):
     """
     serializer_class = LibraryItemListSerializer
     permission_classes = [IsAuthenticated]
+    throttle_classes = [LibraryBurstThrottle, LibrarySustainedThrottle]
 
     def get_queryset(self):
         qs = LibraryItem.objects.filter(is_published=True)
@@ -65,6 +71,7 @@ class LibraryDetailView(generics.RetrieveAPIView):
     """Retrieve a single library item including its ``content``."""
     serializer_class = LibraryItemDetailSerializer
     permission_classes = [IsAuthenticated]
+    throttle_classes = [LibraryBurstThrottle, LibrarySustainedThrottle]
 
     def get_queryset(self):
         return LibraryItem.objects.filter(is_published=True)
@@ -89,6 +96,7 @@ class LibraryForkView(APIView):
         node     -> return the NodeData payload for the client to inject
     """
     permission_classes = [IsAuthenticated]
+    throttle_classes = [LibraryBurstThrottle, LibrarySustainedThrottle, LibraryForkThrottle]
 
     def post(self, request, pk):
         item = get_object_or_404(LibraryItem, pk=pk, is_published=True)
