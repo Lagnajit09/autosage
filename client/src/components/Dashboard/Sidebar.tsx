@@ -6,7 +6,7 @@ import {
   Settings,
   User,
   Plus,
-  ListPlus,
+  Library,
   FileClock,
   BookText,
 } from "lucide-react";
@@ -33,7 +33,7 @@ interface NavItem {
 const navItems: NavItem[] = [
   { icon: LayoutGrid, label: "Dashboard", route: "/dashboard" },
   { icon: Workflow, label: "All Workflows", route: "/workflows" },
-  { icon: ListPlus, label: "Templates", route: "/templates" },
+  { icon: Library, label: "Library", route: "/library" },
   { icon: Code2, label: "Editor", route: "/script-editor" },
   { icon: FileClock, label: "Execution Logs", route: "/execution-logs" },
   { icon: AutobotIcon, label: "Autobot", route: "/ai/autobot" },

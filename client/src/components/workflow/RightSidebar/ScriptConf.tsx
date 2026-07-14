@@ -5,6 +5,7 @@ import {
   FileText,
   Server as ServerIcon,
   Loader2,
+  Boxes,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -13,6 +14,9 @@ import {
   SelectItem,
   SelectTrigger,
   SelectValue,
+  SelectGroup,
+  SelectLabel,
+  SelectSeparator,
 } from "@/components/ui/select";
 import { Link } from "react-router-dom";
 import {
@@ -44,6 +48,7 @@ export const ScriptConf: React.FC<BaseConfigProps> = ({
     close: closeSchemaModal,
   } = useDeferredModal(false);
   const [savedScripts, setSavedScripts] = useState<ScriptFile[]>([]);
+  const [libraryScripts, setLibraryScripts] = useState<ScriptFile[]>([]);
   const [isLoadingScripts, setIsLoadingScripts] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -55,6 +60,14 @@ export const ScriptConf: React.FC<BaseConfigProps> = ({
         const scripts = await scriptService.getAll(token);
         const scriptFiles = scripts.map((s) => mapScriptToScriptFile(s));
         setSavedScripts(scriptFiles);
+
+        // Shared Autosage library scripts (non-fatal if this fails).
+        try {
+          const libScripts = await scriptService.getAll(token, "library");
+          setLibraryScripts(libScripts.map((s) => mapScriptToScriptFile(s)));
+        } catch (libError) {
+          console.error("Failed to fetch library scripts:", libError);
+        }
       }
     } catch (error) {
       console.error("Failed to fetch scripts:", error);
@@ -170,19 +183,24 @@ export const ScriptConf: React.FC<BaseConfigProps> = ({
     }
   };
 
+  const expectedLanguage = () =>
+    currentScriptType.replace(" Script", "").toLowerCase();
+
   const getSavedScripts = () => {
     try {
-      return savedScripts.filter((file: ScriptFile) => {
-        const expectedLanguage = currentScriptType
-          .replace(" Script", "")
-          .toLowerCase();
-        return file.language === expectedLanguage;
-      });
+      return savedScripts.filter(
+        (file: ScriptFile) => file.language === expectedLanguage(),
+      );
     } catch (error) {
       console.error("Error loading scripts:", error);
     }
     return [];
   };
+
+  const getLibraryScripts = () =>
+    libraryScripts.filter(
+      (file: ScriptFile) => file.language === expectedLanguage(),
+    );
 
   const handleScriptSelect = (scriptId: string) => {
     onUpdateNode(selectedNode.id, {
@@ -351,30 +369,56 @@ export const ScriptConf: React.FC<BaseConfigProps> = ({
                   <span className="text-sm">Loading scripts...</span>
                 </div>
               ) : (
-                getSavedScripts().map((script: ScriptFile) => (
-                  <SelectItem
-                    key={script.id}
-                    value={script.id}
-                    className="text-sm"
-                  >
-                    <div className="flex items-center space-x-2">
-                      <FileText size={14} />
-                      <span>{script.name}</span>
-                      <span className="text-xs text-gray-500 dark:text-gray-400">
-                        {script.source === "upload" ? "↑" : "✏️"}
-                      </span>
-                    </div>
-                  </SelectItem>
-                ))
-              )}
-              {getSavedScripts().length === 0 && (
-                <SelectItem
-                  value="none"
-                  disabled
-                  className="text-sm text-gray-500 dark:text-gray-500"
-                >
-                  No scripts available
-                </SelectItem>
+                <>
+                  <SelectGroup>
+                    <SelectLabel className="text-xs uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                      Your Scripts
+                    </SelectLabel>
+                    {getSavedScripts().map((script: ScriptFile) => (
+                      <SelectItem
+                        key={script.id}
+                        value={script.id}
+                        className="text-sm"
+                      >
+                        <div className="flex items-center space-x-2">
+                          <FileText size={14} />
+                          <span>{script.name}</span>
+                          <span className="text-xs text-gray-500 dark:text-gray-400">
+                            {script.source === "upload" ? "↑" : "✏️"}
+                          </span>
+                        </div>
+                      </SelectItem>
+                    ))}
+                    {getSavedScripts().length === 0 && (
+                      <div className="px-2 py-1.5 text-sm text-gray-500 dark:text-gray-500">
+                        No scripts of this type
+                      </div>
+                    )}
+                  </SelectGroup>
+
+                  {getLibraryScripts().length > 0 && (
+                    <>
+                      <SelectSeparator />
+                      <SelectGroup>
+                        <SelectLabel className="text-xs uppercase tracking-wider text-purple-600 dark:text-purple-400">
+                          Autosage Library
+                        </SelectLabel>
+                        {getLibraryScripts().map((script: ScriptFile) => (
+                          <SelectItem
+                            key={script.id}
+                            value={script.id}
+                            className="text-sm"
+                          >
+                            <div className="flex items-center space-x-2">
+                              <Boxes size={14} className="text-purple-500" />
+                              <span>{script.name}</span>
+                            </div>
+                          </SelectItem>
+                        ))}
+                      </SelectGroup>
+                    </>
+                  )}
+                </>
               )}
             </SelectContent>
           </Select>

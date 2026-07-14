@@ -35,9 +35,14 @@ export const mapScriptToScriptFile = (
 };
 
 export const scriptService = {
-  // List all scripts (metadata only)
-  getAll: async (token: string): Promise<ScriptResponse[]> => {
-    const response = await apiRequest(`${BASE_URL}/`, {}, token);
+  // List scripts (metadata only). Pass scope "library" to list the shared
+  // Autosage scripts-library instead of the user's own scripts.
+  getAll: async (
+    token: string,
+    scope?: "library",
+  ): Promise<ScriptResponse[]> => {
+    const query = scope ? `?scope=${scope}` : "";
+    const response = await apiRequest(`${BASE_URL}/${query}`, {}, token);
     return response.data;
   },
 

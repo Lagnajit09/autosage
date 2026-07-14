@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import {
   Play,
   Zap,
@@ -8,11 +8,22 @@ import {
   GitBranch,
   LucideIcon,
   Clock,
+  Boxes,
 } from "lucide-react";
+import { useAuth } from "@clerk/clerk-react";
 import { NodeData } from "@/utils/types";
+import { libraryService } from "@/lib/api/library";
 import Logo from "../Logo";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
+
+// A library node carries the node type plus a fully pre-configured NodeData blob.
+interface LibraryNode {
+  id: string;
+  name: string;
+  nodeType: string;
+  data: NodeData;
+}
 
 interface LeftSidebarProps {
   onSaveWorkflow: () => void;
@@ -41,6 +52,48 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
     );
     event.dataTransfer.effectAllowed = "move";
   };
+
+  // Pre-configured nodes from the Library (fetched once on mount).
+  const { getToken, isSignedIn } = useAuth();
+  const [libraryNodes, setLibraryNodes] = useState<LibraryNode[]>([]);
+
+  useEffect(() => {
+    if (!isSignedIn) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const token = await getToken();
+        if (!token) return;
+        const list = await libraryService.list(token, { type: "node" });
+        // The list omits `content`; fetch each detail to get {nodeType, data}.
+        const details = await Promise.all(
+          list.map((item) => libraryService.get(item.id, token)),
+        );
+        if (cancelled) return;
+        const nodes: LibraryNode[] = details
+          .map((d) => {
+            const content = d.content as {
+              nodeType?: string;
+              data?: NodeData;
+            };
+            if (!content?.nodeType || !content?.data) return null;
+            return {
+              id: d.id,
+              name: d.name,
+              nodeType: content.nodeType,
+              data: content.data,
+            };
+          })
+          .filter((n): n is LibraryNode => n !== null);
+        setLibraryNodes(nodes);
+      } catch (error) {
+        console.error("Failed to load library nodes:", error);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [isSignedIn, getToken]);
 
   // Define available triggers
   const triggers = [
@@ -221,6 +274,42 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
           })}
         </div>
       </div>
+
+      {/* Library Section (pre-configured nodes) */}
+      {libraryNodes.length > 0 && (
+        <div className="mb-6 relative z-10">
+          <div className="text-xs text-purple-600 dark:text-purple-400 mb-4 uppercase tracking-wider font-medium flex items-center">
+            <div className="w-1 h-1 bg-purple-600 dark:bg-purple-400 rounded-full mr-2"></div>
+            Library
+          </div>
+          <div className="space-y-3">
+            {libraryNodes.map((node) => (
+              <div
+                key={node.id}
+                draggable
+                onDragStart={(e) => onDragStart(e, node.nodeType, node.data)}
+                className="group cursor-grab active:cursor-grabbing
+                         bg-gray-50 dark:bg-gray-900
+                         hover:bg-purple-50 dark:hover:bg-purple-900/10
+                         rounded-xl p-2
+                         border border-gray-200 dark:border-gray-800
+                         hover:border-purple-200 dark:hover:border-purple-800
+                         transition-all duration-200 ease-out
+                         transform hover:scale-[1.02]"
+              >
+                <div className="flex items-center space-x-3">
+                  <div className="p-2 bg-purple-100 dark:bg-purple-900/20 rounded-lg text-purple-600 dark:text-purple-400 group-hover:text-purple-700 dark:group-hover:text-purple-300">
+                    <Boxes size={14} />
+                  </div>
+                  <span className="text-sm text-gray-700 dark:text-gray-200 font-medium">
+                    {node.name}
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       </div>
 

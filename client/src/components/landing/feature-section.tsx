@@ -48,8 +48,8 @@ const Feature = () => {
     },
     {
       Icon: Workflow,
-      name: "Templates",
-      description: "Build your workflow in the Workflow-Editor.",
+      name: "Library",
+      description: "Fork reusable workflows, scripts, and nodes from the Library.",
 
       background: (
         <img

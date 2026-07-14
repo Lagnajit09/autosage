@@ -59,7 +59,7 @@ const FAQ_ITEMS: FaqItem[] = [
   {
     question: "Can I export or share my workflows?",
     answer:
-      "Yes — workflows can be exported as JSON from the workflow editor menu. You can also save a workflow as a template (from the workflow menu) to make it reusable across your account or share it with the community via the Templates gallery.",
+      "Yes — workflows can be exported as JSON from the workflow editor menu. You can also fork reusable workflows, scripts, and nodes from the Library to jump-start your automations.",
   },
   {
     question: "How do I cancel or change my subscription?",

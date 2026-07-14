@@ -20,6 +20,7 @@ import { TriggerNode } from "./nodes/TriggerNode";
 import { ActionNode } from "./nodes/ActionNode";
 import { LeftSidebar } from "./LeftSidebar";
 import { Edge, NodeData, WorkflowData } from "@/utils/types";
+import { LIBRARY_NODE_CLIPBOARD_KEY } from "@/components/Library/types";
 import { validateConnection } from "@/utils/graph";
 import { ImportWorkflowDialog } from "./ImportWorkflowDialog";
 import { DeleteConfirmationModal } from "@/components/DeleteConfirmationModal";
@@ -334,6 +335,59 @@ const WorkflowBuilderContent = ({
     },
     [reactFlowInstance, setNodes],
   );
+
+  // Insert a node at the canvas centre (used by clipboard paste of library nodes).
+  const addNodeAtCenter = useCallback(
+    (nodeType: string, nodeData: NodeData) => {
+      if (!reactFlowInstance || !reactFlowWrapper.current) return;
+      const bounds = reactFlowWrapper.current.getBoundingClientRect();
+      const position = reactFlowInstance.screenToFlowPosition({
+        x: bounds.left + bounds.width / 2,
+        y: bounds.top + bounds.height / 2,
+      });
+      const newNode: Node = {
+        id: `${nodeType}-${Date.now()}`,
+        type: nodeType,
+        position,
+        data: { ...nodeData, label: nodeData.label },
+      };
+      setNodes((nds) => nds.concat(newNode));
+    },
+    [reactFlowInstance, setNodes],
+  );
+
+  // Paste a library node copied from the Library page (Ctrl/Cmd + V).
+  useEffect(() => {
+    const handlePaste = (event: ClipboardEvent) => {
+      // Ignore pastes while the user is typing in a form field.
+      const target = event.target as HTMLElement | null;
+      if (
+        target &&
+        (target.tagName === "INPUT" ||
+          target.tagName === "TEXTAREA" ||
+          target.isContentEditable)
+      ) {
+        return;
+      }
+      const text = event.clipboardData?.getData("text");
+      if (!text) return;
+      let payload: Record<string, unknown>;
+      try {
+        payload = JSON.parse(text);
+      } catch {
+        return;
+      }
+      if (payload?.[LIBRARY_NODE_CLIPBOARD_KEY] !== true) return;
+      const nodeType = payload.nodeType as string | undefined;
+      const data = payload.data as NodeData | undefined;
+      if (!nodeType || !data) return;
+      event.preventDefault();
+      addNodeAtCenter(nodeType, data);
+      toast2.success("Node pasted onto the canvas.");
+    };
+    window.addEventListener("paste", handlePaste);
+    return () => window.removeEventListener("paste", handlePaste);
+  }, [addNodeAtCenter]);
 
   const onNodeClick = useCallback((_: React.MouseEvent, node: Node) => {
     setSelectedNode(node);

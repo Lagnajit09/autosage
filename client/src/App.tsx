@@ -21,7 +21,7 @@ import AutobotChat from "./pages/AutobotChat";
 import AutobotDashboard from "./pages/AutobotDashboard";
 import AutobotArchived from "./pages/AutobotArchived";
 import Workflows from "./pages/Workflows";
-import Templates from "./pages/Templates";
+import Library from "./pages/Library";
 import Settings from "./pages/Settings";
 import Profile from "./pages/Profile";
 import Plans from "./pages/Plans";
@@ -87,7 +87,7 @@ const App = () => {
                       element={<WorkflowExecution />}
                     />
                     <Route path="/workflows" element={<Workflows />} />
-                    <Route path="/templates" element={<Templates />} />
+                    <Route path="/library" element={<Library />} />
                     <Route path="/dashboard" element={<Dashboard />} />
                     <Route path="/script-editor" element={<ScriptEditor />} />
                     <Route

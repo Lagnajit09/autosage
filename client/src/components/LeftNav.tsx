@@ -9,7 +9,7 @@ import {
   FileClock,
   HelpCircle,
   Home,
-  ListPlus,
+  Library,
   Moon,
   Settings,
   Sun,
@@ -44,10 +44,10 @@ export const NavItems = ({ mobile = false }: { mobile?: boolean }) => {
     },
     {
       icon: (
-        <ListPlus className={cn("w-6 h-6", mobile ? "w-5 h-5 mr-2" : "")} />
+        <Library className={cn("w-6 h-6", mobile ? "w-5 h-5 mr-2" : "")} />
       ),
-      label: "Templates",
-      onClick: () => navigate("/templates"),
+      label: "Library",
+      onClick: () => navigate("/library"),
     },
     {
       icon: <CodeXml className={cn("w-6 h-6", mobile ? "w-5 h-5 mr-2" : "")} />,
