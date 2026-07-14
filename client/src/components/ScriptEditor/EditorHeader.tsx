@@ -1,4 +1,4 @@
-import { Airplay, DatabaseZap, History, Save } from "lucide-react";
+import { Airplay, DatabaseZap, History, Save, LibraryBig } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import GenieButton from "@/components/GenieButton";
 import { SidebarTrigger } from "@/components/ui/sidebar";
@@ -18,6 +18,7 @@ interface EditorHeaderProps {
   onToggleAI: () => void;
   onToggleTerminal: () => void;
   onToggleExecutions: () => void;
+  onOpenLibrary: () => void;
 }
 
 export function EditorHeader({
@@ -27,6 +28,7 @@ export function EditorHeader({
   onToggleAI,
   onToggleTerminal,
   onToggleExecutions,
+  onOpenLibrary,
 }: EditorHeaderProps) {
   const [showVault, setShowVault] = useState(false);
 
@@ -46,6 +48,15 @@ export function EditorHeader({
         </div>
 
         <div className="flex items-center space-x-2">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={onOpenLibrary}
+            className="flex items-center space-x-1 border-2 border-gray-200 dark:border-gray-800 text-gray-700 dark:text-gray-300 dark:hover:bg-gray-700/30"
+          >
+            <LibraryBig size={16} />
+            <span className="hidden sm:inline">Library</span>
+          </Button>
           <Button
             variant="ghost"
             size="sm"

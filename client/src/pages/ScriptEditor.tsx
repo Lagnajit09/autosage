@@ -15,6 +15,7 @@ import { EditorPane } from "../components/ScriptEditor/EditorPane";
 import { useScriptExecution } from "../components/ScriptEditor/useScriptExecution";
 import { ScriptExecutionDrawer } from "../components/ScriptEditor/ScriptExecutionDrawer";
 import { ExecutionHistoryModal } from "../components/ScriptEditor/ExecutionHistoryModal";
+import { LibraryScriptsModal } from "../components/ScriptEditor/LibraryScriptsModal";
 import { useState, useEffect } from "react";
 
 // Mobile gate lives in this thin wrapper so the inner component's
@@ -69,6 +70,7 @@ const ScriptEditorContent = () => {
 
   const [isExecutionOpen, setIsExecutionOpen] = useState(false);
   const [isExecutionsHistoryOpen, setIsExecutionsHistoryOpen] = useState(false);
+  const [isLibraryOpen, setIsLibraryOpen] = useState(false);
 
   const {
     servers,
@@ -128,6 +130,7 @@ const ScriptEditorContent = () => {
               onToggleAI={() => setIsAISidebarOpen(!isAISidebarOpen)}
               onToggleTerminal={() => setIsExecutionOpen(!isExecutionOpen)}
               onToggleExecutions={() => setIsExecutionsHistoryOpen(true)}
+              onOpenLibrary={() => setIsLibraryOpen(true)}
             />
 
             <EditorTabs
@@ -204,6 +207,12 @@ const ScriptEditorContent = () => {
           title="Delete Script?"
           description="Are you sure you want to delete this script? This action cannot be undone."
           isLoading={isLoading}
+        />
+
+        <LibraryScriptsModal
+          open={isLibraryOpen}
+          onClose={() => setIsLibraryOpen(false)}
+          onForked={handleScriptCreated}
         />
       </div>
     </SidebarProvider>

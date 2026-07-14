@@ -110,13 +110,15 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({
               onUpdateNode={onUpdateNode}
             />
           );
-        } else {
+        } else if (selectedNode.data?.type === "script") {
           return (
             <ScriptConf
               selectedNode={selectedNode}
               onUpdateNode={onUpdateNode}
             />
           );
+        } else {
+          return null;
         }
       case "trigger":
         return (
@@ -218,7 +220,8 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({
               </div>
 
               {/* Parameters Section */}
-              {selectedNode.type === "action" && (
+              {selectedNode.type === "action" &&
+                selectedNode.data?.type === "script" && (
                 <div className="space-y-4">
                   <div className="flex items-center justify-between">
                     <label className="block text-sm font-medium text-text-secondary dark:text-text-secondary">
@@ -252,7 +255,7 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({
                     Action Type
                   </Label>
                   <Select
-                    value={selectedNode.data?.type || "script"}
+                    value={selectedNode.data?.type || ""}
                     onValueChange={(value) => handleInputChange("type", value)}
                   >
                     <SelectTrigger className="w-full px-4 py-3 text-sm bg-transparent border border-gray-300 dark:border-gray-700 rounded-xl text-gray-900 dark:text-gray-100 hover:border-purple-500 dark:hover:border-purple-500 focus:outline-none">
@@ -263,6 +266,11 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({
                       <SelectItem value="email">Email</SelectItem>
                     </SelectContent>
                   </Select>
+                  {!selectedNode.data?.type && (
+                    <p className="text-xs text-amber-600 dark:text-amber-400 mt-2">
+                      Select an action type to configure this node.
+                    </p>
+                  )}
                 </div>
               )}
 

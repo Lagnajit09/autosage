@@ -34,7 +34,7 @@ export const TriggerConf: React.FC<BaseConfigProps> = ({
           Trigger Type
         </Label>
         <Select
-          value={selectedNode.data?.type || "manual"}
+          value={selectedNode.data?.type || ""}
           onValueChange={(value) => handleInputChange("type", value)}
           disabled={isConfigured}
         >
@@ -50,7 +50,13 @@ export const TriggerConf: React.FC<BaseConfigProps> = ({
         </Select>
       </div>
 
-      {(!selectedNode.data?.type || selectedNode.data?.type === "manual") && (
+      {!selectedNode.data?.type && (
+        <p className="text-xs text-amber-600 dark:text-amber-400">
+          Select a trigger type to configure this node.
+        </p>
+      )}
+
+      {selectedNode.data?.type === "manual" && (
         <ManualTrigger
           selectedNode={selectedNode}
           onUpdateNode={onUpdateNode}

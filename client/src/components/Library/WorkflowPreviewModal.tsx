@@ -103,7 +103,7 @@ export const WorkflowPreviewModal = ({
 
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
-      <DialogContent className="max-w-4xl w-[90vw] bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800">
+      <DialogContent className="max-w-4xl w-[90vw] bg-white dark:bg-black border border-gray-200 dark:border-gray-800">
         <DialogHeader>
           <DialogTitle className="text-gray-900 dark:text-gray-100">
             {name}

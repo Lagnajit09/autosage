@@ -674,6 +674,27 @@ const WorkflowBuilderContent = ({
       return;
     }
 
+    // Every trigger/action node must have an explicit sub-type chosen in the
+    // config panel before the workflow can be saved. Decision nodes have none.
+    const TRIGGER_TYPES = ["manual", "http", "schedule"];
+    const ACTION_TYPES = ["script", "email"];
+    const untypedNode = nodes.find((node) => {
+      const t = node.data?.type as string | undefined;
+      if (node.type === "trigger") return !t || !TRIGGER_TYPES.includes(t);
+      if (node.type === "action") return !t || !ACTION_TYPES.includes(t);
+      return false;
+    });
+    if (untypedNode) {
+      toast({
+        title: "Incomplete node",
+        description: `Select a type for "${
+          untypedNode.data?.label || untypedNode.type
+        }" before saving.`,
+        variant: "destructive",
+      });
+      return;
+    }
+
     toast2.loading("Saving workflow...");
 
     const workflow = {
@@ -827,6 +848,7 @@ const WorkflowBuilderContent = ({
             onSaveWorkflow={saveWorkflow}
             workflowName={workflowName}
             setWorkflowName={setWorkflowName}
+            onAddLibraryNode={addNodeAtCenter}
           />
 
           <AppContextMenu
