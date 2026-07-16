@@ -65,3 +65,29 @@ class Subscription(models.Model):
             self.credits_pass_expires_at
             and self.credits_pass_expires_at > timezone.now()
         )
+
+
+class DayPassPurchase(models.Model):
+    """A one-time Pro Day Pass payment receipt.
+
+    One-time Razorpay Orders don't generate Razorpay Invoices, so we record
+    each successful Day Pass payment locally to show it in billing history.
+    Keyed by order_id for idempotency across the verify/webhook grant paths.
+    """
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='day_pass_purchases',
+    )
+    order_id = models.CharField(max_length=255, unique=True)
+    payment_id = models.CharField(max_length=255, blank=True)
+    amount = models.PositiveIntegerField(help_text='Amount in the smallest currency unit (paise).')
+    currency = models.CharField(max_length=10, default='INR')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = 'billing_day_pass_purchases'
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"DayPass {self.order_id} — {self.user}"

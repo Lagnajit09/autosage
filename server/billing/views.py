@@ -280,6 +280,17 @@ def verify_credits_payment(request):
     if not order_id or not payment_id or not signature:
         return api_response(success=False, message='Missing payment details.', status_code=400)
 
+    # Idempotency / race with the order.paid webhook: the webhook may have
+    # already granted this pass and cleared credits_order_id before this
+    # synchronous verify call ran. If the pass is now active, treat verify as a
+    # success rather than surfacing a spurious "expired order" error.
+    if sub.has_active_day_pass and not sub.credits_order_id:
+        return api_response(
+            success=True,
+            message='Pro Day Pass activated! Enjoy Pro features for the next 24 hours.',
+            data={'expires_at': sub.credits_pass_expires_at.isoformat()},
+        )
+
     # The order must be the one we issued to this user — prevents replaying
     # another user's / a stale order to mint a pass.
     if not sub.credits_order_id or order_id != sub.credits_order_id:
@@ -314,6 +325,14 @@ def verify_credits_payment(request):
         'credits_pass_expires_at', 'last_credits_purchase_at', 'credits_order_id', 'modified_at',
     ])
 
+    _record_day_pass_purchase(
+        user=user,
+        order_id=order_id,
+        payment_id=payment_id,
+        amount=settings.RAZORPAY_PRO_CREDITS,
+        currency=settings.RAZORPAY_PRO_CREDITS_CURRENCY,
+    )
+
     logger.info('Pro Day Pass granted to user %s until %s', user.id, sub.credits_pass_expires_at)
 
     return api_response(
@@ -331,27 +350,40 @@ def list_invoices(request):
     user = request.user
     sub = get_or_create_subscription(user)
 
-    if not sub.razorpay_subscription_id:
-        return api_response(success=True, message='No invoices.', data=[])
+    data = []
 
-    try:
-        result = _get_rzp().invoice.all({'subscription_id': sub.razorpay_subscription_id, 'count': 20})
-        invoices = result.get('items', [])
-        data = [
-            {
-                'id': inv['id'],
-                'invoice_number': inv.get('invoice_number', inv['id']),
-                'amount': inv['amount'] / 100,
-                'currency': inv.get('currency', 'USD').upper(),
-                'status': inv['status'],
-                'date': inv.get('date') or inv.get('created_at'),
-                'description': inv.get('description', 'Pro Plan'),
-            }
-            for inv in invoices
-        ]
-    except Exception as e:
-        logger.exception('Failed to fetch invoices: %s', e)
-        return api_response(success=True, message='Could not load invoices.', data=[])
+    # Razorpay subscription invoices (recurring Pro plan).
+    if sub.razorpay_subscription_id:
+        try:
+            result = _get_rzp().invoice.all({'subscription_id': sub.razorpay_subscription_id, 'count': 20})
+            for inv in result.get('items', []):
+                data.append({
+                    'id': inv['id'],
+                    'invoice_number': inv.get('invoice_number', inv['id']),
+                    'amount': inv['amount'] / 100,
+                    'currency': inv.get('currency', 'USD').upper(),
+                    'status': inv['status'],
+                    'date': inv.get('date') or inv.get('created_at'),
+                    'description': inv.get('description', 'Pro Plan'),
+                })
+        except Exception as e:
+            logger.exception('Failed to fetch invoices: %s', e)
+
+    # Local Day Pass receipts (one-time Orders don't generate Razorpay invoices).
+    from billing.models import DayPassPurchase
+    for p in DayPassPurchase.objects.filter(user=user)[:20]:
+        data.append({
+            'id': p.order_id,
+            'invoice_number': p.payment_id or p.order_id,
+            'amount': p.amount / 100,
+            'currency': p.currency.upper(),
+            'status': 'paid',
+            'date': int(p.created_at.timestamp()),
+            'description': 'Pro Day Pass (24 hrs)',
+        })
+
+    # Newest first; entries missing a date sort last.
+    data.sort(key=lambda x: x.get('date') or 0, reverse=True)
 
     return api_response(success=True, message='Invoices retrieved.', data=data)
 
@@ -460,10 +492,16 @@ def razorpay_webhook(request):
     order_id = payment_entity.get('order_id', '')
     if event == 'order.paid' or (event == 'payment.captured' and order_id):
         # `order.paid` puts the order under payload.order.entity.
+        order_entity = payload.get('payload', {}).get('order', {}).get('entity', {})
         if not order_id:
-            order_id = payload.get('payload', {}).get('order', {}).get('entity', {}).get('id', '')
+            order_id = order_entity.get('id', '')
         if order_id:
-            handled = _grant_day_pass_from_webhook(order_id)
+            handled = _grant_day_pass_from_webhook(
+                order_id,
+                payment_id=payment_entity.get('id', ''),
+                amount=payment_entity.get('amount') or order_entity.get('amount'),
+                currency=(payment_entity.get('currency') or order_entity.get('currency') or ''),
+            )
             if handled:
                 return JsonResponse({'status': 'ok'})
             # Not a Day Pass order — fall through to subscription handling
@@ -514,7 +552,7 @@ def razorpay_webhook(request):
     return JsonResponse({'status': 'ok'})
 
 
-def _grant_day_pass_from_webhook(order_id):
+def _grant_day_pass_from_webhook(order_id, payment_id='', amount=None, currency=''):
     """Grant a Day Pass for a paid one-time Order, if `order_id` matches one we
     issued and it hasn't already been consumed. Idempotent: a second delivery
     (or a race with /credits/verify/) is a no-op because credits_order_id is
@@ -534,8 +572,39 @@ def _grant_day_pass_from_webhook(order_id):
     sub.save(update_fields=[
         'credits_pass_expires_at', 'last_credits_purchase_at', 'credits_order_id', 'modified_at',
     ])
+
+    _record_day_pass_purchase(
+        user=sub.user,
+        order_id=order_id,
+        payment_id=payment_id,
+        amount=amount if amount is not None else settings.RAZORPAY_PRO_CREDITS,
+        currency=currency or settings.RAZORPAY_PRO_CREDITS_CURRENCY,
+    )
+
     logger.info('Pro Day Pass granted via webhook for order %s (user %s)', order_id, sub.user_id)
     return True
+
+
+def _record_day_pass_purchase(user, order_id, payment_id, amount, currency):
+    """Store a local receipt for a Day Pass purchase (idempotent by order_id).
+
+    One-time Razorpay Orders don't produce Razorpay Invoices, so this lets the
+    billing history surface Day Pass payments.
+    """
+    from billing.models import DayPassPurchase
+    try:
+        DayPassPurchase.objects.get_or_create(
+            order_id=order_id,
+            defaults={
+                'user': user,
+                'payment_id': payment_id or '',
+                'amount': int(amount),
+                'currency': (currency or 'INR').upper(),
+            },
+        )
+    except Exception as e:
+        # A missing receipt must never fail the (already-granted) pass.
+        logger.warning('Could not record Day Pass receipt for order %s: %s', order_id, e)
 
 
 # ── POST /api/billing/contact/ ──────────────────────────────────────────────

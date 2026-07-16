@@ -38,6 +38,9 @@ import {
 } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { apiRequest } from "@/lib/api-client";
+import ProActivationOverlay, {
+  type ActivationState,
+} from "@/components/billing/ProActivationOverlay";
 
 interface RazorpayResponse {
   razorpay_payment_id: string;
@@ -71,6 +74,13 @@ const Plans = () => {
   const [dayPassLoading, setDayPassLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Post-payment activation overlay
+  const [activation, setActivation] = useState<{
+    open: boolean;
+    state: ActivationState;
+    label: string;
+  }>({ open: false, state: "activating", label: "Pro Plan" });
+
   // Enterprise contact dialog state
   const [contactOpen, setContactOpen] = useState(false);
   const [contactType, setContactType] = useState("Solo / Individual");
@@ -90,6 +100,41 @@ const Plans = () => {
       } catch { /* silent */ }
     })();
   }, [getToken]);
+
+  // Poll the subscription until `predicate` is satisfied, driving the
+  // activation overlay: "activating" while polling → "success" → auto-close,
+  // with the fresh subscription applied in place (no reload/navigation).
+  const pollUntilActivated = useCallback(
+    async (label: string, predicate: (s: Subscription) => boolean) => {
+      setActivation({ open: true, state: "activating", label });
+      const deadline = Date.now() + 60000;
+      while (Date.now() < deadline) {
+        const t = await getToken();
+        if (t) {
+          try {
+            const updated = await getSubscription(t);
+            if (predicate(updated)) {
+              setSub(updated);
+              setActivation({ open: true, state: "success", label });
+              await new Promise((r) => setTimeout(r, 1800));
+              setActivation((a) => ({ ...a, open: false }));
+              return;
+            }
+          } catch { /* keep polling */ }
+        }
+        await new Promise((r) => setTimeout(r, 3000));
+      }
+      // Timed out — close the overlay and refresh whatever we have.
+      setActivation((a) => ({ ...a, open: false }));
+      const t = await getToken();
+      if (t) {
+        try {
+          setSub(await getSubscription(t));
+        } catch { /* silent */ }
+      }
+    },
+    [getToken],
+  );
 
   const handleUpgrade = useCallback(async (interval: "monthly" | "yearly") => {
     const token = await getToken();
@@ -111,17 +156,7 @@ const Plans = () => {
         image: "/icon.png",
         theme: { color: "#7c3aed" },
         handler: () => {
-          const poll = setInterval(async () => {
-            const t = await getToken();
-            if (!t) return;
-            const updated = await getSubscription(t);
-            if (updated.plan === "pro") {
-              setSub(updated);
-              clearInterval(poll);
-              navigate("/billing");
-            }
-          }, 3000);
-          setTimeout(() => clearInterval(poll), 60000);
+          void pollUntilActivated("Pro Plan", (s) => s.plan === "pro" && !s.day_pass.active);
         },
       });
       rzp.open();
@@ -130,7 +165,7 @@ const Plans = () => {
     } finally {
       setCheckoutLoading(null);
     }
-  }, [getToken, navigate]);
+  }, [getToken, navigate, pollUntilActivated]);
 
   const handleDayPass = useCallback(async () => {
     const token = await getToken();
@@ -150,23 +185,21 @@ const Plans = () => {
         image: "/icon.png",
         theme: { color: "#7c3aed" },
         handler: async (response: RazorpayResponse) => {
+          // Show the activation overlay immediately, then verify + poll.
+          setActivation({ open: true, state: "activating", label: "Pro Day Pass" });
           try {
             const t = await getToken();
-            if (!t) return;
-            await verifyCreditsPayment(t, {
-              razorpay_order_id: response.razorpay_order_id,
-              razorpay_payment_id: response.razorpay_payment_id,
-              razorpay_signature: response.razorpay_signature,
-            });
-            setSub(await getSubscription(t));
-            navigate("/billing");
-          } catch (e: unknown) {
-            setError(
-              e instanceof Error
-                ? e.message
-                : "Payment received but activation failed. Please contact support.",
-            );
+            if (t) {
+              await verifyCreditsPayment(t, {
+                razorpay_order_id: response.razorpay_order_id,
+                razorpay_payment_id: response.razorpay_payment_id,
+                razorpay_signature: response.razorpay_signature,
+              });
+            }
+          } catch {
+            // Verify may race the webhook; polling below confirms the grant.
           }
+          await pollUntilActivated("Pro Day Pass", (s) => s.day_pass.active);
         },
       });
       rzp.open();
@@ -175,7 +208,7 @@ const Plans = () => {
     } finally {
       setDayPassLoading(false);
     }
-  }, [getToken, navigate]);
+  }, [getToken, pollUntilActivated]);
 
   const handleContactSubmit = async () => {
     if (!contactName.trim() || !contactEmail.trim() || !contactDesc.trim()) {
@@ -289,6 +322,11 @@ const Plans = () => {
 
   return (
     <div className="flex h-screen bg-gray-50 dark:bg-gray-950 transition-colors duration-300">
+      <ProActivationOverlay
+        open={activation.open}
+        state={activation.state}
+        planLabel={activation.label}
+      />
       <LeftNav />
       <main className="flex-1 overflow-y-auto">
         <div className="container mx-auto px-6 py-12">

@@ -60,6 +60,9 @@ import {
   type Subscription,
   type Invoice,
 } from "@/lib/api/billing";
+import ProActivationOverlay, {
+  type ActivationState,
+} from "@/components/billing/ProActivationOverlay";
 
 interface RazorpayResponse {
   razorpay_payment_id: string;
@@ -123,6 +126,11 @@ const Billing = () => {
   const [invoicesLoading, setInvoicesLoading] = useState(false);
   const [checkoutLoading, setCheckoutLoading] = useState<"monthly" | "yearly" | null>(null);
   const [dayPassLoading, setDayPassLoading] = useState(false);
+  const [activation, setActivation] = useState<{
+    open: boolean;
+    state: ActivationState;
+    label: string;
+  }>({ open: false, state: "activating", label: "Pro Plan" });
   const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
   const [cancelLoading, setCancelLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -158,6 +166,35 @@ const Billing = () => {
     loadSubscription();
   }, [loadSubscription]);
 
+  // Poll the subscription until `predicate` holds, driving the activation
+  // overlay in place (no reload). Also refreshes invoices on success.
+  const pollUntilActivated = useCallback(
+    async (label: string, predicate: (s: Subscription) => boolean) => {
+      setActivation({ open: true, state: "activating", label });
+      const deadline = Date.now() + 60000;
+      while (Date.now() < deadline) {
+        const t = await getToken();
+        if (t) {
+          try {
+            const updated = await getSubscription(t);
+            if (predicate(updated)) {
+              setSub(updated);
+              setActivation({ open: true, state: "success", label });
+              void loadInvoices();
+              await new Promise((r) => setTimeout(r, 1800));
+              setActivation((a) => ({ ...a, open: false }));
+              return;
+            }
+          } catch { /* keep polling */ }
+        }
+        await new Promise((r) => setTimeout(r, 3000));
+      }
+      setActivation((a) => ({ ...a, open: false }));
+      await loadSubscription();
+    },
+    [getToken, loadSubscription, loadInvoices],
+  );
+
   const handleUpgrade = async (interval: "monthly" | "yearly") => {
     const token = await getToken();
     if (!token) return;
@@ -181,17 +218,7 @@ const Billing = () => {
         image: "/icon.png",
         theme: { color: "#7c3aed" },
         handler: () => {
-          // Webhook handles activation; poll until plan updates
-          const poll = setInterval(async () => {
-            const t = await getToken();
-            if (!t) return;
-            const updated = await getSubscription(t);
-            if (updated.plan === "pro") {
-              setSub(updated);
-              clearInterval(poll);
-            }
-          }, 3000);
-          setTimeout(() => clearInterval(poll), 60000);
+          void pollUntilActivated("Pro Plan", (s) => s.plan === "pro" && !s.day_pass.active);
         },
       });
       rzp.open();
@@ -221,22 +248,20 @@ const Billing = () => {
         image: "/icon.png",
         theme: { color: "#7c3aed" },
         handler: async (response: RazorpayResponse) => {
+          setActivation({ open: true, state: "activating", label: "Pro Day Pass" });
           try {
             const t = await getToken();
-            if (!t) return;
-            await verifyCreditsPayment(t, {
-              razorpay_order_id: response.razorpay_order_id,
-              razorpay_payment_id: response.razorpay_payment_id,
-              razorpay_signature: response.razorpay_signature,
-            });
-            await loadSubscription();
-          } catch (e: unknown) {
-            setError(
-              e instanceof Error
-                ? e.message
-                : "Payment received but activation failed. Please contact support.",
-            );
+            if (t) {
+              await verifyCreditsPayment(t, {
+                razorpay_order_id: response.razorpay_order_id,
+                razorpay_payment_id: response.razorpay_payment_id,
+                razorpay_signature: response.razorpay_signature,
+              });
+            }
+          } catch {
+            // Verify may race the webhook; polling below confirms the grant.
           }
+          await pollUntilActivated("Pro Day Pass", (s) => s.day_pass.active);
         },
       });
       rzp.open();
@@ -274,6 +299,11 @@ const Billing = () => {
 
   return (
     <SidebarProvider>
+      <ProActivationOverlay
+        open={activation.open}
+        state={activation.state}
+        planLabel={activation.label}
+      />
       <div className="flex w-full h-screen bg-gray-100 dark:bg-workflow-void/90 overflow-hidden">
         <LeftNav />
 
