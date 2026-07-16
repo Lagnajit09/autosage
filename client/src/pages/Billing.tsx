@@ -53,11 +53,19 @@ import {
 import {
   getSubscription,
   createCheckout,
+  createCreditsCheckout,
+  verifyCreditsPayment,
   cancelSubscription,
   getInvoices,
   type Subscription,
   type Invoice,
 } from "@/lib/api/billing";
+
+interface RazorpayResponse {
+  razorpay_payment_id: string;
+  razorpay_order_id: string;
+  razorpay_signature: string;
+}
 
 declare global {
   interface Window {
@@ -66,6 +74,17 @@ declare global {
     };
   }
 }
+
+const loadRazorpay = async (): Promise<void> => {
+  if (window.Razorpay) return;
+  await new Promise<void>((resolve, reject) => {
+    const script = document.createElement("script");
+    script.src = "https://checkout.razorpay.com/v1/checkout.js";
+    script.onload = () => resolve();
+    script.onerror = () => reject(new Error("Razorpay failed to load"));
+    document.body.appendChild(script);
+  });
+};
 
 function usagePercent(used: number, limit: number | null): number {
   if (limit === null || limit === 0) return 0;
@@ -103,6 +122,7 @@ const Billing = () => {
   const [loading, setLoading] = useState(true);
   const [invoicesLoading, setInvoicesLoading] = useState(false);
   const [checkoutLoading, setCheckoutLoading] = useState<"monthly" | "yearly" | null>(null);
+  const [dayPassLoading, setDayPassLoading] = useState(false);
   const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
   const [cancelLoading, setCancelLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -151,16 +171,7 @@ const Billing = () => {
         return;
       }
 
-      // Load Razorpay script if not already loaded
-      if (!window.Razorpay) {
-        await new Promise<void>((resolve, reject) => {
-          const script = document.createElement("script");
-          script.src = "https://checkout.razorpay.com/v1/checkout.js";
-          script.onload = () => resolve();
-          script.onerror = () => reject(new Error("Razorpay failed to load"));
-          document.body.appendChild(script);
-        });
-      }
+      await loadRazorpay();
 
       const rzp = new window.Razorpay({
         key: session.key_id,
@@ -192,6 +203,50 @@ const Billing = () => {
     }
   };
 
+  const handleDayPass = async () => {
+    const token = await getToken();
+    if (!token) return;
+    setDayPassLoading(true);
+    setError(null);
+    try {
+      const order = await createCreditsCheckout(token);
+      await loadRazorpay();
+      const rzp = new window.Razorpay({
+        key: order.key_id,
+        order_id: order.order_id,
+        amount: order.amount,
+        currency: order.currency,
+        name: "Autosage",
+        description: "Pro Day Pass — 24 hours of Pro",
+        image: "/icon.png",
+        theme: { color: "#7c3aed" },
+        handler: async (response: RazorpayResponse) => {
+          try {
+            const t = await getToken();
+            if (!t) return;
+            await verifyCreditsPayment(t, {
+              razorpay_order_id: response.razorpay_order_id,
+              razorpay_payment_id: response.razorpay_payment_id,
+              razorpay_signature: response.razorpay_signature,
+            });
+            await loadSubscription();
+          } catch (e: unknown) {
+            setError(
+              e instanceof Error
+                ? e.message
+                : "Payment received but activation failed. Please contact support.",
+            );
+          }
+        },
+      });
+      rzp.open();
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Could not start the Day Pass checkout.");
+    } finally {
+      setDayPassLoading(false);
+    }
+  };
+
   const handleCancel = async () => {
     const token = await getToken();
     if (!token) return;
@@ -212,6 +267,10 @@ const Billing = () => {
   const isPro = sub?.plan === "pro";
   const isFree = sub?.plan === "free";
   const isAdmin = sub?.is_admin;
+  const dayPass = sub?.day_pass;
+  const dayPassPrice = dayPass
+    ? `${dayPass.currency === "INR" ? "₹" : ""}${(dayPass.amount / 100).toFixed(0)}`
+    : "₹99";
 
   return (
     <SidebarProvider>
@@ -288,7 +347,11 @@ const Billing = () => {
                               <CardDescription className="mt-2">
                                 You are on the{" "}
                                 <span className="font-semibold text-purple-600 dark:text-purple-400">
-                                  {isAdmin ? "Enterprise (Admin)" : `${planName} Plan`}
+                                  {isAdmin
+                                    ? "Enterprise (Admin)"
+                                    : dayPass?.active
+                                    ? "Pro (Day Pass)"
+                                    : `${planName} Plan`}
                                 </span>
                               </CardDescription>
                             </div>
@@ -305,19 +368,32 @@ const Billing = () => {
                           </div>
                         </CardHeader>
                         <CardContent className="space-y-4">
-                          {isFree && !isAdmin && (
-                            <div className="text-3xl font-bold text-gray-900 dark:text-white">$0 / month</div>
-                          )}
-                          {isPro && (
-                            <div className="text-3xl font-bold text-gray-900 dark:text-white">
-                              {sub?.billing_interval === "yearly" ? "$120 / year" : "$15 / month"}
-                            </div>
-                          )}
-                          {sub?.current_period_end && (
-                            <p className="text-sm text-gray-500 dark:text-gray-400">
-                              {sub.status === "cancelled" ? "Access until" : "Renews on"}{" "}
-                              {formatDate(sub.current_period_end)}
-                            </p>
+                          {dayPass?.active ? (
+                            <>
+                              <div className="text-3xl font-bold text-gray-900 dark:text-white">
+                                {dayPassPrice} / 24 hrs
+                              </div>
+                              <p className="text-sm text-gray-500 dark:text-gray-400">
+                                Pass expires {formatDate(dayPass.expires_at)}
+                              </p>
+                            </>
+                          ) : (
+                            <>
+                              {isFree && !isAdmin && (
+                                <div className="text-3xl font-bold text-gray-900 dark:text-white">$0 / month</div>
+                              )}
+                              {isPro && (
+                                <div className="text-3xl font-bold text-gray-900 dark:text-white">
+                                  {sub?.billing_interval === "yearly" ? "$120 / year" : "$15 / month"}
+                                </div>
+                              )}
+                              {sub?.current_period_end && (
+                                <p className="text-sm text-gray-500 dark:text-gray-400">
+                                  {sub.status === "cancelled" ? "Access until" : "Renews on"}{" "}
+                                  {formatDate(sub.current_period_end)}
+                                </p>
+                              )}
+                            </>
                           )}
                           {/* Plan features */}
                           <div className="space-y-2 mt-4">
@@ -338,41 +414,88 @@ const Billing = () => {
                           </div>
                         </CardContent>
                         {!isAdmin && (
-                          <CardFooter className="flex flex-wrap gap-3 border-t border-gray-100 dark:border-gray-800 pt-6">
-                            {isFree && (
-                              <>
-                                <Button
-                                  onClick={() => handleUpgrade("monthly")}
-                                  disabled={checkoutLoading !== null}
-                                  className="bg-purple-600 hover:bg-purple-700 text-white"
-                                >
-                                  {checkoutLoading === "monthly" ? <RefreshCw className="w-4 h-4 mr-2 animate-spin" /> : <Zap className="w-4 h-4 mr-2" />}
-                                  Upgrade — $15/mo
-                                </Button>
-                                <Button
-                                  onClick={() => handleUpgrade("yearly")}
-                                  disabled={checkoutLoading !== null}
-                                  variant="outline"
-                                  className="dark:bg-transparent dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
-                                >
-                                  {checkoutLoading === "yearly" ? <RefreshCw className="w-4 h-4 mr-2 animate-spin" /> : null}
-                                  Upgrade — $120/yr (save 33%)
-                                </Button>
-                              </>
-                            )}
-                            {isPro && sub?.status !== "cancelled" && (
-                              <>
-                                <Button onClick={() => navigate("/plans")} variant="outline" className="dark:bg-transparent dark:border-gray-700 dark:text-gray-300">
-                                  Change Plan
-                                </Button>
-                                <Button
-                                  variant="ghost"
-                                  className="text-red-600 hover:text-red-700 dark:text-red-400"
-                                  onClick={() => setCancelDialogOpen(true)}
-                                >
-                                  Cancel Subscription
-                                </Button>
-                              </>
+                          <CardFooter className="flex flex-col gap-4 border-t border-gray-100 dark:border-gray-800 pt-6">
+                            <div className="flex flex-wrap gap-3">
+                              {isFree && (
+                                <>
+                                  <Button
+                                    onClick={() => handleUpgrade("monthly")}
+                                    disabled={checkoutLoading !== null}
+                                    className="bg-purple-600 hover:bg-purple-700 text-white"
+                                  >
+                                    {checkoutLoading === "monthly" ? <RefreshCw className="w-4 h-4 mr-2 animate-spin" /> : <Zap className="w-4 h-4 mr-2" />}
+                                    Upgrade — $15/mo
+                                  </Button>
+                                  <Button
+                                    onClick={() => handleUpgrade("yearly")}
+                                    disabled={checkoutLoading !== null}
+                                    variant="outline"
+                                    className="dark:bg-transparent dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
+                                  >
+                                    {checkoutLoading === "yearly" ? <RefreshCw className="w-4 h-4 mr-2 animate-spin" /> : null}
+                                    Upgrade — $120/yr (save 33%)
+                                  </Button>
+                                </>
+                              )}
+                              {/* A day pass reports plan="pro" but has no real subscription to cancel. */}
+                              {isPro && !dayPass?.active && sub?.status !== "cancelled" && (
+                                <>
+                                  <Button onClick={() => navigate("/plans")} variant="outline" className="dark:bg-transparent dark:border-gray-700 dark:text-gray-300">
+                                    Change Plan
+                                  </Button>
+                                  <Button
+                                    variant="ghost"
+                                    className="text-red-600 hover:text-red-700 dark:text-red-400"
+                                    onClick={() => setCancelDialogOpen(true)}
+                                  >
+                                    Cancel Subscription
+                                  </Button>
+                                </>
+                              )}
+                            </div>
+
+                            {/* One-time Pro Day Pass */}
+                            {dayPass && (
+                              <div className="w-full rounded-lg border border-dashed border-purple-300 dark:border-purple-800/60 bg-purple-50/50 dark:bg-purple-900/10 p-4">
+                                {dayPass.active ? (
+                                  <div className="flex items-center gap-2 text-sm text-purple-700 dark:text-purple-300">
+                                    <Zap className="w-4 h-4 shrink-0" />
+                                    <span>
+                                      Pro Day Pass active — expires{" "}
+                                      <span className="font-semibold">{formatDate(dayPass.expires_at)}</span>.
+                                    </span>
+                                  </div>
+                                ) : (
+                                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                                    <div>
+                                      <p className="text-sm font-medium text-gray-900 dark:text-white">
+                                        Pro Day Pass
+                                      </p>
+                                      <p className="text-xs text-gray-500 dark:text-gray-400">
+                                        Try Pro for 24 hours — {dayPassPrice}. Once per week.
+                                      </p>
+                                    </div>
+                                    {dayPass.available ? (
+                                      <Button
+                                        onClick={handleDayPass}
+                                        disabled={dayPassLoading}
+                                        variant="secondary"
+                                        size="sm"
+                                        className="shrink-0"
+                                      >
+                                        {dayPassLoading ? <RefreshCw className="w-4 h-4 mr-2 animate-spin" /> : <Zap className="w-4 h-4 mr-2" />}
+                                        Get Day Pass — {dayPassPrice}
+                                      </Button>
+                                    ) : (
+                                      <Button variant="secondary" size="sm" disabled className="shrink-0">
+                                        {dayPass.next_available_at
+                                          ? `Available again ${formatDate(dayPass.next_available_at)}`
+                                          : "Unavailable"}
+                                      </Button>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
                             )}
                           </CardFooter>
                         )}

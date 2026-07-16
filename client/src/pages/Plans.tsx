@@ -13,7 +13,13 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Check, Zap, RefreshCw } from "lucide-react";
-import { getSubscription, createCheckout, type Subscription } from "@/lib/api/billing";
+import {
+  getSubscription,
+  createCheckout,
+  createCreditsCheckout,
+  verifyCreditsPayment,
+  type Subscription,
+} from "@/lib/api/billing";
 import {
   Dialog,
   DialogContent,
@@ -33,11 +39,28 @@ import {
 import { Label } from "@/components/ui/label";
 import { apiRequest } from "@/lib/api-client";
 
+interface RazorpayResponse {
+  razorpay_payment_id: string;
+  razorpay_order_id: string;
+  razorpay_signature: string;
+}
+
 declare global {
   interface Window {
     Razorpay: new (options: Record<string, unknown>) => { open: () => void };
   }
 }
+
+const loadRazorpay = async (): Promise<void> => {
+  if (window.Razorpay) return;
+  await new Promise<void>((resolve, reject) => {
+    const s = document.createElement("script");
+    s.src = "https://checkout.razorpay.com/v1/checkout.js";
+    s.onload = () => resolve();
+    s.onerror = () => reject(new Error("Razorpay failed to load"));
+    document.body.appendChild(s);
+  });
+};
 
 const Plans = () => {
   const navigate = useNavigate();
@@ -45,6 +68,7 @@ const Plans = () => {
 
   const [sub, setSub] = useState<Subscription | null>(null);
   const [checkoutLoading, setCheckoutLoading] = useState<"monthly" | "yearly" | null>(null);
+  const [dayPassLoading, setDayPassLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   // Enterprise contact dialog state
@@ -78,15 +102,7 @@ const Plans = () => {
         navigate("/billing");
         return;
       }
-      if (!window.Razorpay) {
-        await new Promise<void>((resolve, reject) => {
-          const s = document.createElement("script");
-          s.src = "https://checkout.razorpay.com/v1/checkout.js";
-          s.onload = () => resolve();
-          s.onerror = () => reject(new Error("Razorpay failed to load"));
-          document.body.appendChild(s);
-        });
-      }
+      await loadRazorpay();
       const rzp = new window.Razorpay({
         key: session.key_id,
         subscription_id: session.subscription_id,
@@ -113,6 +129,51 @@ const Plans = () => {
       setError(e instanceof Error ? e.message : "Checkout failed. Please try again.");
     } finally {
       setCheckoutLoading(null);
+    }
+  }, [getToken, navigate]);
+
+  const handleDayPass = useCallback(async () => {
+    const token = await getToken();
+    if (!token) return;
+    setDayPassLoading(true);
+    setError(null);
+    try {
+      const order = await createCreditsCheckout(token);
+      await loadRazorpay();
+      const rzp = new window.Razorpay({
+        key: order.key_id,
+        order_id: order.order_id,
+        amount: order.amount,
+        currency: order.currency,
+        name: "Autosage",
+        description: "Pro Day Pass — 24 hours of Pro",
+        image: "/icon.png",
+        theme: { color: "#7c3aed" },
+        handler: async (response: RazorpayResponse) => {
+          try {
+            const t = await getToken();
+            if (!t) return;
+            await verifyCreditsPayment(t, {
+              razorpay_order_id: response.razorpay_order_id,
+              razorpay_payment_id: response.razorpay_payment_id,
+              razorpay_signature: response.razorpay_signature,
+            });
+            setSub(await getSubscription(t));
+            navigate("/billing");
+          } catch (e: unknown) {
+            setError(
+              e instanceof Error
+                ? e.message
+                : "Payment received but activation failed. Please contact support.",
+            );
+          }
+        },
+      });
+      rzp.open();
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Could not start the Day Pass checkout.");
+    } finally {
+      setDayPassLoading(false);
     }
   }, [getToken, navigate]);
 
@@ -160,6 +221,12 @@ const Plans = () => {
   };
 
   const currentPlan = sub?.plan ?? "free";
+  const dayPass = sub?.day_pass;
+  const dayPassPrice = dayPass
+    ? `${dayPass.currency === "INR" ? "₹" : ""}${(dayPass.amount / 100).toFixed(0)}`
+    : "₹99";
+  const formatDate = (iso: string | null) =>
+    iso ? new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric" }) : "";
 
   const plans = [
     {
@@ -324,12 +391,50 @@ const Plans = () => {
                           )}
                           Subscribe Yearly — $120
                         </Button>
+
+                        {/* One-time Pro Day Pass */}
+                        {dayPass && !sub?.is_admin && (
+                          <div className="mt-2 pt-3 border-t border-purple-200 dark:border-purple-800/60">
+                            <p className="text-xs text-center text-gray-500 dark:text-gray-400 mb-2">
+                              Just want to try Pro? Grab a 24-hour pass.
+                            </p>
+                            {dayPass.available ? (
+                              <Button
+                                className="w-full"
+                                variant="secondary"
+                                size="sm"
+                                disabled={dayPassLoading}
+                                onClick={handleDayPass}
+                              >
+                                {dayPassLoading ? (
+                                  <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                                ) : (
+                                  <Zap className="w-4 h-4 mr-2" />
+                                )}
+                                Pro Day Pass — {dayPassPrice} / 24 hrs
+                              </Button>
+                            ) : (
+                              <Button className="w-full" variant="secondary" size="sm" disabled>
+                                {dayPass.next_available_at
+                                  ? `Day Pass available again ${formatDate(dayPass.next_available_at)}`
+                                  : "Day Pass unavailable"}
+                              </Button>
+                            )}
+                          </div>
+                        )}
                       </>
                     )}
                     {plan.key === "pro" && isCurrent && (
-                      <Button className="w-full" variant="outline" size="lg" disabled>
-                        Current Plan
-                      </Button>
+                      dayPass?.active ? (
+                        <Button className="w-full" variant="outline" size="lg" disabled>
+                          <Zap className="w-4 h-4 mr-2" />
+                          Day Pass active until {formatDate(dayPass.expires_at)}
+                        </Button>
+                      ) : (
+                        <Button className="w-full" variant="outline" size="lg" disabled>
+                          Current Plan
+                        </Button>
+                      )
                     )}
                     {plan.key === "enterprise" && (
                       <Button className="w-full" variant="outline" size="lg" onClick={handleContactOpen}>

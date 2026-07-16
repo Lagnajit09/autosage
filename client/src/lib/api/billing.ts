@@ -35,6 +35,15 @@ export interface BillingUsage {
   vault_entries: number;
 }
 
+export interface DayPass {
+  active: boolean;
+  expires_at: string | null;
+  available: boolean;
+  next_available_at: string | null;
+  amount: number; // in paise
+  currency: string;
+}
+
 export interface Subscription {
   plan: PlanKey;
   plan_display: PlanDisplay;
@@ -46,6 +55,14 @@ export interface Subscription {
   limits: PlanLimits;
   execution_mode: boolean;
   usage: BillingUsage;
+  day_pass: DayPass;
+}
+
+export interface CreditsCheckout {
+  order_id: string;
+  amount: number; // in paise
+  currency: string;
+  key_id: string;
 }
 
 export interface CheckoutSession {
@@ -90,6 +107,33 @@ export const createCheckout = async (
     token
   );
   return res.data as CheckoutSession;
+};
+
+export const createCreditsCheckout = async (
+  token: string
+): Promise<CreditsCheckout> => {
+  const res = await apiRequest(
+    `${BILLING_BASE}/credits/checkout/`,
+    { method: "POST" },
+    token
+  );
+  return res.data as CreditsCheckout;
+};
+
+export const verifyCreditsPayment = async (
+  token: string,
+  payload: {
+    razorpay_order_id: string;
+    razorpay_payment_id: string;
+    razorpay_signature: string;
+  }
+): Promise<{ expires_at: string }> => {
+  const res = await apiRequest(
+    `${BILLING_BASE}/credits/verify/`,
+    { method: "POST", body: JSON.stringify(payload) },
+    token
+  );
+  return res.data as { expires_at: string };
 };
 
 export const cancelSubscription = async (
