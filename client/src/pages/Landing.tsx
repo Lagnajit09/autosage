@@ -6,11 +6,13 @@ import { Button } from "@/components/ui/button";
 import { useTheme } from "@/contexts/theme/theme-context";
 import { BookText, Moon, Sun } from "lucide-react";
 import { DOCS_BASE_URL } from "@/lib/api-client";
+import SEO from "@/components/seo/SEO";
 
 const Landing = () => {
   const { isDark, toggleTheme } = useTheme();
   return (
     <div className="dark:bg-bg-card overflow-x-hidden">
+      <SEO path="/" />
       <div className="w-full h-10 px-8 flex justify-end items-center gap-2">
         <Button
           variant="outline"
