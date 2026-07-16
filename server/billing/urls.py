@@ -4,6 +4,8 @@ from billing import views
 urlpatterns = [
     path('subscription/', views.subscription_detail, name='billing-subscription'),
     path('checkout/', views.create_checkout, name='billing-checkout'),
+    path('credits/checkout/', views.create_credits_checkout, name='billing-credits-checkout'),
+    path('credits/verify/', views.verify_credits_payment, name='billing-credits-verify'),
     path('cancel/', views.cancel_subscription, name='billing-cancel'),
     path('invoices/', views.list_invoices, name='billing-invoices'),
     path('plans/', views.list_plans, name='billing-plans'),

@@ -1,3 +1,4 @@
+import datetime
 import hashlib
 import hmac
 import json
@@ -48,6 +49,8 @@ def subscription_detail(request):
     limits = get_limits(user)
     usage = get_usage(user)
 
+    credits_available, next_at = _credits_availability(user, sub)
+
     data = {
         'plan': plan,
         'plan_display': PLAN_DISPLAY[plan],
@@ -59,8 +62,36 @@ def subscription_detail(request):
         'limits': {k: v for k, v in limits.items() if k != 'execution_mode'},
         'execution_mode': limits['execution_mode'],
         'usage': usage,
+        'day_pass': {
+            'active': sub.has_active_day_pass,
+            'expires_at': sub.credits_pass_expires_at.isoformat() if sub.credits_pass_expires_at else None,
+            'available': credits_available,
+            'next_available_at': next_at.isoformat() if next_at else None,
+            'amount': settings.RAZORPAY_PRO_CREDITS,
+            'currency': settings.RAZORPAY_PRO_CREDITS_CURRENCY,
+        },
     }
     return api_response(success=True, message='Subscription retrieved.', data=data)
+
+
+def _credits_availability(user, sub):
+    """Return (available: bool, next_available_at: datetime|None).
+
+    The Day Pass is unavailable to admins, to users already on a paid plan,
+    while a pass is currently active, or during the 7-day cooldown.
+    """
+    if user.is_staff:
+        return False, None
+    if sub.plan != Subscription.PLAN_FREE:
+        return False, None
+    if sub.has_active_day_pass:
+        return False, sub.credits_pass_expires_at
+    if sub.last_credits_purchase_at:
+        cooldown = datetime.timedelta(days=settings.RAZORPAY_PRO_CREDITS_COOLDOWN_DAYS)
+        next_at = sub.last_credits_purchase_at + cooldown
+        if timezone.now() < next_at:
+            return False, next_at
+    return True, None
 
 
 # ── POST /api/billing/checkout/ ──────────────────────────────────────────────
@@ -169,6 +200,126 @@ def cancel_subscription(request):
         success=True,
         message='Subscription cancelled. Access continues until the end of your billing period.',
         data={'cancelled_at': sub.cancelled_at.isoformat()},
+    )
+
+
+# ── POST /api/billing/credits/checkout/ ──────────────────────────────────────
+# Creates a one-time Razorpay Order for the ₹99 "Pro Day Pass".
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def create_credits_checkout(request):
+    user = request.user
+
+    if not settings.RAZORPAY_KEY_ID or not settings.RAZORPAY_KEY_SECRET:
+        return api_response(success=False, message='Payment gateway not configured.', status_code=503)
+
+    sub = get_or_create_subscription(user)
+    available, next_at = _credits_availability(user, sub)
+    if not available:
+        if sub.has_active_day_pass:
+            msg = 'You already have an active Pro Day Pass.'
+        elif sub.plan != Subscription.PLAN_FREE:
+            msg = 'The Day Pass is only for Free-plan users.'
+        else:
+            msg = 'You can buy the Day Pass again once per week. Please try later.'
+        return api_response(
+            success=False,
+            message=msg,
+            data={'next_available_at': next_at.isoformat() if next_at else None},
+            status_code=status.HTTP_400_BAD_REQUEST,
+        )
+
+    try:
+        order = _get_rzp().order.create({
+            'amount': settings.RAZORPAY_PRO_CREDITS,
+            'currency': settings.RAZORPAY_PRO_CREDITS_CURRENCY,
+            'payment_capture': 1,
+            'notes': {
+                'user_id': str(user.id),
+                'username': user.username,
+                'kind': 'pro_day_pass',
+            },
+        })
+    except Exception as e:
+        logger.exception('Razorpay order creation failed: %s', e)
+        return api_response(
+            success=False,
+            message='Payment gateway error. Please try again.',
+            status_code=status.HTTP_502_BAD_GATEWAY,
+        )
+
+    sub.credits_order_id = order['id']
+    sub.save(update_fields=['credits_order_id', 'modified_at'])
+
+    return api_response(
+        success=True,
+        message='Day Pass checkout created.',
+        data={
+            'order_id': order['id'],
+            'amount': order['amount'],
+            'currency': order['currency'],
+            'key_id': settings.RAZORPAY_KEY_ID,
+        }
+    )
+
+
+# ── POST /api/billing/credits/verify/ ────────────────────────────────────────
+# Verifies the one-time payment signature and grants 1 day of Pro.
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def verify_credits_payment(request):
+    user = request.user
+    sub = get_or_create_subscription(user)
+
+    order_id = request.data.get('razorpay_order_id', '')
+    payment_id = request.data.get('razorpay_payment_id', '')
+    signature = request.data.get('razorpay_signature', '')
+
+    if not order_id or not payment_id or not signature:
+        return api_response(success=False, message='Missing payment details.', status_code=400)
+
+    # The order must be the one we issued to this user — prevents replaying
+    # another user's / a stale order to mint a pass.
+    if not sub.credits_order_id or order_id != sub.credits_order_id:
+        return api_response(success=False, message='Unknown or expired order.', status_code=400)
+
+    expected = hmac.new(
+        settings.RAZORPAY_KEY_SECRET.encode('utf-8'),
+        f'{order_id}|{payment_id}'.encode('utf-8'),
+        hashlib.sha256,
+    ).hexdigest()
+
+    if not hmac.compare_digest(expected, signature):
+        logger.warning('Day Pass payment signature mismatch for user %s', user.id)
+        return api_response(success=False, message='Payment verification failed.', status_code=400)
+
+    # Re-check eligibility server-side; a genuinely paid-but-ineligible payment
+    # should not silently double-grant. (Refunds are handled out of band.)
+    available, next_at = _credits_availability(user, sub)
+    if not available and not sub.has_active_day_pass:
+        return api_response(
+            success=False,
+            message='Day Pass is not available right now.',
+            data={'next_available_at': next_at.isoformat() if next_at else None},
+            status_code=status.HTTP_400_BAD_REQUEST,
+        )
+
+    now = timezone.now()
+    sub.credits_pass_expires_at = now + datetime.timedelta(days=settings.RAZORPAY_PRO_CREDITS_DAYS)
+    sub.last_credits_purchase_at = now
+    sub.credits_order_id = ''
+    sub.save(update_fields=[
+        'credits_pass_expires_at', 'last_credits_purchase_at', 'credits_order_id', 'modified_at',
+    ])
+
+    logger.info('Pro Day Pass granted to user %s until %s', user.id, sub.credits_pass_expires_at)
+
+    return api_response(
+        success=True,
+        message='Pro Day Pass activated! Enjoy Pro features for the next 24 hours.',
+        data={'expires_at': sub.credits_pass_expires_at.isoformat()},
     )
 
 
@@ -294,21 +445,41 @@ def razorpay_webhook(request):
         from django.http import JsonResponse
         return JsonResponse({'error': 'Invalid JSON'}, status=400)
 
+    from django.http import JsonResponse
+
     event = payload.get('event', '')
+    payment_entity = payload.get('payload', {}).get('payment', {}).get('entity', {})
+
+    logger.info('Razorpay webhook: %s', event)
+
+    # ── Day Pass (one-time Order) backstop ───────────────────────────────────
+    # A one-time Order payment carries an `order_id` on the payment entity and
+    # has no subscription. If it matches a Day Pass order we issued, grant the
+    # pass here (idempotent) in case the synchronous /credits/verify/ call was
+    # never made (e.g. the user closed the tab after paying).
+    order_id = payment_entity.get('order_id', '')
+    if event == 'order.paid' or (event == 'payment.captured' and order_id):
+        # `order.paid` puts the order under payload.order.entity.
+        if not order_id:
+            order_id = payload.get('payload', {}).get('order', {}).get('entity', {}).get('id', '')
+        if order_id:
+            handled = _grant_day_pass_from_webhook(order_id)
+            if handled:
+                return JsonResponse({'status': 'ok'})
+            # Not a Day Pass order — fall through to subscription handling
+            # only if this was a subscription payment (has no order match).
+
+    # ── Subscription events ──────────────────────────────────────────────────
     entity = payload.get('payload', {}).get('subscription', {}).get('entity', {})
     rzp_sub_id = entity.get('id', '')
 
-    logger.info('Razorpay webhook: %s for subscription %s', event, rzp_sub_id)
-
     if not rzp_sub_id:
-        from django.http import JsonResponse
         return JsonResponse({'status': 'ok'})
 
     try:
         sub = Subscription.objects.get(razorpay_subscription_id=rzp_sub_id)
     except Subscription.DoesNotExist:
         logger.warning('Webhook for unknown subscription: %s', rzp_sub_id)
-        from django.http import JsonResponse
         return JsonResponse({'status': 'ok'})
 
     if event in ('subscription.activated', 'payment.captured'):
@@ -340,8 +511,31 @@ def razorpay_webhook(request):
         sub.save()
         logger.info('Subscription %s expired — reverted to Free', rzp_sub_id)
 
-    from django.http import JsonResponse
     return JsonResponse({'status': 'ok'})
+
+
+def _grant_day_pass_from_webhook(order_id):
+    """Grant a Day Pass for a paid one-time Order, if `order_id` matches one we
+    issued and it hasn't already been consumed. Idempotent: a second delivery
+    (or a race with /credits/verify/) is a no-op because credits_order_id is
+    cleared on grant. Returns True if this order was a Day Pass order.
+    """
+    import datetime
+
+    try:
+        sub = Subscription.objects.get(credits_order_id=order_id)
+    except Subscription.DoesNotExist:
+        return False
+
+    now = timezone.now()
+    sub.credits_pass_expires_at = now + datetime.timedelta(days=settings.RAZORPAY_PRO_CREDITS_DAYS)
+    sub.last_credits_purchase_at = now
+    sub.credits_order_id = ''
+    sub.save(update_fields=[
+        'credits_pass_expires_at', 'last_credits_purchase_at', 'credits_order_id', 'modified_at',
+    ])
+    logger.info('Pro Day Pass granted via webhook for order %s (user %s)', order_id, sub.user_id)
+    return True
 
 
 # ── POST /api/billing/contact/ ──────────────────────────────────────────────

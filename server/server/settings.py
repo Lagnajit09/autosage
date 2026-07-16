@@ -384,3 +384,12 @@ RAZORPAY_KEY_SECRET = config('RAZORPAY_KEY_SECRET', default='')
 RAZORPAY_WEBHOOK_SECRET = config('RAZORPAY_WEBHOOK_SECRET', default='')
 RAZORPAY_PRO_MONTHLY_PLAN_ID = config('RAZORPAY_PRO_MONTHLY_PLAN_ID', default='')
 RAZORPAY_PRO_YEARLY_PLAN_ID = config('RAZORPAY_PRO_YEARLY_PLAN_ID', default='')
+
+# One-time "Pro Day Pass" — a ₹99 one-time payment granting 1 day of Pro,
+# purchasable at most once every 7 days. This is a Razorpay Order (not a
+# recurring subscription), so the 7-day-minimum subscription rule does not apply.
+# RAZORPAY_PRO_CREDITS is the amount in paise (e.g. 9900 = ₹99).
+RAZORPAY_PRO_CREDITS = config('RAZORPAY_PRO_CREDITS', default=9900, cast=int)
+RAZORPAY_PRO_CREDITS_CURRENCY = config('RAZORPAY_PRO_CREDITS_CURRENCY', default='INR')
+RAZORPAY_PRO_CREDITS_DAYS = config('RAZORPAY_PRO_CREDITS_DAYS', default=1, cast=int)
+RAZORPAY_PRO_CREDITS_COOLDOWN_DAYS = config('RAZORPAY_PRO_CREDITS_COOLDOWN_DAYS', default=7, cast=int)

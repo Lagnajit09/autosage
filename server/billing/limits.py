@@ -49,15 +49,23 @@ PLAN_DISPLAY = {
 
 
 def get_plan(user) -> str:
-    """Return the effective plan for a user. Admins always get enterprise."""
+    """Return the effective plan for a user. Admins always get enterprise.
+
+    An active one-time "Pro Day Pass" temporarily elevates any non-admin user
+    to 'pro' without altering their underlying subscription plan.
+    """
     if user.is_staff:
         return 'enterprise'
     try:
         sub = user.subscription
-        if sub.status == sub.STATUS_ACTIVE:
-            return sub.plan
     except Exception:
-        pass
+        return 'free'
+    # A day pass is an override on top of whatever the real plan is; it never
+    # downgrades a genuinely higher plan (pro/enterprise).
+    if sub.has_active_day_pass and sub.plan == sub.PLAN_FREE:
+        return 'pro'
+    if sub.status == sub.STATUS_ACTIVE:
+        return sub.plan
     return 'free'
 
 

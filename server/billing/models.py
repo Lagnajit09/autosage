@@ -37,6 +37,14 @@ class Subscription(models.Model):
     current_period_end = models.DateTimeField(null=True, blank=True)
     billing_interval = models.CharField(max_length=10, blank=True)
     cancelled_at = models.DateTimeField(null=True, blank=True)
+
+    # One-time "Pro Day Pass" — a temporary Pro override layered on top of the
+    # real plan. credits_pass_expires_at is when the current pass lapses;
+    # last_credits_purchase_at gates the once-per-week cooldown.
+    credits_pass_expires_at = models.DateTimeField(null=True, blank=True)
+    last_credits_purchase_at = models.DateTimeField(null=True, blank=True)
+    credits_order_id = models.CharField(max_length=255, blank=True)
+
     created_at = models.DateTimeField(auto_now_add=True)
     modified_at = models.DateTimeField(auto_now=True)
 
@@ -49,3 +57,11 @@ class Subscription(models.Model):
     @property
     def is_active(self):
         return self.status == self.STATUS_ACTIVE
+
+    @property
+    def has_active_day_pass(self):
+        from django.utils import timezone
+        return bool(
+            self.credits_pass_expires_at
+            and self.credits_pass_expires_at > timezone.now()
+        )
