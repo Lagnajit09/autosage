@@ -59,7 +59,8 @@ class ApiKeyAuthentication(authentication.BaseAuthentication):
         now = timezone.now()
         last = api_key.last_used_at
         if last is None or (now - last).total_seconds() > self._TOUCH_INTERVAL_SECONDS:
-            ApiKey.objects.filter(pk=api_key.pk).update(last_used_at=now)
+            # Use the instance's own class (ApiKey is imported lazily in authenticate).
+            type(api_key).objects.filter(pk=api_key.pk).update(last_used_at=now)
 
     def authenticate_header(self, request):
         # Make DRF return 401 (not 403) on failure.
