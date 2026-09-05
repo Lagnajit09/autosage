@@ -20,6 +20,8 @@ const PROVIDER_COLORS: Record<AutobotProvider | string, string> = {
   openrouter:
     "bg-gray-100 dark:bg-gray-700/60 text-gray-700 dark:text-gray-300",
   azure_openai: "bg-sky-100 dark:bg-sky-900/30 text-sky-700 dark:text-sky-400",
+  nvidia_nim:
+    "bg-lime-100 dark:bg-lime-900/30 text-lime-700 dark:text-lime-400",
   custom: "bg-gray-100 dark:bg-gray-700/60 text-gray-700 dark:text-gray-300",
 };
 

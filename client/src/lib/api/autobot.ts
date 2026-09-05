@@ -20,6 +20,8 @@ export type AutobotProvider =
   | "anthropic"
   | "openai"
   | "azure_openai"
+  // LiteLLM's provider tag for build.nvidia.com — not "nvidia".
+  | "nvidia_nim"
   | "custom";
 
 export type AutobotRole = "user" | "assistant" | "system" | "tool";

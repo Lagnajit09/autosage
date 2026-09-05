@@ -43,6 +43,9 @@ class LLMConfig(models.Model):
         ANTHROPIC = 'anthropic', _('Anthropic')
         OPENAI = 'openai', _('OpenAI')
         AZURE_OPENAI = 'azure_openai', _('Azure OpenAI')
+        # Value is LiteLLM's provider tag, not the vendor name — autobot
+        # builds its wire model string from this verbatim.
+        NVIDIA_NIM = 'nvidia_nim', _('NVIDIA NIM')
         CUSTOM = 'custom', _('Custom (LiteLLM-compatible)')
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)

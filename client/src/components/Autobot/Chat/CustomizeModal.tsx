@@ -78,6 +78,7 @@ const PROVIDER_OPTIONS: { value: AutobotProvider; label: string }[] = [
   { value: "anthropic", label: "Anthropic" },
   { value: "openai", label: "OpenAI" },
   { value: "azure_openai", label: "Azure OpenAI" },
+  { value: "nvidia_nim", label: "NVIDIA NIM" },
   { value: "custom", label: "Custom (LiteLLM-compatible)" },
 ];
 
@@ -90,6 +91,8 @@ const MODEL_HINTS: Record<AutobotProvider, string> = {
   anthropic: "e.g. anthropic/claude-sonnet-4-5",
   openai: "e.g. gpt-4o-mini",
   azure_openai: "Azure deployment name",
+  // Keep the org prefix — NVIDIA ids are `<org>/<model>`.
+  nvidia_nim: "e.g. nvidia/nemotron-3-super-120b-a12b",
   custom: "Any LiteLLM model id",
 };
 
