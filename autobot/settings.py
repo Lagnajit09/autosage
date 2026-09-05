@@ -39,15 +39,14 @@ class AutobotSettings(BaseSettings):
     OPENROUTER_API_KEY: str = ""
     CEREBRAS_API_KEY: str = ""
 
-    # Default admin LLM. Quota-fit ranking (best → worst):
-    #   1. groq/llama-4-scout-17b — 30 RPM, 30k TPM, 8k completion cap
-    #   2. cerebras/gpt-oss-120b — 65k context, 32k output
-    #   3. openrouter/openai/gpt-oss-120b:free — 20 RPM, 50 RPD
-    #   4. openrouter/nvidia/llama-3.1-nemotron-70b-instruct:free
-    #   5. gemini/gemini-2.5-flash — 5 RPM, 250 RPD
-    #   6. gemini/gemini-2.5-flash-lite
-    DEFAULT_PROVIDER: str = "groq"
-    DEFAULT_MODEL: str = "groq/meta-llama/llama-4-scout-17b-16e-instruct"
+    NVIDIA_NIM_API_KEY: str = ""
+
+    # Verified reachable + tool-calling on our NVIDIA key (probed 2026-09-05
+    # with tools+tool_choice attached). NVIDIA's public /v1/models list is
+    # NOT account-scoped, so re-probe before adding an entry: gated models
+    # return 404 "Function <uuid>: Not found for account <id>".
+    DEFAULT_PROVIDER: str = "nvidia_nim"
+    DEFAULT_MODEL: str = "nvidia/nemotron-3-super-120b-a12b"
 
     # Hard cap on tool-call rounds per user turn. Bounds runaway loops;
     # multi-step workflow scenarios can take 5–10 rounds when serial.
@@ -57,10 +56,23 @@ class AutobotSettings(BaseSettings):
     # errors. Only attempted on round 1, and only before any token is emitted —
     # we never swap providers mid-reply. BYO is final; no fallback for that path.
     # Providers with no API key configured are silently skipped.
+    # NVIDIA entries carry the model's own org prefix, so they read
+    # `nvidia_nim/<org>/<model>` — the two slashes are intentional and parse
+    # correctly (split on the FIRST slash only).
+    # NVIDIA endpoints scale to zero, so a cold model's first token can take
+    # minutes (probed: lightning 2s, ultra 36s, deepseek 188s, kimi-k3 298s).
+    # Lightning sits second precisely because it answered warm — it's the
+    # latency escape hatch when the primary is cold.
+    # Excluded deliberately: kimi-k2.6 + nemotron-nano-3 (404, gated for this
+    # key), deepseek-v4-* (open NVIDIA bug — streaming tool calls don't
+    # propagate), kimi-k3 (no tool_choice; always-on thinking at max effort).
     AUTOBOT_ADMIN_FALLBACKS: str = (
+        "nvidia_nim/nvidia/nemotron-3.5-lightning-30b-a3b,"
+        "nvidia_nim/openai/gpt-oss-20b,"
+        "nvidia_nim/nvidia/nemotron-3-ultra-550b-a55b,"
         "cerebras/gpt-oss-120b,"
+        "groq/meta-llama/llama-4-scout-17b-16e-instruct,"
         "openrouter/openai/gpt-oss-120b:free,"
-        "openrouter/nvidia/llama-3.1-nemotron-70b-instruct:free,"
         "gemini/gemini-2.5-flash,"
         "gemini/gemini-2.5-flash-lite"
     )

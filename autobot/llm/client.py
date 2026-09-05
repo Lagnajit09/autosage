@@ -21,12 +21,19 @@ from settings import get_settings
 # Litellm exception subclasses that are SAFE to retry against another
 # provider. BadRequest / Auth / ContextWindowExceeded are deliberately
 # excluded — those reflect the request itself being broken.
+#
+# NotFoundError belongs here: a 404 means THIS model is unavailable (bad id,
+# or gated for this account — NVIDIA returns "Function <uuid>: Not found for
+# account <id>" for models its public /v1/models list advertises but the key
+# can't invoke). The request itself is fine, so the next chain entry may well
+# serve it. Without this, one unreachable model in the chain kills the turn.
 _RETRYABLE_LITELLM_ERRORS: tuple[type[Exception], ...] = tuple(
     cls for cls in (
         getattr(litellm, "RateLimitError", None),
         getattr(litellm, "ServiceUnavailableError", None),
         getattr(litellm, "APIConnectionError", None),
         getattr(litellm, "Timeout", None),
+        getattr(litellm, "NotFoundError", None),
     ) if cls is not None
 )
 
@@ -66,6 +73,12 @@ def _kind_for(e: Exception) -> str:
     conn_cls = getattr(litellm, "APIConnectionError", None)
     if conn_cls is not None and isinstance(e, conn_cls):
         return "connection"
+
+    # Not a BadRequestError subclass, so this must be checked explicitly or
+    # it falls through to "unknown".
+    nf_cls = getattr(litellm, "NotFoundError", None)
+    if nf_cls is not None and isinstance(e, nf_cls):
+        return "model_unavailable"
 
     bad_cls = getattr(litellm, "BadRequestError", None)
     if bad_cls is not None and isinstance(e, bad_cls):
@@ -136,6 +149,10 @@ _FRIENDLY_LLM_MESSAGES: dict[str, str] = {
         "The AI provider rejected our credentials. The site operators "
         "have been notified — please try again later."
     ),
+    "model_unavailable": (
+        "The configured AI model isn't available right now. Please try "
+        "again shortly."
+    ),
     "bad_request": (
         "The AI couldn't process this request. Try rephrasing your "
         "message or starting a new chat."
@@ -162,7 +179,10 @@ def friendly_llm_message(kind: str, *, all_exhausted: bool = False) -> str:
             "try again in a few minutes, or add a personal LLM key in "
             "Customize to keep working."
         )
-    if kind in ("service_unavailable", "connection", "timeout", "unknown"):
+    if kind in (
+        "service_unavailable", "connection", "timeout", "unknown",
+        "model_unavailable",
+    ):
         return (
             "We couldn't reach any available AI model right now. Please "
             "try again shortly, or add a personal LLM key in Customize "
@@ -175,8 +195,9 @@ def friendly_llm_message(kind: str, *, all_exhausted: bool = False) -> str:
 class LLMResolution:
     """Resolved call parameters — what to pass to `litellm.acompletion`.
 
-    `base_url` and `api_version` are only populated for the BYO LLMConfig
-    path; admin keys always use the provider's default endpoint.
+    `api_version` is only populated for the BYO LLMConfig path. `base_url`
+    is populated for BYO, and for admin providers that need an explicit
+    endpoint (NVIDIA NIM); other admin providers use litellm's default.
     """
     model: str          # litellm-format, e.g. "gemini/gemini-1.5-flash"
     api_key: str
@@ -189,7 +210,42 @@ class LLMResolution:
     is_admin: bool = True
 
 
-_ADMIN_PROVIDERS = {"gemini", "groq", "openrouter", "cerebras"}
+_ADMIN_PROVIDERS = {"gemini", "groq", "openrouter", "cerebras", "nvidia_nim"}
+
+# build.nvidia.com's OpenAI-compatible endpoint.
+#
+# We deliberately route NVIDIA through litellm's generic `openai/` adapter
+# with this as `api_base`, rather than its native `nvidia_nim/` prefix.
+# `NvidiaNimConfig` overrides `get_supported_openai_params()` with a
+# hardcoded allowlist that omits `stream_options` — and `astream_complete`
+# sends `stream_options={"include_usage": True}` on every streaming call.
+# Under the native prefix that param is either rejected or dropped, and a
+# dropped `include_usage` means NVIDIA never emits the usage chunk, so every
+# NVIDIA turn would record 0 tokens and silently corrupt the usage dashboard
+# and the summarizer's token budgeting.
+#
+# The OpenAI adapter has no such allowlist, and NVIDIA's endpoint is fully
+# OpenAI-shaped, so tools / tool_choice / stream_options all pass through.
+# `LLMResolution.provider` and `.model_name` still record the NVIDIA identity,
+# which is what lands on `Message` — only the wire-format `model` differs.
+_NVIDIA_NIM_BASE_URL = "https://integrate.api.nvidia.com/v1"
+
+
+def _apply_nvidia_routing(
+    provider: str,
+    litellm_model: str,
+    bare_model: str,
+    base_url: str | None,
+) -> tuple[str, str | None]:
+    """Rewrite an NVIDIA resolution onto the generic OpenAI adapter.
+
+    Shared by the admin and BYO resolvers so the two can't drift. A BYO
+    user's own `base_url` wins (self-hosted NIM / proxy); we only supply
+    the hosted default when they left it blank.
+    """
+    if provider != "nvidia_nim":
+        return litellm_model, base_url
+    return f"openai/{bare_model}", base_url or _NVIDIA_NIM_BASE_URL
 
 
 def resolve_admin(
@@ -223,6 +279,7 @@ def resolve_admin(
         "groq": settings.GROQ_API_KEY,
         "openrouter": settings.OPENROUTER_API_KEY,
         "cerebras": settings.CEREBRAS_API_KEY,
+        "nvidia_nim": settings.NVIDIA_NIM_API_KEY,
     }
     api_key = api_key_map[provider]
     if not api_key:
@@ -246,11 +303,16 @@ def resolve_admin(
         litellm_model = f"{prefix}{model}"
         bare_model = model
 
+    litellm_model, base_url = _apply_nvidia_routing(
+        provider, litellm_model, bare_model, None,
+    )
+
     return LLMResolution(
         model=litellm_model,
         api_key=api_key,
         provider=provider,
         model_name=bare_model,
+        base_url=base_url,
     )
 
 
@@ -337,6 +399,10 @@ def resolve_from_llm_config(config: dict[str, Any]) -> LLMResolution:
     else:
         litellm_model = f"{prefix}{model}"
         bare_model = model
+
+    litellm_model, base_url = _apply_nvidia_routing(
+        provider, litellm_model, bare_model, base_url,
+    )
 
     return LLMResolution(
         model=litellm_model,
