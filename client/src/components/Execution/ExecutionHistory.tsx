@@ -18,6 +18,8 @@ import {
   Calendar,
   Activity,
   History as HistoryIcon,
+  AlertTriangle,
+  FileJson,
 } from "lucide-react";
 import { useAuth } from "@clerk/clerk-react";
 import { executionsService } from "@/lib/api/executions";
@@ -28,6 +30,28 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 interface ExecutionHistoryProps {
   workflowId?: string;
 }
+
+// GCS autosagex-logs bucket deletes objects after this many days.
+const GCS_RETENTION_DAYS = 90;
+// Start warning this many days after creation (i.e. 3 days before the sweep).
+const LOG_WARNING_THRESHOLD_DAYS = 87;
+
+const getLogExpiryInfo = (createdAt: string) => {
+  if (!createdAt) {
+    return { isExpired: false, isExpiringSoon: false, daysUntilExpiry: 0 };
+  }
+  const ageDays = Math.floor(
+    (Date.now() - new Date(createdAt).getTime()) / (1000 * 60 * 60 * 24),
+  );
+  const daysUntilExpiry = GCS_RETENTION_DAYS - ageDays;
+  if (ageDays >= GCS_RETENTION_DAYS) {
+    return { isExpired: true, isExpiringSoon: false, daysUntilExpiry: 0 };
+  }
+  if (ageDays >= LOG_WARNING_THRESHOLD_DAYS) {
+    return { isExpired: false, isExpiringSoon: true, daysUntilExpiry };
+  }
+  return { isExpired: false, isExpiringSoon: false, daysUntilExpiry };
+};
 
 const ExecutionHistory = ({ workflowId }: ExecutionHistoryProps) => {
   const { getToken } = useAuth();
@@ -173,6 +197,23 @@ const ExecutionHistory = ({ workflowId }: ExecutionHistoryProps) => {
     );
   };
 
+  // Copy run metadata (no logs) — the fallback when GCS logs have expired.
+  const handleCopyMetadata = (run: WorkflowRun) => {
+    const metadata = {
+      id: run.id,
+      workflow_id: run.workflow_id,
+      workflow_name: run.workflow_name,
+      status: run.status,
+      started_at: run.started_at,
+      finished_at: run.finished_at,
+      created_at: run.created_at,
+      error_message: run.error_message || undefined,
+      inputs: run.inputs,
+    };
+    navigator.clipboard.writeText(JSON.stringify(metadata, null, 2));
+    toast.success("Metadata copied to clipboard");
+  };
+
   const handleDownloadLogs = async (run: WorkflowRun) => {
     toast.promise(
       (async () => {
@@ -263,7 +304,9 @@ const ExecutionHistory = ({ workflowId }: ExecutionHistoryProps) => {
                   </TableCell>
                 </TableRow>
               ) : (
-                runs.map((run) => (
+                runs.map((run) => {
+                  const expiry = getLogExpiryInfo(run.created_at);
+                  return (
                   <TableRow
                     key={run.id}
                     className="group border-gray-100 dark:border-gray-800 hover:bg-gray-50/50 dark:hover:bg-gray-900/50 transition-colors"
@@ -287,7 +330,21 @@ const ExecutionHistory = ({ workflowId }: ExecutionHistoryProps) => {
                       </div>
                     </TableCell>
                     <TableCell className="text-xs text-gray-500 whitespace-nowrap">
-                      {formatDate(run.created_at)}
+                      <div className="flex flex-col gap-1">
+                        <span>{formatDate(run.created_at)}</span>
+                        {expiry.isExpired && (
+                          <Badge className="w-fit gap-1 bg-slate-500/10 text-slate-600 dark:text-slate-400 border-slate-500/20 text-[10px] font-medium">
+                            Logs unavailable
+                          </Badge>
+                        )}
+                        {expiry.isExpiringSoon && (
+                          <Badge className="w-fit gap-1 bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20 text-[10px] font-medium">
+                            <AlertTriangle className="h-2.5 w-2.5" />
+                            Expires in {expiry.daysUntilExpiry} day
+                            {expiry.daysUntilExpiry === 1 ? "" : "s"}
+                          </Badge>
+                        )}
+                      </div>
                     </TableCell>
                     <TableCell>{getStatusBadge(run.status)}</TableCell>
                     <TableCell className="text-xs font-medium text-gray-500">
@@ -295,34 +352,67 @@ const ExecutionHistory = ({ workflowId }: ExecutionHistoryProps) => {
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="flex items-center justify-end gap-1">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-8 px-2 text-gray-500 hover:text-purple-600 dark:hover:text-purple-400"
-                          onClick={() => handleCopyLogs(run)}
-                          disabled={
-                            run.status === "queued" || run.status === "running"
-                          }
-                        >
-                          <Copy className="h-3.5 w-3.5 mr-1.5" />
-                          <span className="hidden lg:inline">Copy</span>
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-8 px-2 text-gray-500 hover:text-purple-600 dark:hover:text-purple-400"
-                          onClick={() => handleDownloadLogs(run)}
-                          disabled={
-                            run.status === "queued" || run.status === "running"
-                          }
-                        >
-                          <Download className="h-3.5 w-3.5 mr-1.5" />
-                          <span className="hidden lg:inline">Logs</span>
-                        </Button>
+                        {expiry.isExpired ? (
+                          /* Logs swept by GCS retention — only metadata remains. */
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            title="Logs unavailable (past 90-day retention) — copy run metadata"
+                            className="h-8 px-2 text-gray-500 hover:text-purple-600 dark:hover:text-purple-400"
+                            onClick={() => handleCopyMetadata(run)}
+                          >
+                            <FileJson className="h-3.5 w-3.5 mr-1.5" />
+                            <span className="hidden lg:inline">Metadata</span>
+                          </Button>
+                        ) : (
+                          <>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-8 px-2 text-gray-500 hover:text-purple-600 dark:hover:text-purple-400"
+                              onClick={() => handleCopyLogs(run)}
+                              disabled={
+                                run.status === "queued" ||
+                                run.status === "running"
+                              }
+                            >
+                              <Copy className="h-3.5 w-3.5 mr-1.5" />
+                              <span className="hidden lg:inline">Copy</span>
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-8 px-2 text-gray-500 hover:text-purple-600 dark:hover:text-purple-400"
+                              onClick={() => handleDownloadLogs(run)}
+                              disabled={
+                                run.status === "queued" ||
+                                run.status === "running"
+                              }
+                            >
+                              <Download className="h-3.5 w-3.5 mr-1.5" />
+                              <span className="hidden lg:inline">Logs</span>
+                            </Button>
+                            {expiry.isExpiringSoon && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                title="Copy run metadata before logs expire"
+                                className="h-8 px-2 text-gray-500 hover:text-amber-600 dark:hover:text-amber-400"
+                                onClick={() => handleCopyMetadata(run)}
+                              >
+                                <FileJson className="h-3.5 w-3.5 mr-1.5" />
+                                <span className="hidden lg:inline">
+                                  Metadata
+                                </span>
+                              </Button>
+                            )}
+                          </>
+                        )}
                       </div>
                     </TableCell>
                   </TableRow>
-                ))
+                  );
+                })
               )}
             </TableBody>
           </Table>
