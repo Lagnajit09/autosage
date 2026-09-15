@@ -34,6 +34,7 @@ import ExecutionLogs from "./pages/ExecutionLogs";
 import AccountReactivationRequest from "./pages/AccountReactivationRequest";
 import ReportBug from "./pages/ReportBug";
 import FaqContact from "./pages/FaqContact";
+import RouteSEO from "./components/seo/RouteSEO";
 
 const queryClient = new QueryClient();
 
@@ -77,6 +78,7 @@ const App = () => {
               <Sonner />
               <BrowserRouter>
                 <ServerErrorListener />
+                <RouteSEO />
                 <Routes>
                   {/* Protected Routes */}
                   <Route element={<ProtectedRoute />}>

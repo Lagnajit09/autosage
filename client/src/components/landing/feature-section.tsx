@@ -15,6 +15,7 @@ const Feature = () => {
       background: (
         <img
           src={`${isDark ? "/ai-dark.png" : "/ai-light.png"}`}
+          alt="Autobot generating workflows and scripts from a prompt in AutoSage"
           className="absolute inset-0 h-full w-full object-cover opacity-60"
         />
       ),
@@ -28,6 +29,7 @@ const Feature = () => {
       background: (
         <img
           src={`${isDark ? "/code-dark.jpg" : "/code-light.png"}`}
+          alt="AutoSage built-in code editor for authoring scripts"
           className="absolute inset-0 h-full w-full object-cover opacity-60"
         />
       ),
@@ -41,6 +43,7 @@ const Feature = () => {
       background: (
         <img
           src={`${isDark ? "/workflow-dark.jpg" : "/workflow-light.png"}`}
+          alt="Building an automation workflow in the AutoSage workflow editor"
           className="absolute inset-0 h-full w-full object-cover opacity-60"
         />
       ),
@@ -54,6 +57,7 @@ const Feature = () => {
       background: (
         <img
           src={`${isDark ? "/templates-dark.jpg" : "/templates-light.png"}`}
+          alt="AutoSage Library of reusable workflows, scripts, and nodes to fork"
           className="absolute inset-0 h-full w-full object-cover opacity-60"
         />
       ),
@@ -63,7 +67,7 @@ const Feature = () => {
   return (
     <div className="w-[90%] mx-auto my-20 flex flex-col items-center justify-center">
       <LampContainer className="hidden dark:flex">
-        <motion.h1
+        <motion.h2
           initial={{ opacity: 0.5, y: 100 }}
           whileInView={{ opacity: 1, y: -20 }}
           transition={{
@@ -74,9 +78,9 @@ const Feature = () => {
           className="mt-8 bg-gradient-to-br from-slate-300 to-slate-500 py-4 bg-clip-text text-center text-4xl font-medium tracking-tight text-transparent md:text-7xl"
         >
           AI-crafted Scripts, <br /> Remote-ready Workflows
-        </motion.h1>
+        </motion.h2>
       </LampContainer>
-      <motion.h1
+      <motion.h2
         initial={{ opacity: 0.5, y: 100 }}
         whileInView={{ opacity: 1, y: -20 }}
         transition={{
@@ -87,7 +91,7 @@ const Feature = () => {
         className="dark:hidden my-10 bg-gradient-to-br from-slate-500 to-slate-700 py-4 bg-clip-text text-center text-4xl font-medium tracking-tight text-transparent md:text-7xl"
       >
         AI-crafted Scripts, <br /> Remote-ready Workflows
-      </motion.h1>
+      </motion.h2>
       <BentoGrid className="lg:grid-rows-0">
         {features.map((feature) => (
           <BentoCard key={feature.name} {...feature} />

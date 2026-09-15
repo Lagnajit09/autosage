@@ -9,7 +9,7 @@
     <meta name="description" content="AutoSage: seamless automation, smarter execution. Build AI-powered workflows, run scripts on your own servers, and chat with Autobot — your intelligent automation assistant." />
     <meta name="keywords" content="workflow automation, AI automation, autobot, script runner, AI workflows, devops automation, AutoSage" />
     <meta name="author" content="AutoSage" />
-    <meta name="robots" content="index, follow" />
+    <!-- Per-page robots directive is managed at runtime by the SEO component. -->
     <meta name="theme-color" content="#0f0f0f" />
 
     <!-- Canonical -->
@@ -80,6 +80,25 @@
   </head>
   <body>
     <div id="root"></div>
+    <!-- Crawlable fallback for bots that do not execute JavaScript -->
+    <noscript>
+      <h1>AutoSage – AI-Powered Workflow Automation</h1>
+      <p>
+        AutoSage lets you build AI-powered workflows, run scripts on your own
+        servers, and chat with Autobot — your intelligent automation assistant.
+        Seamless automation, smarter execution.
+      </p>
+      <ul>
+        <li>Autobot: generate workflows and scripts from a single prompt.</li>
+        <li>Built-in code editor: author the scripts you want to execute.</li>
+        <li>Workflow editor: design and run automations visually.</li>
+        <li>Library: fork reusable workflows, scripts, and nodes.</li>
+      </ul>
+      <p>
+        <a href="/signup">Create a free account</a> or
+        <a href="/signin">sign in</a> to get started.
+      </p>
+    </noscript>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

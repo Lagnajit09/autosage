@@ -4,25 +4,15 @@
         xsi:schemaLocation="http://www.sitemaps.org/schemas/sitemap/0.9
           http://www.sitemaps.org/schemas/sitemap/0.9/sitemap.xsd">
 
+  <!--
+    Only publicly indexable pages belong here. The sign-in / sign-up pages are
+    served with a `noindex` directive, so they are intentionally omitted.
+  -->
   <url>
     <loc>https://autosagex.web.app/</loc>
-    <lastmod>2026-07-16</lastmod>
+    <lastmod>2026-09-15</lastmod>
     <changefreq>weekly</changefreq>
     <priority>1.0</priority>
-  </url>
-
-  <url>
-    <loc>https://autosagex.web.app/signup</loc>
-    <lastmod>2026-07-16</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.8</priority>
-  </url>
-
-  <url>
-    <loc>https://autosagex.web.app/signin</loc>
-    <lastmod>2026-07-16</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
   </url>
 
 </urlset>

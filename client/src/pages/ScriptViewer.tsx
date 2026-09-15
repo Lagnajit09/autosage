@@ -6,9 +6,6 @@ const RawScript = () => {
   const [scriptContent, setScriptContent] = useState("");
 
   useEffect(() => {
-    // Set content type for plain text
-    document.title = `Raw Script - ${id}`;
-
     const loadScript = async () => {
       try {
         const savedFiles = localStorage.getItem("scriptFiles");

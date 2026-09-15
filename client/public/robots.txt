@@ -1,15 +1,27 @@
 User-agent: *
 Allow: /
+
+# Auth-gated app surface — no crawlable content, keep out of search
 Disallow: /api/
-Disallow: /workflow/
 Disallow: /dashboard
-Disallow: /settings
-Disallow: /profile
-Disallow: /billing
-Disallow: /plans
-Disallow: /ai/
-Disallow: /execution-logs
+Disallow: /workflows
+Disallow: /workflow/
+Disallow: /library
 Disallow: /script-editor
 Disallow: /raw/
+Disallow: /execution-logs
+Disallow: /ai/
+Disallow: /settings
+Disallow: /profile
+Disallow: /plans
+Disallow: /billing
+Disallow: /account-activation-request
+Disallow: /report-bug
+Disallow: /faq
+
+# Transient / error states
+Disallow: /sso-callback
+Disallow: /server-error
+Disallow: /limit-exceeded
 
 Sitemap: https://autosagex.web.app/sitemap.xml
