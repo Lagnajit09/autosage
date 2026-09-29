@@ -58,12 +58,15 @@ export function useScriptExecution() {
     }
   }, [selectedServerId, servers]);
 
-  const executeScript = async (script: {
-    id: string | number;
-    name: string;
-    pathname?: string;
-    blobUrl?: string;
-  }) => {
+  const executeScript = async (
+    script: {
+      id: string | number;
+      name: string;
+      pathname?: string;
+      blobUrl?: string;
+    },
+    inputs: Record<string, string> = {},
+  ) => {
     if (!selectedServerId) {
       toast.error("Please select a server");
       return;
@@ -98,7 +101,7 @@ export function useScriptExecution() {
               ? server.credential
               : selectedCredentialId,
         },
-        inputs: {},
+        inputs,
       };
 
       const response = await fetch(

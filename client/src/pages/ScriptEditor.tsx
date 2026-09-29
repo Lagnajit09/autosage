@@ -16,7 +16,15 @@ import { useScriptExecution } from "../components/ScriptEditor/useScriptExecutio
 import { ScriptExecutionDrawer } from "../components/ScriptEditor/ScriptExecutionDrawer";
 import { ExecutionHistoryModal } from "../components/ScriptEditor/ExecutionHistoryModal";
 import { LibraryScriptsModal } from "../components/ScriptEditor/LibraryScriptsModal";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
+import { useAuth } from "@clerk/clerk-react";
+import { toast } from "sonner";
+import { scriptService } from "@/lib/api/scripts";
+import { ScriptParameter } from "@/utils/types";
+import {
+  extractScriptVariables,
+  mergeScriptParams,
+} from "@/utils/scriptParams";
 
 // Mobile gate lives in this thin wrapper so the inner component's
 // hooks (useScriptEditor, useScriptExecution, Monaco mount) never run on
@@ -89,6 +97,75 @@ const ScriptEditorContent = () => {
     logs,
   } = useScriptExecution();
 
+  const { getToken } = useAuth();
+
+  // ── Parameterized execution state ─────────────────────────────────────────
+  // Persisted metadata (type/default/secret) for the open script. The variable
+  // *set* is derived from the body's {{VAR}} markers; metadata just enriches it.
+  const [paramMeta, setParamMeta] = useState<ScriptParameter[]>([]);
+  const [paramValues, setParamValues] = useState<Record<string, string>>({});
+  const [isSavingParamMeta, setIsSavingParamMeta] = useState(false);
+
+  // Seed metadata from the file whenever a different script is opened.
+  useEffect(() => {
+    setParamMeta(currentFile?.parameters ?? []);
+  }, [currentFile?.id, currentFile?.parameters]);
+
+  // Reset entered values when switching scripts (keep them across body edits).
+  useEffect(() => {
+    setParamValues({});
+  }, [currentFile?.id]);
+
+  // Merge detected {{vars}} with metadata into the render list.
+  const params = useMemo(
+    () =>
+      mergeScriptParams(
+        extractScriptVariables(currentFile?.content ?? ""),
+        paramMeta,
+      ),
+    [currentFile?.content, paramMeta],
+  );
+
+  // paramValues holds only user-entered overrides; the display/run value falls
+  // back to each param's default. No prefill effect (which could clobber typing).
+  const setParamValue = useCallback((name: string, value: string) => {
+    setParamValues((prev) => ({ ...prev, [name]: value }));
+  }, []);
+
+  const handleRunScript = useCallback(() => {
+    if (!currentFile) return;
+    // Send every detected variable, falling back to its default when blank.
+    const inputs: Record<string, string> = {};
+    for (const p of params) {
+      inputs[p.name] = paramValues[p.name] ?? p.default ?? "";
+    }
+    executeScript(currentFile, inputs);
+  }, [currentFile, params, paramValues, executeScript]);
+
+  const handleSaveParamMeta = useCallback(
+    async (meta: ScriptParameter[]) => {
+      if (!currentFile?.id) return;
+      setIsSavingParamMeta(true);
+      try {
+        const token = await getToken();
+        if (!token) throw new Error("Not authenticated");
+        const updated = await scriptService.updateParameters(
+          currentFile.id,
+          meta,
+          token,
+        );
+        setParamMeta(updated.parameters ?? meta);
+        toast.success("Parameters saved");
+      } catch (error) {
+        console.error("Failed to save parameters:", error);
+        toast.error((error as Error).message || "Failed to save parameters");
+      } finally {
+        setIsSavingParamMeta(false);
+      }
+    },
+    [currentFile?.id, getToken],
+  );
+
   // Clear logs when script changes to improve user experience
   useEffect(() => {
     if (currentFile?.id) {
@@ -160,7 +237,7 @@ const ScriptEditorContent = () => {
                 setSelectedServerId={setSelectedServerId}
                 selectedCredentialId={selectedCredentialId}
                 setSelectedCredentialId={setSelectedCredentialId}
-                onExecute={() => currentFile && executeScript(currentFile)}
+                onExecute={handleRunScript}
                 onStop={stopCurrentExecution}
                 onRefresh={() => {
                   refreshData();
@@ -171,6 +248,11 @@ const ScriptEditorContent = () => {
                 isStopping={isStopping}
                 isLoadingData={isLoadingData}
                 logs={logs}
+                params={params}
+                paramValues={paramValues}
+                onParamValueChange={setParamValue}
+                onSaveParamMeta={handleSaveParamMeta}
+                isSavingParamMeta={isSavingParamMeta}
               />
               <ExecutionHistoryModal
                 isOpen={isExecutionsHistoryOpen}

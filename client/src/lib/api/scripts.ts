@@ -4,6 +4,7 @@ import {
   ScriptLanguage,
   ScriptResponse,
   ScriptContentResponse,
+  ScriptParameter,
 } from "@/utils/types";
 
 const BASE_URL = "/api/scripts";
@@ -31,6 +32,7 @@ export const mapScriptToScriptFile = (
     source: "upload",
     pathname: script.pathname,
     blobUrl: script.blob_url,
+    parameters: script.parameters ?? [],
   };
 };
 
@@ -101,6 +103,24 @@ export const scriptService = {
       {
         method: "POST",
         body: JSON.stringify({ new_name: newName }),
+      },
+      token,
+    );
+    return response.data;
+  },
+
+  // Update parameter metadata (type / default / secret). Metadata only — does
+  // not touch the script body or bump the version.
+  updateParameters: async (
+    id: string,
+    parameters: ScriptParameter[],
+    token: string,
+  ): Promise<ScriptResponse> => {
+    const response = await apiRequest(
+      `${BASE_URL}/${id}/parameters/`,
+      {
+        method: "PATCH",
+        body: JSON.stringify({ parameters }),
       },
       token,
     );

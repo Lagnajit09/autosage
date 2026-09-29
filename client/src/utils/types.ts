@@ -9,6 +9,19 @@ export interface ScriptFile {
   source: "upload" | "editor";
   pathname?: string;
   blobUrl?: string;
+  parameters?: ScriptParameter[];
+}
+
+// Per-variable metadata for parameterized standalone script execution.
+// The set of variables comes from the script body's {{VAR}} markers; this
+// only enriches them with type / default / secret info. Secret params never
+// carry a stored default.
+export interface ScriptParameter {
+  name: string;
+  type: "string" | "number" | "boolean" | "password";
+  default?: string;
+  secret?: boolean;
+  description?: string;
 }
 
 export type ComparisonOperator =
@@ -239,6 +252,7 @@ export interface ScriptResponse {
   uploaded_at: string;
   updated_at: string;
   version: number;
+  parameters?: ScriptParameter[];
 }
 
 export interface ScriptContentResponse {
