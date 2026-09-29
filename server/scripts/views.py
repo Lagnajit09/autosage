@@ -14,6 +14,7 @@ from scripts.serializers import (
     ScriptCreateSerializer,
     ScriptUpdateSerializer,
     ScriptRenameSerializer,
+    ScriptParametersUpdateSerializer,
 )
 from server.utils import api_response
 from server.rate_limiters import ScriptBurstThrottle, ScriptSustainedThrottle, ScriptCreateThrottle
@@ -358,6 +359,48 @@ class ScriptUpdateView(APIView):
                 errors={"server": ["Internal server error."]},
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
+
+
+class ScriptParametersView(APIView):
+    """
+    Update a script's parameter metadata (type / default / secret flags).
+
+    PATCH or POST /api/scripts/<pk>/parameters/
+
+    Persists only the ``parameters`` JSON — no GCS round-trip and no version bump.
+    The variable *set* is still derived from the script body's ``{{VAR}}`` markers
+    at run time; this metadata just types the inputs the editor renders.
+    """
+    permission_classes = [IsAuthenticated]
+    throttle_classes = [ScriptBurstThrottle, ScriptSustainedThrottle]
+
+    def _update(self, request, pk):
+        script = get_object_or_404(Script, pk=pk, owner=request.user)
+
+        serializer = ScriptParametersUpdateSerializer(data=request.data)
+        if not serializer.is_valid():
+            return api_response(
+                success=False,
+                message="Validation failed.",
+                errors=serializer.errors,
+                status_code=status.HTTP_400_BAD_REQUEST,
+            )
+
+        script.parameters = serializer.validated_data['parameters']
+        script.save(update_fields=['parameters', 'updated_at'])
+
+        return api_response(
+            success=True,
+            message="Script parameters updated successfully.",
+            data=ScriptSerializer(script).data,
+            status_code=status.HTTP_200_OK,
+        )
+
+    def patch(self, request, pk):
+        return self._update(request, pk)
+
+    def post(self, request, pk):
+        return self._update(request, pk)
 
 
 class ScriptRenameView(APIView):

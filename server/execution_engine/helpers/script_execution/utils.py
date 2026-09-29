@@ -1,7 +1,10 @@
 import json
+import logging
 import uuid
 from django.http import JsonResponse
 from rest_framework.request import Request as DRFRequest
+
+logger = logging.getLogger(__name__)
 
 
 class RunTargetError(Exception):
@@ -34,9 +37,12 @@ def resolve_run_targets(user, validated_data: dict):
 
     script_details = validated_data["script_details"]
     vault_details = validated_data["vault_details"]
-    # Convert UUIDs in inputs to strings to avoid JSON serialization errors
-    # downstream (DB JSONField + worker payload).
-    inputs = uuid_to_str(validated_data)
+    # Only the caller-supplied ``inputs`` map becomes run inputs — NOT the whole
+    # payload. (Previously the entire validated_data was passed through, which
+    # polluted the worker's env vars with script_details/vault_details.)
+    # UUIDs are stringified to avoid JSON serialization errors downstream
+    # (DB JSONField + worker payload).
+    inputs = uuid_to_str(validated_data.get("inputs", {}) or {})
 
     try:
         vault = Vault.objects.get(id=vault_details["vault_id"], owner=user)
@@ -63,23 +69,60 @@ def resolve_run_targets(user, validated_data: dict):
     return script, vault, server, credential, inputs
 
 
-def build_worker_payload(execution_id, script, server, credential, inputs: dict) -> dict:
+def build_worker_payload(
+    execution_id,
+    script,
+    server,
+    credential,
+    inputs: dict,
+    secret_keys: list | None = None,
+) -> dict:
     """Build the exec-worker request payload for a one-shot script run.
     Shared by the streaming view and the async task so the worker contract
     stays single-sourced.
+
+    When ``inputs`` are present the script body is fetched from GCS and its
+    ``{{VAR}}`` placeholders are rendered here (mirroring the workflow script
+    path in ``execution_engine/tasks.py``); the rendered text is passed as
+    ``script.content`` so the worker runs it verbatim. ``inputs`` are also sent
+    through so the worker injects them as environment variables. If the fetch or
+    render fails we omit ``content`` and let the worker fall back to its own raw
+    GCS fetch. Does synchronous GCS I/O — call from a sync context (async
+    callers should wrap it in ``sync_to_async``).
     """
     server_host = server.host.strip()
     if server_host.startswith(('http://', 'https://')):
         server_host = server_host.split('://', 1)[1]
 
+    # Render {{VAR}} placeholders in the body only when there are inputs to
+    # substitute — non-parameterized scripts keep their pre-existing behavior
+    # (no extra GCS fetch; worker downloads the raw body itself).
+    rendered_content = None
+    if inputs:
+        try:
+            from execution_engine.helpers.gcs import download_script_content
+            from execution_engine.helpers.params import resolve_template_variables
+
+            body = download_script_content(script.blob_url)
+            rendered_content = resolve_template_variables(body, inputs)
+        except Exception as exc:  # noqa: BLE001 — best-effort; worker has a fallback
+            logger.error(
+                "Failed to fetch/render script %s from GCS (worker will raw-fetch): %s",
+                getattr(script, "id", "?"), exc,
+            )
+
+    script_payload = {
+        "id": str(script.id),
+        "name": script.name,
+        "pathname": script.pathname,
+        "blob_url": script.blob_url,
+    }
+    if rendered_content is not None:
+        script_payload["content"] = rendered_content
+
     return {
         "execution_id": str(execution_id),
-        "script": {
-            "id": str(script.id),
-            "name": script.name,
-            "pathname": script.pathname,
-            "blob_url": script.blob_url,
-        },
+        "script": script_payload,
         "server": {
             "id": str(server.id),
             "host": server_host,
@@ -97,6 +140,9 @@ def build_worker_payload(execution_id, script, server, credential, inputs: dict)
             "key_passphrase": credential.key_passphrase or "",
         },
         "inputs": inputs,
+        # Names of secret parameters — worker uses them for injection-count
+        # logging only; Django performs the actual log masking.
+        "secret_keys": secret_keys or [],
     }
 
 

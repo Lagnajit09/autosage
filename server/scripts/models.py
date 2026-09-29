@@ -24,6 +24,15 @@ class Script(models.Model):
     # (they back Library workflows/nodes). Regular user scripts stay private.
     is_library = models.BooleanField(default=False)
 
+    # Per-variable metadata for parameterized standalone execution.
+    # The *set* of variables is always derived from the ``{{VAR}}`` placeholders
+    # in the script body (source of truth); this list only enriches those with
+    # type / default / secret info so the Script Editor can render typed inputs.
+    # Shape: [{ "name": str, "type": "string|number|boolean|password",
+    #           "default": str, "secret": bool, "description": str }]
+    # NOTE: secret parameters never store a "default" (no plaintext secrets in DB).
+    parameters = models.JSONField(default=list, blank=True)
+
     # Metadata
     content_type = models.CharField(max_length=100, default='text/javascript')
     file_size = models.PositiveIntegerField()  # bytes

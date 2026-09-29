@@ -41,6 +41,28 @@ async def stream_execution(execution_id: str, payload: dict):
     exit_code = None
     final_status = "failed"
 
+    # Derive secret values straight from the payload so both the streaming view
+    # and the fire-and-forget task (which drains this same generator) mask logs
+    # identically — no extra plumbing needed. secret_keys names the secret
+    # params; their values live in inputs. Longest-first avoids leaving fragments.
+    _inputs = payload.get("inputs") or {}
+    secret_values = sorted(
+        {
+            str(_inputs[k])
+            for k in (payload.get("secret_keys") or [])
+            if _inputs.get(k) not in (None, "")
+        },
+        key=len,
+        reverse=True,
+    )
+
+    def _mask(text):
+        if not text or not isinstance(text, str) or not secret_values:
+            return text
+        for secret in secret_values:
+            text = text.replace(secret, "*****")
+        return text
+
     try:
         # ── Call exec-worker ──────────────────────────────────────────
         # Build headers on a thread so the synchronous google-auth call
@@ -89,6 +111,9 @@ async def stream_execution(execution_id: str, payload: dict):
                     # user's script – we pass it through as-is so the
                     # frontend can decide whether to pretty-print it.
                     chunk_data = str(raw_data) if not isinstance(raw_data, str) else raw_data
+                    # Mask any secret parameter values before they are streamed
+                    # to the browser or persisted to GCS.
+                    chunk_data = _mask(chunk_data)
                     ts = dj_timezone.now().isoformat()
 
                     if chunk_type == "stdout":

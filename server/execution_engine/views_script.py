@@ -30,11 +30,21 @@ from execution_engine.helpers.script_execution.utils import (
     RunTargetError,
 )
 from execution_engine.helpers.script_execution.executor import stream_execution
+from execution_engine.helpers.params import resolve_script_inputs
 from billing.limits import get_limits, get_plan
 
 import httpx
 
 logger = logging.getLogger(__name__)
+
+
+def _mask_stored_inputs(resolved: dict, secret_names: list) -> dict:
+    """Return a copy of ``resolved`` safe to persist on ScriptExecution.inputs —
+    secret values are replaced with a mask so plaintext secrets never hit the DB.
+    """
+    secret_set = set(secret_names or [])
+    return {k: ("*****" if k in secret_set else v) for k, v in (resolved or {}).items()}
+
 
 # ── Async execute view (SSE streaming) ───────────────────────────────────────
 
@@ -106,7 +116,10 @@ async def execute_script(request):
     except RunTargetError as exc:
         return json_response(False, exc.message, status_code=exc.status_code)
 
-    # ── Create execution record ───────────────────────────────────────────
+    # ── Resolve + type-coerce inputs against the script's param metadata ──
+    resolved, secret_names, _ = resolve_script_inputs(inputs, script.parameters)
+
+    # ── Create execution record (persist inputs with secrets masked) ──────
     create_execution = sync_to_async(ScriptExecution.objects.create)
     execution = await create_execution(
         script=script,
@@ -114,12 +127,15 @@ async def execute_script(request):
         server=server,
         credential=credential,
         user=user,
-        inputs=inputs,
+        inputs=_mask_stored_inputs(resolved, secret_names),
         status="pending",
     )
 
     # ── Build payload for exec-worker (shared with run_script_async) ──────
-    worker_payload = build_worker_payload(execution.id, script, server, credential, inputs)
+    # Does synchronous GCS I/O (fetch + render) — run off the event loop.
+    worker_payload = await sync_to_async(build_worker_payload)(
+        execution.id, script, server, credential, resolved, secret_keys=secret_names
+    )
 
     # ── Validate exec-worker URL is configured ────────────────────────────
     if not EXEC_WORKER_URL:
@@ -186,17 +202,21 @@ def run_script_async_view(request):
             status_code=exc.status_code,
         )
 
+    resolved, secret_names, _ = resolve_script_inputs(inputs, script.parameters)
+
     execution = ScriptExecution.objects.create(
         script=script,
         vault=vault,
         server=server,
         credential=credential,
         user=request.user,
-        inputs=inputs,
+        inputs=_mask_stored_inputs(resolved, secret_names),
         status="pending",
     )
 
-    worker_payload = build_worker_payload(execution.id, script, server, credential, inputs)
+    worker_payload = build_worker_payload(
+        execution.id, script, server, credential, resolved, secret_keys=secret_names
+    )
 
     # Fire-and-forget on the default Celery queue (same queue as workflow runs).
     from execution_engine.tasks import run_script_async

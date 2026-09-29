@@ -20,7 +20,8 @@ class ScriptSerializer(serializers.ModelSerializer):
             'file_size',
             'uploaded_at',
             'updated_at',
-            'version'
+            'version',
+            'parameters'
         ]
         read_only_fields = [
             'id',
@@ -119,6 +120,56 @@ class ScriptRenameSerializer(serializers.Serializer):
         if not re.match(r'^[a-zA-Z0-9_-]+$', value):
             raise serializers.ValidationError(
                 "Script name can only contain letters, numbers, underscores, and hyphens."
+            )
+        return value
+
+
+class ScriptParameterSerializer(serializers.Serializer):
+    """One parameter-metadata entry for a standalone script.
+
+    The variable *set* is derived from the script body's ``{{VAR}}`` placeholders;
+    this only carries the type / default / secret info the editor renders. Secret
+    parameters never keep a stored default (no plaintext secrets in the DB).
+    """
+    TYPE_CHOICES = ("string", "number", "boolean", "password")
+
+    name = serializers.CharField(max_length=255)
+    type = serializers.ChoiceField(choices=TYPE_CHOICES, required=False, default="string")
+    default = serializers.CharField(required=False, allow_blank=True, default="")
+    secret = serializers.BooleanField(required=False, default=False)
+    description = serializers.CharField(
+        max_length=500, required=False, allow_blank=True, default=""
+    )
+
+    def validate_name(self, value):
+        import re
+        # Must be a valid POSIX / PowerShell identifier so it survives env-var
+        # injection on the worker (both executors skip invalid names).
+        if not re.match(r'^[A-Za-z_][A-Za-z0-9_]*$', value or ""):
+            raise serializers.ValidationError(
+                "Parameter name must start with a letter or underscore and contain "
+                "only letters, numbers, and underscores."
+            )
+        return value
+
+    def validate(self, attrs):
+        # A password-typed parameter is always secret, and never stores a default.
+        if attrs.get("type") == "password":
+            attrs["secret"] = True
+        if attrs.get("secret"):
+            attrs["default"] = ""
+        return attrs
+
+
+class ScriptParametersUpdateSerializer(serializers.Serializer):
+    """Payload for PATCH/POST /api/scripts/<pk>/parameters/ — metadata only."""
+    parameters = ScriptParameterSerializer(many=True)
+
+    def validate_parameters(self, value):
+        names = [p["name"].lower() for p in value]
+        if len(names) != len(set(names)):
+            raise serializers.ValidationError(
+                "Duplicate parameter names are not allowed (names are case-insensitive)."
             )
         return value
 

@@ -4,7 +4,8 @@ from scripts.views import (
     ScriptDetailView,
     ScriptContentView,
     ScriptUpdateView,
-    ScriptRenameView
+    ScriptRenameView,
+    ScriptParametersView
 )
 
 urlpatterns = [
@@ -19,7 +20,10 @@ urlpatterns = [
     
     # Update script content
     path('<int:pk>/update/', ScriptUpdateView.as_view(), name='script-update'),
-    
+
+    # Update script parameter metadata (type / default / secret)
+    path('<int:pk>/parameters/', ScriptParametersView.as_view(), name='script-parameters'),
+
     # Rename script
     path('<int:pk>/rename/', ScriptRenameView.as_view(), name='script-rename'),
 ]

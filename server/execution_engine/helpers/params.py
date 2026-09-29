@@ -43,6 +43,21 @@ _SCRIPT_VAR_RE = re.compile(r"\{\{([\w]+)\}\}")
 SOURCE_MANUAL = "manual"
 SOURCE_OUTPUT = "output"
 
+# ── Secret detection heuristic (Django-side sibling of Autobot's key-name
+#    heuristic). A parameter is treated as secret if its metadata flags it OR
+#    its name matches this pattern — so values are masked in logs even when a
+#    standalone script has no persisted metadata for the variable.
+_SECRET_NAME_RE = re.compile(
+    r"(password|passwd|secret|token|api[_-]?key|access[_-]?key|"
+    r"private[_-]?key|passphrase|credential)",
+    re.IGNORECASE,
+)
+
+
+def is_secret_param_name(name: str) -> bool:
+    """True when a parameter name looks secret by convention."""
+    return bool(name) and bool(_SECRET_NAME_RE.search(name))
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Internal helpers
@@ -455,3 +470,70 @@ def resolve_template_variables(
     # Use re.IGNORECASE so the pattern itself is case-insensitive, and combine
     # with the per-match lowercased lookup for the parameter dict.
     return re.sub(r"\{\{([\w]+)\}\}", _replace, script, flags=re.IGNORECASE)
+
+
+def resolve_script_inputs(
+    inputs_by_name: dict[str, Any],
+    param_meta: list[dict[str, Any]] | None = None,
+) -> tuple[dict[str, Any], list[str], list[str]]:
+    """Resolve standalone-script run inputs into worker-ready values.
+
+    Unlike :func:`resolve_parameters` (which keys off workflow-node param *ids*
+    and resolves upstream ``output`` references), a standalone script has no
+    graph: the variable set comes from the script body's ``{{VAR}}`` markers and
+    the request supplies values keyed directly by **name**.
+
+    Each value is coerced to its declared type using the same ``_coerce_value``
+    the workflow path uses (so ``{{VAR}}`` substitution and env-var injection
+    behave identically). A parameter is treated as secret when its metadata
+    ``secret``/``type == "password"`` flag is set OR its name matches the
+    secret-name heuristic (:func:`is_secret_param_name`).
+
+    Args:
+        inputs_by_name: ``{NAME: value}`` supplied by the caller for this run.
+        param_meta:     The script's persisted ``parameters`` metadata list,
+                        each ``{name, type, secret, ...}`` (case-insensitive name
+                        match). May be ``None``/empty.
+
+    Returns:
+        ``(resolved, secret_names, secret_values)`` where ``resolved`` is the
+        coerced ``{NAME: value}`` dict passed to the worker, ``secret_names`` is
+        the list of parameter names deemed secret, and ``secret_values`` is the
+        list of their string values (for log masking).
+    """
+    inputs_by_name = inputs_by_name or {}
+
+    # Index metadata by lowercased name for O(1), case-insensitive lookup.
+    meta_by_name: dict[str, dict[str, Any]] = {}
+    for m in (param_meta or []):
+        if isinstance(m, dict) and m.get("name"):
+            meta_by_name[str(m["name"]).lower()] = m
+
+    resolved: dict[str, Any] = {}
+    secret_names: list[str] = []
+    secret_values: list[str] = []
+
+    for name, raw_value in inputs_by_name.items():
+        if not name:
+            continue
+        meta = meta_by_name.get(str(name).lower(), {})
+        ptype = (meta.get("type") or "string")
+
+        is_secret = (
+            bool(meta.get("secret"))
+            or (meta.get("type") == "password")
+            or is_secret_param_name(name)
+        )
+
+        coerced = _coerce_value(raw_value, ptype)
+        resolved[name] = coerced
+
+        if is_secret:
+            secret_names.append(name)
+            val_str = "" if coerced is None else str(coerced)
+            if val_str:
+                secret_values.append(val_str)
+
+    # Longest-first so overlapping secrets are masked without leaving fragments.
+    secret_values = sorted(set(secret_values), key=len, reverse=True)
+    return resolved, secret_names, secret_values
