@@ -1,33 +1,17 @@
 import { useState } from "react";
-import { AvatarCircles } from "@/components/ui/avatar-circles";
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { Button } from "@/components/ui/button";
-import {
-  CreditCard,
-  DatabaseZap,
-  HelpCircle,
-  LogOut,
-  Moon,
-  Sun,
-} from "lucide-react";
+import { DatabaseZap, HelpCircle, Moon, Sun } from "lucide-react";
 import { useTheme } from "@/contexts/theme/theme-context";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 
 import { SidebarTrigger } from "@/components/ui/sidebar";
-import { SignOutButton } from "@clerk/clerk-react";
 import { Vault } from "../vault/Vault";
 import { useNavigate } from "react-router";
+import UserMenu from "@/components/UserMenu";
 
 const TopNav = () => {
   const { isDark, toggleTheme } = useTheme();
@@ -103,43 +87,5 @@ const ToolTipIcon = ({
         <p>{tooltip}</p>
       </TooltipContent>
     </Tooltip>
-  );
-};
-
-const UserMenu = () => {
-  const navigate = useNavigate();
-  return (
-    <DropdownMenu>
-      <DropdownMenuTrigger>
-        <AvatarCircles
-          className="ml-2"
-          avatarUrls={[]}
-          username="Lagnajit"
-          onClick={() => {}}
-        />
-      </DropdownMenuTrigger>
-      <DropdownMenuContent className="dark:bg-gray-800 dark:border-gray-900">
-        <DropdownMenuLabel>
-          <p className="dark:text-gray-200">Lagnajit Moharana</p>
-          <span className="font-normal text-gray-600 dark:text-gray-400 text-xs">
-            moharanalagnajit@gmail.com
-          </span>
-        </DropdownMenuLabel>
-        <DropdownMenuSeparator />
-        <DropdownMenuItem
-          onClick={() => navigate("/billing")}
-          className="cursor-pointer dark:text-gray-300 dark:hover:bg-gray-700"
-        >
-          <CreditCard />
-          Subscription
-        </DropdownMenuItem>
-        <SignOutButton>
-          <DropdownMenuItem className="cursor-pointer dark:text-gray-300 dark:hover:bg-gray-700">
-            <LogOut />
-            LogOut
-          </DropdownMenuItem>
-        </SignOutButton>
-      </DropdownMenuContent>
-    </DropdownMenu>
   );
 };

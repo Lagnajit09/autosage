@@ -5,9 +5,15 @@ import { toast } from "@/hooks/use-toast";
 interface SocialAuthProps {
   isLoading: boolean;
   mode: "signin" | "signup";
+  /** Where to land once the OAuth round-trip completes (validated upstream). */
+  redirectUrlComplete?: string;
 }
 
-export function SocialAuth({ isLoading, mode }: SocialAuthProps) {
+export function SocialAuth({
+  isLoading,
+  mode,
+  redirectUrlComplete = "/dashboard",
+}: SocialAuthProps) {
   const { signIn } = useSignIn();
   const { signUp } = useSignUp();
 
@@ -30,7 +36,7 @@ export function SocialAuth({ isLoading, mode }: SocialAuthProps) {
       await authObject.authenticateWithRedirect({
         strategy,
         redirectUrl: "/sso-callback",
-        redirectUrlComplete: "/dashboard",
+        redirectUrlComplete,
       });
     } catch (error: unknown) {
       console.error("Social auth error:", error);

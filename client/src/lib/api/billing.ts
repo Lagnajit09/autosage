@@ -1,4 +1,5 @@
-import { apiRequest } from "../api-client";
+import { API_BASE_URL, apiRequest } from "../api-client";
+import { sanitizeInput } from "@/sanitizers";
 
 const BILLING_BASE = "/api/billing";
 
@@ -88,6 +89,12 @@ export interface PlanInfo {
   price_monthly: number | null;
   price_yearly: number | null;
   limits: PlanLimits & { execution_mode: boolean };
+  /** Present on the Pro plan: one-time trial pass pricing. */
+  day_pass?: {
+    amount: number; // minor units (paise)
+    currency: string;
+    days: number;
+  };
 }
 
 // ── API calls ─────────────────────────────────────────────────────────────────
@@ -155,4 +162,44 @@ export const getInvoices = async (token: string): Promise<Invoice[]> => {
 export const getPlans = async (token: string): Promise<PlanInfo[]> => {
   const res = await apiRequest(`${BILLING_BASE}/plans/`, {}, token);
   return (res.data ?? []) as PlanInfo[];
+};
+
+/**
+ * Plan catalogue from the server. Raw fetch so a failure surfaces inline
+ * instead of firing the global server-error / limit-exceeded redirects.
+ */
+export const getPublicPlans = async (): Promise<PlanInfo[]> => {
+  const res = await fetch(`${API_BASE_URL}${BILLING_BASE}/plans/`);
+  if (!res.ok) throw new Error(`Failed to load plans (${res.status})`);
+  const body = await res.json();
+  return (body.data ?? []) as PlanInfo[];
+};
+
+export interface EnterpriseContactBody {
+  type: string;
+  name: string;
+  email: string;
+  description: string;
+}
+
+/**
+ * Enterprise enquiry (public endpoint — works signed in or out). Raw fetch so
+ * a failure surfaces inline in the dialog instead of triggering the global
+ * /server-error redirect (the dialog also lives on the public landing page).
+ */
+export const submitEnterpriseContact = async (
+  body: EnterpriseContactBody,
+  token?: string | null,
+): Promise<void> => {
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (token) headers.Authorization = `Bearer ${token}`;
+  const res = await fetch(`${API_BASE_URL}${BILLING_BASE}/contact/`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify(sanitizeInput(body)),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok || data.success === false) {
+    throw new Error(data.message || "Failed to send.");
+  }
 };

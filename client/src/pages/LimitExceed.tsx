@@ -1,7 +1,10 @@
 import { Button } from "@/components/ui/button";
-import { AlertCircle, ArrowLeft, Home } from "lucide-react";
+import { AlertCircle, ArrowLeft, Home, RotateCw } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
+import { useAuth } from "@clerk/clerk-react";
+import Loader from "@/components/Loader";
+import { useErrorPageRedirect } from "@/hooks/use-error-redirect";
 
 interface LimitExceedProps {
   header?: string;
@@ -15,6 +18,16 @@ const LimitExceed = ({
   errorCode = "429",
 }: LimitExceedProps) => {
   const navigate = useNavigate();
+  const { isSignedIn } = useAuth();
+  const { redirect, redirecting, retry } = useErrorPageRedirect();
+
+  if (redirecting) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-100 dark:bg-gray-950">
+        <Loader />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen w-full flex flex-col items-center justify-center bg-gray-100 dark:bg-gray-950 p-4 overflow-hidden relative">
@@ -55,7 +68,7 @@ const LimitExceed = ({
           </p>
         </div>
 
-        <div className="pt-6 flex justify-center gap-4">
+        <div className="pt-6 flex flex-wrap justify-center gap-4">
           <Button
             variant="outline"
             size="lg"
@@ -65,14 +78,25 @@ const LimitExceed = ({
             <ArrowLeft className="w-4 h-4" />
             Go Back
           </Button>
-          <Button
-            size="lg"
-            onClick={() => navigate("/dashboard")}
-            className="gap-2 min-w-[120px] bg-primary hover:bg-primary/90 text-primary-foreground shadow-md hover:shadow-lg transition-all"
-          >
-            <Home className="w-4 h-4" />
-            Dashboard
-          </Button>
+          {redirect ? (
+            <Button
+              size="lg"
+              onClick={retry}
+              className="gap-2 min-w-[120px] bg-primary hover:bg-primary/90 text-primary-foreground shadow-md hover:shadow-lg transition-all"
+            >
+              <RotateCw className="w-4 h-4" />
+              Try Again
+            </Button>
+          ) : (
+            <Button
+              size="lg"
+              onClick={() => navigate(isSignedIn ? "/dashboard" : "/")}
+              className="gap-2 min-w-[120px] bg-primary hover:bg-primary/90 text-primary-foreground shadow-md hover:shadow-lg transition-all"
+            >
+              <Home className="w-4 h-4" />
+              {isSignedIn ? "Dashboard" : "Home"}
+            </Button>
+          )}
         </div>
       </motion.div>
 

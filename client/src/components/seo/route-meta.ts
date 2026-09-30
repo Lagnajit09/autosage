@@ -32,6 +32,29 @@ export const ROUTE_META: RouteMeta[] = [
       "AutoSage: seamless automation, smarter execution. Build AI-powered workflows, run scripts on your own servers, and chat with Autobot — your intelligent automation assistant.",
     noIndex: false,
   },
+  {
+    pattern: "/faq",
+    title: "FAQ & Help",
+    description:
+      "Answers to common AutoSage questions: building workflows, triggers, Autobot, execution mode, the vault, plans and billing.",
+    noIndex: false,
+  },
+  {
+    pattern: "/terms",
+    title: "Terms of Service",
+    description:
+      "The terms for using AutoSage: accounts, acceptable use, your servers and scripts, Autobot, plans and billing.",
+    noIndex: false,
+  },
+  {
+    pattern: "/privacy",
+    title: "Privacy Policy",
+    description:
+      "How AutoSage collects, uses and protects your information, including vault credentials, execution logs and Autobot conversations.",
+    noIndex: false,
+  },
+  // Redirect alias to /faq#contact — the destination is what gets indexed.
+  { pattern: "/contact", title: "Contact Us", noIndex: true },
 
   // ---- Auth (thin pages, deliberately kept out of the index) ---------------
   {
@@ -49,6 +72,7 @@ export const ROUTE_META: RouteMeta[] = [
     noIndex: true,
   },
   { pattern: "/sso-callback", title: "Signing in…", noIndex: true },
+  { pattern: "/signout", title: "Signing out…", noIndex: true },
 
   // ---- App surface (auth-gated, never indexed) -----------------------------
   { pattern: "/dashboard", title: "Dashboard", noIndex: true },
@@ -79,7 +103,6 @@ export const ROUTE_META: RouteMeta[] = [
     noIndex: true,
   },
   { pattern: "/report-bug", title: "Report a Bug", noIndex: true },
-  { pattern: "/faq", title: "FAQ & Contact", noIndex: true },
 
   // ---- Error states --------------------------------------------------------
   { pattern: "/server-error", title: "Server Error", noIndex: true },

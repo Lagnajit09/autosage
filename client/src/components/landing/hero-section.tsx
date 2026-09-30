@@ -1,14 +1,15 @@
 "use client";
 
 import { motion } from "motion/react";
-import HeroDemo from "./HeroDemo";
 import { HoverBorderGradient } from "../ui/hover-border-gradient";
 import { cn } from "@/lib/utils";
 import CircularText from "./CircularText";
 import { useNavigate } from "react-router-dom";
 import { Button } from "../ui/button";
+import { useTheme } from "@/contexts/theme/theme-context";
 
 export default function HeroSectionOne() {
+  const { isDark } = useTheme();
   return (
     <div className="relative mx-auto flex max-w-7xl flex-col items-center justify-center">
       <div className="w-full absolute z-20 top-0">
@@ -96,10 +97,11 @@ export default function HeroSectionOne() {
           />
         </div>
         <HoverBorderGradient
-          containerClassName="mt-20 rounded-3xl w-full md:w-fit h-fit border-none bg-transparent p-0"
+          as="div"
+          containerClassName="mt-20 rounded-3xl w-full h-fit border-none bg-transparent p-0"
           duration={1}
           clockwise={true}
-          className="p-0 w-full md:w-auto"
+          className="p-0 w-full"
         >
           <motion.div
             initial={{
@@ -114,9 +116,15 @@ export default function HeroSectionOne() {
               duration: 0.3,
               delay: 1.2,
             }}
-            className="relative z-10 m-0 rounded-3xl border border-neutral-200 bg-neutral-100 p-4 shadow-md dark:border-neutral-800 dark:bg-neutral-900"
+            className="relative z-10 m-0 rounded-3xl border border-neutral-200 bg-neutral-100 p-2 md:p-4 shadow-md dark:border-neutral-800 dark:bg-neutral-900"
           >
-            <HeroDemo />
+            <img
+              src={isDark ? "/autosage-overview-dark.svg" : "/autosage-overview-light.svg"}
+              alt="AutoSage workflow editor showing a live scheduled run, streaming logs, and Autobot fixing a failed run and re-running it"
+              width={1440}
+              height={900}
+              className="block h-auto w-full rounded-xl border border-neutral-200 dark:border-neutral-800"
+            />
           </motion.div>
         </HoverBorderGradient>
       </div>

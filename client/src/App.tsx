@@ -2,7 +2,14 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route, useNavigate } from "react-router-dom";
+import {
+  BrowserRouter,
+  Navigate,
+  Routes,
+  Route,
+  useLocation,
+  useNavigate,
+} from "react-router-dom";
 import { useEffect } from "react";
 import Workflow from "./pages/Workflow";
 import WorkflowExecution from "./pages/WorkflowExecution";
@@ -34,20 +41,35 @@ import ExecutionLogs from "./pages/ExecutionLogs";
 import AccountReactivationRequest from "./pages/AccountReactivationRequest";
 import ReportBug from "./pages/ReportBug";
 import FaqContact from "./pages/FaqContact";
+import SignOut from "./pages/SignOut";
+import Terms from "./pages/Terms";
+import Privacy from "./pages/Privacy";
 import RouteSEO from "./components/seo/RouteSEO";
+import ScrollManager from "./components/ScrollManager";
+import { pathOf, rememberLastPath, withRedirect } from "./lib/redirect";
 
 const queryClient = new QueryClient();
+
+const ERROR_ROUTES = new Set(["/server-error", "/limit-exceeded"]);
 
 const ServerErrorListener = () => {
   const navigate = useNavigate();
 
   useEffect(() => {
+    // Send the user to the error page with `redirect_url` = the page they were
+    // on, so "Try again" (or a refresh) returns them there. If we're already
+    // on an error page, keep its original redirect instead of overwriting it.
+    const goToError = (errorPath: string) => {
+      if (ERROR_ROUTES.has(window.location.pathname)) return;
+      navigate(withRedirect(errorPath, pathOf(window.location)));
+    };
+
     const handleServerError = () => {
-      navigate("/server-error");
+      goToError("/server-error");
     };
 
     const handleLimitExceeded = () => {
-      navigate("/limit-exceeded");
+      goToError("/limit-exceeded");
     };
 
     window.addEventListener("server-error", handleServerError);
@@ -57,6 +79,18 @@ const ServerErrorListener = () => {
       window.removeEventListener("limit-exceeded", handleLimitExceeded);
     };
   }, [navigate]);
+
+  return null;
+};
+
+// Remembers the last page visited in this tab so /signout can send the user
+// back there after they sign in again (auth/error routes are ignored).
+const LastLocationTracker = () => {
+  const location = useLocation();
+
+  useEffect(() => {
+    rememberLastPath(pathOf(location));
+  }, [location]);
 
   return null;
 };
@@ -78,6 +112,8 @@ const App = () => {
               <Sonner />
               <BrowserRouter>
                 <ServerErrorListener />
+                <LastLocationTracker />
+                <ScrollManager />
                 <RouteSEO />
                 <Routes>
                   {/* Protected Routes */}
@@ -117,7 +153,6 @@ const App = () => {
                       element={<AccountReactivationRequest />}
                     />
                     <Route path="/report-bug" element={<ReportBug />} />
-                    <Route path="/faq" element={<FaqContact />} />
                   </Route>
 
                   {/* Public Routes - redirect to dashboard if authenticated */}
@@ -129,6 +164,17 @@ const App = () => {
 
                   {/* SSO Callback - no redirect needed */}
                   <Route path="/sso-callback" element={<SSOCallback />} />
+
+                  {/* Open to everyone, signed in or not (no auth redirect) */}
+                  <Route path="/faq" element={<FaqContact />} />
+                  {/* Contact form lives on the FAQ page */}
+                  <Route
+                    path="/contact"
+                    element={<Navigate to="/faq#contact" replace />}
+                  />
+                  <Route path="/terms" element={<Terms />} />
+                  <Route path="/privacy" element={<Privacy />} />
+                  <Route path="/signout" element={<SignOut />} />
 
                   {/* Server Error Route */}
                   <Route

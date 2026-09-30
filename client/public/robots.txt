@@ -17,10 +17,10 @@ Disallow: /plans
 Disallow: /billing
 Disallow: /account-activation-request
 Disallow: /report-bug
-Disallow: /faq
 
 # Transient / error states
 Disallow: /sso-callback
+Disallow: /signout
 Disallow: /server-error
 Disallow: /limit-exceeded
 

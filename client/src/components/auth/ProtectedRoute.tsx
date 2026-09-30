@@ -3,6 +3,7 @@ import { Navigate, Outlet, useLocation } from "react-router-dom";
 import { useAuth } from "@clerk/clerk-react";
 import Loader from "../Loader";
 import { getAccountStatus } from "@/lib/api/user";
+import { pathOf, withRedirect } from "@/lib/redirect";
 
 // The reactivation page itself lives behind ProtectedRoute (the user is signed
 // into Clerk, just deactivated in Django) — never gate it, or it can't render.
@@ -52,7 +53,8 @@ const ProtectedRoute = () => {
   }
 
   if (!isSignedIn) {
-    return <Navigate to="/signin" replace />;
+    // Remember where the user was headed so sign-in can send them back.
+    return <Navigate to={withRedirect("/signin", pathOf(location))} replace />;
   }
 
   // Always allow the reactivation page through without a status gate.

@@ -1,10 +1,11 @@
-import { Navigate, Outlet } from "react-router-dom";
+import { Navigate, Outlet, useLocation } from "react-router-dom";
 import { useAuth } from "@clerk/clerk-react";
-import { Spinner } from "@/components/ui/spinner";
 import Loader from "../Loader";
+import { DEFAULT_AFTER_AUTH, redirectFromSearch } from "@/lib/redirect";
 
 const PublicRoute = () => {
   const { isSignedIn, isLoaded } = useAuth();
+  const location = useLocation();
 
   // Show loading state while checking authentication
   if (!isLoaded) {
@@ -15,9 +16,15 @@ const PublicRoute = () => {
     );
   }
 
-  // If user is signed in, redirect to dashboard
-  // Otherwise, show the public route (sign in, sign up, landing page)
-  return isSignedIn ? <Navigate to="/dashboard" replace /> : <Outlet />;
+  // Signed-in users skip the public pages. Honour `redirect_url` here too: the
+  // moment Clerk flips `isSignedIn` after sign-in/sign-up this component
+  // re-renders, so it must agree with the form's own post-auth navigation.
+  if (isSignedIn) {
+    const target = redirectFromSearch(location.search) ?? DEFAULT_AFTER_AUTH;
+    return <Navigate to={target} replace />;
+  }
+
+  return <Outlet />;
 };
 
 export default PublicRoute;

@@ -1,7 +1,11 @@
-import React from "react";
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
+import { redirectFromSearch, withRedirect } from "@/lib/redirect";
 
 const AuthHeader = ({ route }: { route: string }) => {
+  const location = useLocation();
+  // Keep the pending redirect when switching between sign-in and sign-up.
+  const target = withRedirect(route, redirectFromSearch(location.search));
+
   return (
     <div className="w-full flex items-center justify-between mb-8 opacity-0 animate-[fade-in_0.6s_ease-out_0.2s_forwards]">
       <Link
@@ -27,7 +31,7 @@ const AuthHeader = ({ route }: { route: string }) => {
           {route === "/signin" ? "Already a member?" : "New to AutoSage?"}
         </span>
         <Link
-          to={route}
+          to={target}
           className="text-gray-900 dark:text-gray-100 hover:text-primary transition-all duration-200 border border-border hover:border-primary px-4 py-1.5 rounded-full hover:shadow-sm hover:scale-105 font-medium"
         >
           {route === "/signin" ? "Sign In" : "Sign Up"}

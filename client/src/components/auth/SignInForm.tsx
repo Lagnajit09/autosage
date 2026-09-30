@@ -19,8 +19,13 @@ import { Button } from "../ui/button";
 import { Mail, ArrowRight } from "lucide-react";
 import { useLoading } from "../../contexts/loading/loading-context";
 import { Spinner } from "../ui/spinner";
-import { useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { toast } from "@/hooks/use-toast";
+import {
+  DEFAULT_AFTER_AUTH,
+  redirectFromSearch,
+  withRedirect,
+} from "@/lib/redirect";
 import {
   Card,
   CardContent,
@@ -41,8 +46,13 @@ export function SignInForm() {
   const { isLoaded, signIn, setActive } = useSignIn();
   const { isLoading, setIsLoading } = useLoading();
   const navigate = useNavigate();
+  const location = useLocation();
   const [step, setStep] = useState<"email" | "otp">("email");
   const [email, setEmail] = useState("");
+
+  // Where to land after a successful sign-in (validated `redirect_url`).
+  const redirect = redirectFromSearch(location.search);
+  const afterAuth = redirect ?? DEFAULT_AFTER_AUTH;
 
   // Forms
   const emailForm = useForm<z.infer<typeof EmailSchema>>({
@@ -180,26 +190,30 @@ export function SignInForm() {
                 </div>
               </div>
 
-              <SocialAuth isLoading={isLoading} mode="signin" />
+              <SocialAuth
+                isLoading={isLoading}
+                mode="signin"
+                redirectUrlComplete={afterAuth}
+              />
             </>
           ) : (
             <VerifyEmail
               mode="signin"
               email={email}
               onBack={() => setStep("email")}
-              onSuccess={() => navigate("/dashboard", { replace: true })}
+              onSuccess={() => navigate(afterAuth, { replace: true })}
             />
           )}
         </CardContent>
         <CardFooter className="flex flex-col space-y-2">
           <div className="text-sm text-gray-700 dark:text-gray-400 text-center">
             Don't have an account?{" "}
-            <a
-              href="/signup"
+            <Link
+              to={withRedirect("/signup", redirect)}
               className="text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-200 font-medium transition-colors"
             >
               Sign up
-            </a>
+            </Link>
           </div>
         </CardFooter>
       </Card>

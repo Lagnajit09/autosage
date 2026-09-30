@@ -37,7 +37,7 @@ export const DangerZone = () => {
         await apiRequest("/api/users/deactivate/", { method: "POST" }, token);
       }
       await signOut();
-      navigate("/sign-in");
+      navigate("/signin");
     } catch {
       setError("Failed to deactivate account. Please try again.");
       setIsLoading(false);
@@ -54,7 +54,7 @@ export const DangerZone = () => {
         await apiRequest("/api/users/delete/", { method: "POST" }, token);
       }
       await user.delete();
-      navigate("/sign-in");
+      navigate("/signin");
     } catch {
       setError("Failed to delete account. Please try again.");
       setIsLoading(false);

@@ -20,8 +20,13 @@ import { Input } from "../ui/input";
 import { Checkbox } from "../ui/checkbox";
 import { useLoading } from "../../contexts/loading/loading-context";
 import { Spinner } from "../ui/spinner";
-import { useNavigate, Link } from "react-router-dom";
+import { useNavigate, useLocation, Link } from "react-router-dom";
 import { toast } from "@/hooks/use-toast";
+import {
+  DEFAULT_AFTER_AUTH,
+  redirectFromSearch,
+  withRedirect,
+} from "@/lib/redirect";
 import {
   Card,
   CardContent,
@@ -46,8 +51,13 @@ export function SignUpForm() {
   const { isLoaded, signUp, setActive } = useSignUp();
   const { isLoading, setIsLoading } = useLoading();
   const navigate = useNavigate();
+  const location = useLocation();
   const [step, setStep] = useState<"email" | "otp">("email");
   const [email, setEmail] = useState("");
+
+  // Where to land after a successful sign-up (validated `redirect_url`).
+  const redirect = redirectFromSearch(location.search);
+  const afterAuth = redirect ?? DEFAULT_AFTER_AUTH;
 
   const form = useForm<z.infer<typeof SignUpSchema>>({
     resolver: zodResolver(SignUpSchema),
@@ -208,8 +218,11 @@ export function SignUpForm() {
                         <div className="space-y-1 leading-none">
                           <FormLabel className="text-sm font-normal cursor-pointer text-gray-700 dark:text-gray-400">
                             I accept the{" "}
+                            {/* New tab, so the half-filled form isn't lost. */}
                             <Link
                               to="/terms"
+                              target="_blank"
+                              rel="noopener noreferrer"
                               className="text-gray-700 dark:text-gray-400 hover:underline font-medium"
                             >
                               Terms of Service
@@ -217,6 +230,8 @@ export function SignUpForm() {
                             and{" "}
                             <Link
                               to="/privacy"
+                              target="_blank"
+                              rel="noopener noreferrer"
                               className="text-gray-700 dark:text-gray-400 hover:underline font-medium"
                             >
                               Privacy Policy
@@ -257,14 +272,18 @@ export function SignUpForm() {
                   </span>
                 </div>
               </div>
-              <SocialAuth isLoading={isLoading} mode="signup" />
+              <SocialAuth
+                isLoading={isLoading}
+                mode="signup"
+                redirectUrlComplete={afterAuth}
+              />
             </>
           ) : (
             <VerifyEmail
               mode="signup"
               email={email}
               onBack={() => setStep("email")}
-              onSuccess={() => navigate("/dashboard", { replace: true })}
+              onSuccess={() => navigate(afterAuth, { replace: true })}
             />
           )}
         </CardContent>
@@ -272,7 +291,7 @@ export function SignUpForm() {
           <div className="text-sm text-muted-foreground text-center">
             Already have an account?{" "}
             <Link
-              to="/signin"
+              to={withRedirect("/signin", redirect)}
               className="text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-200 font-medium transition-colors"
             >
               Sign in

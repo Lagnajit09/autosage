@@ -6,35 +6,18 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useTheme } from "@/contexts/theme/theme-context";
-import {
-  CreditCard,
-  DatabaseZap,
-  LogOut,
-  MessageSquare,
-  Moon,
-  Settings2,
-  Sun,
-} from "lucide-react";
-import { SignOutButton } from "@clerk/clerk-react";
+import { DatabaseZap, MessageSquare, Moon, Settings2, Sun } from "lucide-react";
 
-import { AvatarCircles } from "@/components/ui/avatar-circles";
 import { Button } from "@/components/ui/button";
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Vault } from "../vault/Vault";
 import CustomizeModal from "./Chat/CustomizeModal";
+import UserMenu from "@/components/UserMenu";
 
 interface AutobotDashboardHeaderProps {
   /** Fires when an LLM config is added/edited/deleted via Customize. */
@@ -127,38 +110,6 @@ const ToolTipIcon = ({
       <p>{tooltip}</p>
     </TooltipContent>
   </Tooltip>
-);
-
-const UserMenu = () => (
-  <DropdownMenu>
-    <DropdownMenuTrigger>
-      <AvatarCircles
-        className="ml-2"
-        avatarUrls={[]}
-        username="Lagnajit"
-        onClick={() => {}}
-      />
-    </DropdownMenuTrigger>
-    <DropdownMenuContent className="dark:bg-gray-800 dark:border-gray-900">
-      <DropdownMenuLabel>
-        <p className="dark:text-gray-200">Lagnajit Moharana</p>
-        <span className="font-normal text-gray-600 dark:text-gray-400 text-xs">
-          moharanalagnajit@gmail.com
-        </span>
-      </DropdownMenuLabel>
-      <DropdownMenuSeparator />
-      <DropdownMenuItem className="cursor-pointer dark:text-gray-300 dark:hover:bg-gray-700">
-        <CreditCard />
-        Subscription
-      </DropdownMenuItem>
-      <SignOutButton>
-        <DropdownMenuItem className="cursor-pointer dark:text-gray-300 dark:hover:bg-gray-700">
-          <LogOut />
-          LogOut
-        </DropdownMenuItem>
-      </SignOutButton>
-    </DropdownMenuContent>
-  </DropdownMenu>
 );
 
 export default AutobotDashboardHeader;

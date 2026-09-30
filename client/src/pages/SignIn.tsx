@@ -1,11 +1,12 @@
 import AuthHeader from "@/components/auth/AuthHeader";
 import { SignInForm } from "@/components/auth/SignInForm";
 import Logo from "@/components/Logo";
+import Footer from "@/components/landing/footer";
 
 const Signin = () => {
   return (
-    <div className="w-full min-h-screen flex justify-center p-4 bg-gray-100 dark:bg-gray-950 dark:bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] dark:from-sky-900/20 dark:via-gray-950/20 dark:to-gray-950">
-      <div className="w-full min-h-full animate-fade-in flex flex-col items-center">
+    <div className="w-full min-h-screen flex flex-col items-center p-4 bg-gray-100 dark:bg-gray-950 dark:bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] dark:from-sky-900/20 dark:via-gray-950/20 dark:to-gray-950">
+      <div className="w-full flex-1 animate-fade-in flex flex-col items-center">
         <div className="w-full max-w-5xl animate-scale-in">
           {/* Header */}
           <AuthHeader route="/signup" />
@@ -25,6 +26,8 @@ const Signin = () => {
           </div>
         </div>
       </div>
+
+      <Footer className="mt-16 w-full max-w-5xl" />
     </div>
   );
 };

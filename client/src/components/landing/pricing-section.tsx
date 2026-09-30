@@ -1,5 +1,7 @@
-import { useRef } from "react";
+import { useRef, useState } from "react";
 import { motion, useInView } from "framer-motion";
+import { Link, useNavigate } from "react-router-dom";
+import { Check, Zap } from "lucide-react";
 import {
   Card,
   CardContent,
@@ -9,64 +11,51 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Check } from "lucide-react";
-import { useNavigate } from "react-router-dom";
+import EnterpriseContactDialog from "@/components/billing/EnterpriseContactDialog";
+import type { PlanInfo, PlanKey } from "@/lib/api/billing";
+import {
+  PLAN_CATALOGUE,
+  PLAN_DESCRIPTIONS,
+  dayPassDuration,
+  formatMinorAmount,
+  formatUsd,
+  planFeatures,
+  yearlySavingsPct,
+} from "@/lib/plans";
+import { withRedirect } from "@/lib/redirect";
+
+const PLAN_STYLE: Record<PlanKey, { color: string; border: string }> = {
+  free: {
+    color: "bg-blue-50 dark:bg-blue-900/10",
+    border: "border-blue-200 dark:border-blue-800",
+  },
+  pro: {
+    color: "bg-purple-50 dark:bg-purple-900/10",
+    border: "border-purple-200 dark:border-purple-800",
+  },
+  enterprise: {
+    color: "bg-orange-50 dark:bg-orange-900/10",
+    border: "border-orange-200 dark:border-orange-800",
+  },
+};
+
+// Paid plans are bought from the in-app Plans page, so the upgrade CTA sends
+// visitors through sign-up and lands them there afterwards.
+const UPGRADE_SIGNUP = withRedirect("/signup", "/plans");
+const UPGRADE_SIGNIN = withRedirect("/signin", "/plans");
 
 const PricingSection = () => {
   const navigate = useNavigate();
   const ref = useRef(null);
   const isInView = useInView(ref, { once: true, margin: "-100px" });
-
-  const plans = [
-    {
-      name: "Free",
-      price: "$0",
-      description: "Perfect for getting started",
-      features: [
-        "Basic workflow automation",
-        "5 active workflows",
-        "100 executions per month",
-        "Community support",
-      ],
-      color: "bg-blue-50 dark:bg-blue-900/10",
-      borderColor: "border-blue-200 dark:border-blue-800",
-      buttonVariant: "outline" as const,
-    },
-    {
-      name: "Pro",
-      price: "$29",
-      description: "For power users and creators",
-      features: [
-        "Advanced workflow automation",
-        "Unlimited active workflows",
-        "10,000 executions per month",
-        "Priority email support",
-        "Advanced analytics",
-      ],
-      color: "bg-purple-50 dark:bg-purple-900/10",
-      borderColor: "border-purple-200 dark:border-purple-800",
-      buttonVariant: "default" as const,
-      popular: true,
-    },
-    {
-      name: "Business",
-      price: "$99",
-      description: "For teams and organizations",
-      features: [
-        "Everything in Pro",
-        "Unlimited executions",
-        "Dedicated success manager",
-        "SSO & Advanced security",
-        "Custom integrations",
-      ],
-      color: "bg-orange-50 dark:bg-orange-900/10",
-      borderColor: "border-orange-200 dark:border-orange-800",
-      buttonVariant: "outline" as const,
-    },
-  ];
+  const [contactOpen, setContactOpen] = useState(false);
 
   return (
-    <section className="py-24 bg-white dark:bg-black relative" ref={ref}>
+    <section
+      id="pricing"
+      className="py-24 bg-white dark:bg-black relative scroll-mt-8"
+      ref={ref}
+    >
       {/* Background Gradient */}
       <div
         className="absolute inset-x-0 -top-40 -z-10 transform-gpu overflow-hidden blur-3xl sm:-top-80"
@@ -98,69 +87,151 @@ const PricingSection = () => {
         </motion.div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-7xl mx-auto">
-          {plans.map((plan, index) => (
+          {PLAN_CATALOGUE.map((plan, index) => (
             <motion.div
-              key={plan.name}
+              key={plan.key}
               initial={{ opacity: 0, y: 20 }}
-              animate={isInView ? { opacity: 1, y: 0 } : { opacity: 0, y: 20 }}
+              animate={
+                isInView ? { opacity: 1, y: 0 } : { opacity: 0, y: 20 }
+              }
               transition={{ duration: 0.6, delay: index * 0.1 }}
             >
-              <Card
-                className={`relative flex flex-col h-full ${plan.color} ${plan.borderColor} border-2 hover:shadow-xl transition-all duration-300 dark:bg-gray-950/50 backdrop-blur-sm`}
-              >
-                {plan.popular && (
-                  <div className="absolute -top-4 left-1/2 -translate-x-1/2 bg-primary text-primary-foreground px-4 py-1 rounded-full text-sm font-medium shadow-md">
-                    Most Popular
-                  </div>
-                )}
-                <CardHeader>
-                  <CardTitle className="text-2xl font-bold text-gray-900 dark:text-gray-100">
-                    {plan.name}
-                  </CardTitle>
-                  <CardDescription className="text-base">
-                    {plan.description}
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="flex-1">
-                  <div className="mb-6">
-                    <span className="text-4xl font-bold tracking-tight text-gray-900 dark:text-gray-100">
-                      {plan.price}
-                    </span>
-                    <span className="text-muted-foreground font-medium">
-                      /month
-                    </span>
-                  </div>
-                  <ul className="space-y-3">
-                    {plan.features.map((feature) => (
-                      <li key={feature} className="flex items-start gap-3">
-                        <div className="rounded-full bg-green-100 dark:bg-green-900/30 p-1 mt-0.5">
-                          <Check className="h-3.5 w-3.5 text-green-600 dark:text-green-400 shrink-0" />
-                        </div>
-                        <span className="text-sm text-gray-700 dark:text-gray-300 leading-tight">
-                          {feature}
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
-                </CardContent>
-                <CardFooter>
-                  <Button
-                    className="w-full font-semibold"
-                    variant={plan.buttonVariant}
-                    size="lg"
-                    onClick={() => navigate("/signup")}
-                  >
-                    {plan.name === "Free"
-                      ? "Get Started For Free"
-                      : `Subscribe to ${plan.name}`}
-                  </Button>
-                </CardFooter>
-              </Card>
+              <PlanCard
+                plan={plan}
+                onGetStarted={() => navigate("/signup")}
+                onUpgrade={() => navigate(UPGRADE_SIGNUP)}
+                onContact={() => setContactOpen(true)}
+              />
             </motion.div>
           ))}
         </div>
       </div>
+
+      <EnterpriseContactDialog
+        open={contactOpen}
+        onOpenChange={setContactOpen}
+      />
     </section>
+  );
+};
+
+interface PlanCardProps {
+  plan: PlanInfo;
+  onGetStarted: () => void;
+  onUpgrade: () => void;
+  onContact: () => void;
+}
+
+const PlanCard = ({ plan, onGetStarted, onUpgrade, onContact }: PlanCardProps) => {
+  const style = PLAN_STYLE[plan.key] ?? PLAN_STYLE.free;
+  const isPro = plan.key === "pro";
+  const isCustom = plan.price_monthly === null;
+  const savings =
+    plan.price_monthly && plan.price_yearly
+      ? yearlySavingsPct(plan.price_monthly, plan.price_yearly)
+      : 0;
+
+  return (
+    <Card
+      className={`relative flex flex-col h-full ${style.color} ${style.border} border-2 hover:shadow-xl transition-all duration-300 dark:bg-gray-950/50 backdrop-blur-sm`}
+    >
+      {isPro && (
+        <div className="absolute -top-4 left-1/2 -translate-x-1/2 bg-primary text-primary-foreground px-4 py-1 rounded-full text-sm font-medium shadow-md">
+          Most Popular
+        </div>
+      )}
+      <CardHeader>
+        <CardTitle className="text-2xl font-bold text-gray-900 dark:text-gray-100">
+          {plan.name}
+        </CardTitle>
+        <CardDescription className="text-base">
+          {PLAN_DESCRIPTIONS[plan.key]}
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="flex-1">
+        <div className="mb-6">
+          <span className="text-4xl font-bold tracking-tight text-gray-900 dark:text-gray-100">
+            {isCustom ? "Custom" : formatUsd(plan.price_monthly ?? 0)}
+          </span>
+          {!isCustom && (
+            <span className="text-muted-foreground font-medium">/month</span>
+          )}
+          {plan.price_yearly !== null && plan.price_yearly > 0 && (
+            <p className="text-xs text-muted-foreground mt-1">
+              or {formatUsd(plan.price_yearly)}/year
+              {savings > 0 && ` (save ${savings}%)`}
+            </p>
+          )}
+        </div>
+        <ul className="space-y-3">
+          {planFeatures(plan).map((feature) => (
+            <li key={feature} className="flex items-start gap-3">
+              <div className="rounded-full bg-green-100 dark:bg-green-900/30 p-1 mt-0.5">
+                <Check className="h-3.5 w-3.5 text-green-600 dark:text-green-400 shrink-0" />
+              </div>
+              <span className="text-sm text-gray-700 dark:text-gray-300 leading-tight">
+                {feature}
+              </span>
+            </li>
+          ))}
+        </ul>
+      </CardContent>
+      <CardFooter className="flex flex-col gap-3">
+        {plan.key === "free" && (
+          <Button
+            className="w-full font-semibold"
+            variant="outline"
+            size="lg"
+            onClick={onGetStarted}
+          >
+            Get Started For Free
+          </Button>
+        )}
+
+        {isPro && (
+          <>
+            <Button
+              className="w-full font-semibold"
+              size="lg"
+              onClick={onUpgrade}
+            >
+              <Zap className="w-4 h-4 mr-2" />
+              Upgrade to Pro
+            </Button>
+            {plan.day_pass && (
+              <p className="text-xs text-center text-muted-foreground">
+                Just trying it out? Get a{" "}
+                <span className="font-medium text-gray-700 dark:text-gray-300">
+                  {dayPassDuration(plan.day_pass.days)} Pro Day Pass
+                </span>{" "}
+                for{" "}
+                {formatMinorAmount(plan.day_pass.amount, plan.day_pass.currency)}.
+              </p>
+            )}
+            <p className="text-xs text-center text-muted-foreground">
+              Already have an account?{" "}
+              <Link
+                to={UPGRADE_SIGNIN}
+                className="font-medium text-gray-700 dark:text-gray-300 hover:underline"
+              >
+                Sign in to upgrade
+              </Link>
+            </p>
+          </>
+        )}
+
+        {plan.key === "enterprise" && (
+          <Button
+            className="w-full font-semibold"
+            variant="outline"
+            size="lg"
+            onClick={onContact}
+          >
+            Contact Us
+          </Button>
+        )}
+      </CardFooter>
+    </Card>
   );
 };
 
