@@ -1,6 +1,8 @@
 from django.contrib.auth.models import AnonymousUser
 from django.contrib.auth import get_user_model
+from rest_framework import exceptions
 
+from server.authentication import ApiKeyAuthentication
 from server.clerk_auth import verify_clerk_token, extract_bearer_token
 
 User = get_user_model()
@@ -11,6 +13,17 @@ class ClerkAuthMiddleware:
         self.get_response = get_response
 
     def __call__(self, request):
+        # Raw (non-DRF) async views such as the SSE endpoints only see
+        # request.user, so CLI API keys must be resolved here as well as in DRF.
+        # A present-but-invalid key never falls through to the Clerk path.
+        if request.headers.get(ApiKeyAuthentication.keyword):
+            try:
+                result = ApiKeyAuthentication().authenticate(request)
+            except exceptions.AuthenticationFailed:
+                result = None
+            request.user = result[0] if result else AnonymousUser()
+            return self.get_response(request)
+
         token = extract_bearer_token(request)
         if not token:
             return self.get_response(request)
