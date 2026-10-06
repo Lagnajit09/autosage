@@ -35,6 +35,12 @@ class ApiKeyAuthentication(authentication.BaseAuthentication):
         if not presented:
             return None  # no API key -> let other authenticators (Clerk) try
 
+        # ClerkAuthMiddleware already resolved this key for the same request (a DRF
+        # Request proxies attribute reads to the underlying HttpRequest).
+        resolved = getattr(request, '_api_key_auth', None)
+        if resolved:
+            return resolved
+
         # Imported lazily so this module stays importable before apps are ready.
         from users.models import ApiKey, hash_api_key
 

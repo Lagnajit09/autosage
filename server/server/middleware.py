@@ -22,6 +22,7 @@ class ClerkAuthMiddleware:
             except exceptions.AuthenticationFailed:
                 result = None
             request.user = result[0] if result else AnonymousUser()
+            request._api_key_auth = result     # lets DRF skip a second lookup
             return self.get_response(request)
 
         token = extract_bearer_token(request)
