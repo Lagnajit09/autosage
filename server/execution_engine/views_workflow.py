@@ -460,6 +460,8 @@ def trigger_workflow_via_http(request, trigger_token):
             inputs=raw_inputs,
             send_email=False,
             user_email="",
+            trigger_source="http",
+            trigger_node_id=trigger.node_id,
         )
     except RunBuildError as exc:
         return api_response(
