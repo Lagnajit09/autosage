@@ -34,8 +34,6 @@ def fire_scheduled_workflow(self, schedule_trigger_id: str) -> None:  # type: ig
     """
     # Lazy imports to avoid circular-import issues at module load time.
     from triggers.models import ScheduleTrigger
-    from execution_engine.helpers.run_builder import RunBuildError, enqueue_workflow_run
-    from execution_engine.models import WorkflowRun
 
     # ── 1. Load & guard ──────────────────────────────────────────────────────
     try:
@@ -58,19 +56,31 @@ def fire_scheduled_workflow(self, schedule_trigger_id: str) -> None:  # type: ig
         )
         return
 
+    dispatch_schedule(schedule)
+
+
+def dispatch_schedule(schedule):
+    """One firing of a schedule — shared by Beat's task and the "fire now" endpoint so
+    both take exactly the same path (steps 2-5 above).
+
+    Returns ``(WorkflowRun, "")`` when a run was queued, else ``(None, reason)``; the
+    reason is also recorded as the schedule's ``last_error``.
+    """
+    from execution_engine.helpers.run_builder import RunBuildError, enqueue_workflow_run
+    from execution_engine.models import WorkflowRun
+
+    schedule_trigger_id = str(schedule.id)
     workflow = schedule.workflow
     if workflow.user is None:
-        _record_error(schedule, "Workflow has no owner — cannot run.")
-        return
+        return None, _record_error(schedule, "Workflow has no owner — cannot run.")
 
     # ── 2. Verify trigger node still matches ─────────────────────────────────
     trigger_node = _find_schedule_trigger_node(workflow.nodes, schedule.node_id)
     if trigger_node is None:
-        _record_error(
+        return None, _record_error(
             schedule,
             f"Node {schedule.node_id} no longer exists or is not a schedule trigger.",
         )
-        return
 
     # ── 3. Overlap policy: no concurrent scheduled runs ──────────────────────
     active = WorkflowRun.objects.filter(
@@ -85,11 +95,10 @@ def fire_scheduled_workflow(self, schedule_trigger_id: str) -> None:  # type: ig
             workflow.id,
             schedule_trigger_id,
         )
-        _record_error(
+        return None, _record_error(
             schedule,
             "Skipped: a prior scheduled run is still queued or running.",
         )
-        return
 
     # ── 4. Enqueue ────────────────────────────────────────────────────────────
     try:
@@ -109,15 +118,13 @@ def fire_scheduled_workflow(self, schedule_trigger_id: str) -> None:  # type: ig
             schedule_trigger_id,
             exc.message,
         )
-        _record_error(schedule, exc.message)
-        return
+        return None, _record_error(schedule, exc.message)
     except Exception as exc:  # noqa: BLE001
         logger.exception(
             "fire_scheduled_workflow: unexpected error for schedule %s",
             schedule_trigger_id,
         )
-        _record_error(schedule, str(exc))
-        return
+        return None, _record_error(schedule, str(exc))
 
     # ── 5. Update observability fields ────────────────────────────────────────
     schedule.last_triggered_at = timezone.now()
@@ -131,6 +138,7 @@ def fire_scheduled_workflow(self, schedule_trigger_id: str) -> None:  # type: ig
         workflow.id,
         schedule_trigger_id,
     )
+    return workflow_run, ""
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -146,8 +154,8 @@ def _find_schedule_trigger_node(nodes: list, node_id: str) -> dict | None:
     return None
 
 
-def _record_error(schedule, message: str) -> None:
-    """Persist a last_error string without overwriting last_triggered_at."""
+def _record_error(schedule, message: str) -> str:
+    """Persist a last_error string without overwriting last_triggered_at; returns it."""
     schedule.last_error = message
     schedule.save(update_fields=["last_error"])
     logger.warning(
@@ -155,3 +163,4 @@ def _record_error(schedule, message: str) -> None:
         schedule.id,
         message,
     )
+    return message

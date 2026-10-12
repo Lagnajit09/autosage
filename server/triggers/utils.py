@@ -64,6 +64,42 @@ def parse_cron_fields(cron_expression: str) -> dict:
     }
 
 
+def build_crontab(cron_expression: str, nowfun=None):
+    """The Celery crontab for a 5-field expression — the exact rules Beat applies.
+
+    Note Celery's semantics differ from classic cron: when both day-of-month and
+    day-of-week are restricted, a day must match BOTH (e.g. "0 9 1 * 5" fires only
+    on a Friday that is the 1st). Raises ValueError for malformed/out-of-range fields.
+    """
+    from celery.schedules import crontab
+
+    f = parse_cron_fields(cron_expression)
+    try:
+        return crontab(minute=f["minute"], hour=f["hour"], day_of_month=f["day_of_month"],
+                       month_of_year=f["month_of_year"], day_of_week=f["day_of_week"], nowfun=nowfun)
+    except ValueError:
+        raise
+    except Exception as exc:                  # e.g. ZeroDivisionError for "*/0"
+        raise ValueError(str(exc) or type(exc).__name__) from exc
+
+
+def next_fire_times(cron_expression: str, tz: str = "UTC", count: int = 3, after=None) -> list:
+    """The next `count` times Beat will fire `cron_expression` after `after` (default now)."""
+    from datetime import timedelta
+    from zoneinfo import ZoneInfo
+
+    from django.utils import timezone
+
+    t = (after or timezone.now()).astimezone(ZoneInfo(tz or "UTC"))
+    out = []
+    for _ in range(count):
+        clock = t
+        t = t + build_crontab(cron_expression, nowfun=lambda: clock).remaining_estimate(t)
+        out.append(t)
+        t = t + timedelta(seconds=1)          # step past this firing to find the next one
+    return out
+
+
 def make_periodic_task_name(schedule_trigger_id) -> str:
     """Return the deterministic Beat task name for a ScheduleTrigger."""
     return f"workflow-schedule:{schedule_trigger_id}"

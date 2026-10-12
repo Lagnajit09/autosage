@@ -14,12 +14,20 @@ _CRON_RE = re.compile(
 
 
 def _validate_cron(value: str) -> str:
-    """Reject anything that isn't a 5-field cron expression."""
+    """Reject anything that isn't a valid 5-field cron expression. Fields are parsed
+    with Celery's crontab (what Beat runs), so out-of-range values fail here rather
+    than after the schedule is saved."""
+    from triggers.utils import build_crontab
+
     if not _CRON_RE.match(value.strip()):
         raise serializers.ValidationError(
             "cron_expression must be a 5-field cron string: "
             "<minute> <hour> <day_of_month> <month_of_year> <day_of_week>"
         )
+    try:
+        build_crontab(value.strip())
+    except ValueError as exc:
+        raise serializers.ValidationError(f"Invalid cron expression: {exc}")
     return value.strip()
 
 

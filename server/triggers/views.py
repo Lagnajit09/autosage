@@ -1,5 +1,6 @@
 import logging
 
+from django.db import transaction
 from django.utils import timezone
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes, throttle_classes
@@ -22,9 +23,11 @@ from triggers.utils import (
     generate_secret,
     generate_trigger_token,
     hash_secret,
+    next_fire_times,
     secret_last4,
     sync_beat_task,
 )
+from execution_engine.models import WorkflowRun
 from workflows.models import Workflow
 
 logger = logging.getLogger(__name__)
@@ -201,8 +204,20 @@ def regenerate_http_trigger_secret(request, workflow_id, node_id):
 # ── Schedule trigger views ────────────────────────────────────────────────────
 
 def _schedule_payload(schedule: ScheduleTrigger) -> dict:
-    """Build the standard response dict for a ScheduleTrigger."""
+    """Build the standard response dict for a ScheduleTrigger.
+
+    ``next_runs`` are the next fire times computed with Beat's own crontab rules
+    (empty while disabled); ``last_run_status`` saves callers a run lookup.
+    """
+    next_runs = []
+    if schedule.is_active:
+        try:
+            next_runs = [t.isoformat() for t in next_fire_times(schedule.cron_expression, schedule.timezone)]
+        except ValueError:                    # a row saved before cron values were validated
+            next_runs = []
     return {
+        "next_runs": next_runs,
+        "last_run_status": schedule.last_run.status if schedule.last_run_id else None,
         "id": str(schedule.id),
         "node_id": schedule.node_id,
         "cron_expression": schedule.cron_expression,
@@ -260,27 +275,30 @@ def upsert_schedule_trigger(request, workflow_id):
                 from billing.enforcement import PlanLimitExceeded
                 raise PlanLimitExceeded('max_schedule_triggers', count, cap, get_plan(request.user))
 
-    schedule, created = ScheduleTrigger.objects.update_or_create(
-        workflow=workflow,
-        node_id=node_id,
-        defaults={
-            "user": request.user,
-            "cron_expression": cron_expression,
-            "is_active": True,
-        },
-    )
-
+    # Save + Beat sync together: a failed sync must not leave a schedule row that
+    # Beat will never fire.
     try:
-        sync_beat_task(schedule)
+        with transaction.atomic():
+            schedule, created = ScheduleTrigger.objects.update_or_create(
+                workflow=workflow,
+                node_id=node_id,
+                defaults={
+                    "user": request.user,
+                    "cron_expression": cron_expression,
+                    "is_active": True,
+                },
+            )
+            sync_beat_task(schedule)
     except Exception as exc:
         logger.error(
-            "upsert_schedule_trigger: failed to sync Beat task for schedule %s: %s",
-            schedule.id,
+            "upsert_schedule_trigger: failed to sync Beat task for workflow %s node %s: %s",
+            workflow.id,
+            node_id,
             exc,
         )
         return api_response(
             success=False,
-            message="Schedule record saved but Beat task sync failed.",
+            message="Couldn't register the schedule with the scheduler — nothing was saved.",
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
         )
 
@@ -339,4 +357,66 @@ def schedule_trigger_detail(request, workflow_id, node_id):
         success=True,
         message="Schedule trigger deleted.",
         status_code=status.HTTP_200_OK,
+    )
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+@throttle_classes([ExecutionBurstThrottle, ExecutionSustainedThrottle])
+def fire_schedule_trigger_now(request, workflow_id, node_id):
+    """POST /api/workflows/<workflow_id>/triggers/schedule/<node_id>/fire/
+
+    Fire a schedule now, through exactly the path Beat uses (trigger-node check,
+    overlap rule, no inputs, recorded as a scheduled run + last_run), so it can be
+    tested without waiting for its cron. Counts toward the monthly workflow-run
+    limit like a manual run — it must not become a way around it.
+    """
+    from triggers.tasks import dispatch_schedule
+
+    try:
+        workflow = Workflow.objects.get(id=workflow_id, user=request.user)
+    except Workflow.DoesNotExist:
+        return api_response(
+            success=False,
+            message="Workflow not found or access denied.",
+            status_code=status.HTTP_404_NOT_FOUND,
+        )
+    try:
+        schedule = ScheduleTrigger.objects.select_related("workflow", "workflow__user").get(
+            workflow=workflow, node_id=node_id
+        )
+    except ScheduleTrigger.DoesNotExist:
+        return api_response(
+            success=False,
+            message="Schedule trigger not found for this node.",
+            status_code=status.HTTP_404_NOT_FOUND,
+        )
+    if not schedule.is_active:
+        return api_response(
+            success=False,
+            message="This schedule is disabled — enable it first.",
+            status_code=status.HTTP_403_FORBIDDEN,
+        )
+
+    if not request.user.is_staff:
+        cap = get_limits(request.user).get("max_workflow_runs_per_month")
+        if cap is not None:
+            month_start = timezone.now().replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+            count = WorkflowRun.objects.filter(user=request.user, created_at__gte=month_start).count()
+            if count >= cap:
+                from billing.enforcement import PlanLimitExceeded
+                raise PlanLimitExceeded("max_workflow_runs_per_month", count, cap, get_plan(request.user))
+
+    run, reason = dispatch_schedule(schedule)
+    if run is None:
+        return api_response(
+            success=False,
+            message=reason,
+            status_code=status.HTTP_409_CONFLICT,
+        )
+    return api_response(
+        success=True,
+        message="Scheduled run queued now.",
+        data={"workflow_run_id": str(run.id), "status": run.status},
+        status_code=status.HTTP_202_ACCEPTED,
     )

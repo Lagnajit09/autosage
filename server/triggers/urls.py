@@ -29,4 +29,11 @@ urlpatterns = [
         views.schedule_trigger_detail,
         name="schedule-trigger-detail",
     ),
+
+    # POST /api/workflows/<workflow_id>/triggers/schedule/<node_id>/fire/
+    path(
+        "schedule/<str:node_id>/fire/",
+        views.fire_schedule_trigger_now,
+        name="schedule-trigger-fire",
+    ),
 ]
