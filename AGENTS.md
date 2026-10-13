@@ -185,7 +185,7 @@ Celery worker  pops execute_workflow
 
 ## 5. Triggers — All Roads Lead to `enqueue_workflow_run()`
 
-Autosage supports four trigger sources. **All four converge on a single helper, `execution_engine/helpers/run_builder.py::enqueue_workflow_run()`** — the only place that validates the DAG, validates bindings, masks secrets, persists `WorkflowRun` + `WorkflowNodeRun` rows, and dispatches the Celery task. When `trigger_source == "autobot"`, the helper additionally drops any password-typed inputs before passing them to the worker (Layer-3 backstop of the password safety guarantee).
+Autosage supports four trigger sources. **All four converge on a single helper, `execution_engine/helpers/run_builder.py::enqueue_workflow_run()`** — the only place that validates the DAG, validates bindings, enforces the monthly workflow-run quota, masks secrets, persists `WorkflowRun` + `WorkflowNodeRun` rows, and dispatches the Celery task. The quota (`max_workflow_runs_per_month`, all sources share one count) is checked atomically with the insert via `billing/enforcement.py::reserve_workflow_run` (locks the user's `Subscription` row so concurrent webhook/cron fires can't overshoot); over quota it raises `PlanLimitExceeded` (403). Don't re-check it in views — a view-level check is how webhook/cron runs once slipped past it. One-shot script runs use the sibling `reserve_script_execution`. When `trigger_source == "autobot"`, the helper additionally drops any password-typed inputs before passing them to the worker (Layer-3 backstop of the password safety guarantee).
 
 ### 5.1 Manual trigger (UI) and Autobot trigger
 - `POST /api/execution-engine/workflows/<id>/run/`

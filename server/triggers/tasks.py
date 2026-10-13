@@ -56,7 +56,20 @@ def fire_scheduled_workflow(self, schedule_trigger_id: str) -> None:  # type: ig
         )
         return
 
-    dispatch_schedule(schedule)
+    from billing.enforcement import PlanLimitExceeded
+
+    try:
+        dispatch_schedule(schedule)
+    except PlanLimitExceeded:
+        # Expected while the owner is over their monthly run quota: the skip is
+        # already recorded as the schedule's last_error, and Beat simply tries
+        # again on the next tick (and succeeds once the month rolls over or
+        # the plan is upgraded).
+        logger.info(
+            "fire_scheduled_workflow: schedule %s skipped — owner over monthly "
+            "workflow-run quota.",
+            schedule_trigger_id,
+        )
 
 
 def dispatch_schedule(schedule):
@@ -65,7 +78,12 @@ def dispatch_schedule(schedule):
 
     Returns ``(WorkflowRun, "")`` when a run was queued, else ``(None, reason)``; the
     reason is also recorded as the schedule's ``last_error``.
+
+    Raises ``PlanLimitExceeded`` (after recording it as ``last_error``) when the
+    owner is over their monthly workflow-run quota, so the "fire now" endpoint
+    can return the standard 403 upgrade response; Beat's task catches it.
     """
+    from billing.enforcement import PlanLimitExceeded
     from execution_engine.helpers.run_builder import RunBuildError, enqueue_workflow_run
     from execution_engine.models import WorkflowRun
 
@@ -119,6 +137,18 @@ def dispatch_schedule(schedule):
             exc.message,
         )
         return None, _record_error(schedule, exc.message)
+    except PlanLimitExceeded as exc:
+        # Must precede the catch-all below. Record a readable reason for the
+        # trigger UI, then re-raise for the caller to present.
+        detail = exc.detail if isinstance(exc.detail, dict) else {}
+        reason = (
+            f"Skipped: monthly workflow run limit reached "
+            f"({detail.get('current')}/{detail.get('limit')} this month)."
+        )
+        if detail.get("upgrade_required"):
+            reason += " Upgrade to Pro for more runs."
+        _record_error(schedule, reason)
+        raise
     except Exception as exc:  # noqa: BLE001
         logger.exception(
             "fire_scheduled_workflow: unexpected error for schedule %s",

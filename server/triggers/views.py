@@ -27,7 +27,6 @@ from triggers.utils import (
     secret_last4,
     sync_beat_task,
 )
-from execution_engine.models import WorkflowRun
 from workflows.models import Workflow
 
 logger = logging.getLogger(__name__)
@@ -398,15 +397,8 @@ def fire_schedule_trigger_now(request, workflow_id, node_id):
             status_code=status.HTTP_403_FORBIDDEN,
         )
 
-    if not request.user.is_staff:
-        cap = get_limits(request.user).get("max_workflow_runs_per_month")
-        if cap is not None:
-            month_start = timezone.now().replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-            count = WorkflowRun.objects.filter(user=request.user, created_at__gte=month_start).count()
-            if count >= cap:
-                from billing.enforcement import PlanLimitExceeded
-                raise PlanLimitExceeded("max_workflow_runs_per_month", count, cap, get_plan(request.user))
-
+    # The monthly run quota is enforced inside enqueue_workflow_run (via
+    # dispatch_schedule), which raises PlanLimitExceeded → 403 upgrade prompt.
     run, reason = dispatch_schedule(schedule)
     if run is None:
         return api_response(

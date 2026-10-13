@@ -16,7 +16,8 @@ from server.rate_limiters import (
     ExecutionSustainedThrottle,
     HttpTriggerThrottle,
 )
-from billing.limits import get_limits, get_plan
+from billing.enforcement import enforce_limit
+from billing.limits import workflow_runs_this_month
 from workflows.models import Workflow
 from execution_engine.models import (
     WorkflowRun,
@@ -51,17 +52,8 @@ logger = logging.getLogger(__name__)
 def trigger_workflow_run(request, workflow_id):
     logger.info(f"Triggering workflow run for ID: {workflow_id}")
 
-    if not request.user.is_staff:
-        from django.utils import timezone as tz
-        limits = get_limits(request.user)
-        cap = limits.get('max_workflow_runs_per_month')
-        if cap is not None:
-            month_start = tz.now().replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-            count = WorkflowRun.objects.filter(user=request.user, created_at__gte=month_start).count()
-            if count >= cap:
-                from billing.enforcement import PlanLimitExceeded
-                raise PlanLimitExceeded('max_workflow_runs_per_month', count, cap, get_plan(request.user))
-
+    # The monthly run quota is enforced inside enqueue_workflow_run (raises
+    # PlanLimitExceeded → 403), shared by every trigger source.
     try:
         workflow = Workflow.objects.get(id=workflow_id, user=request.user)
     except Workflow.DoesNotExist:
@@ -232,6 +224,11 @@ def create_workflow_run_intent(request, workflow_id):
             message="Run intents are only available on the autobot path.",
             status_code=status.HTTP_400_BAD_REQUEST,
         )
+
+    # Fail fast on the monthly run quota, before the user is asked to type
+    # secrets into the confirmation form for a run that would be refused. The
+    # authoritative (atomic) check still happens in enqueue_workflow_run.
+    enforce_limit(request.user, "max_workflow_runs_per_month", workflow_runs_this_month)
 
     inputs = dict(serializer.validated_data.get("inputs", {}) or {})
     send_email = serializer.validated_data.get("send_email", False)

@@ -31,11 +31,35 @@ from execution_engine.helpers.script_execution.utils import (
 )
 from execution_engine.helpers.script_execution.executor import stream_execution
 from execution_engine.helpers.params import resolve_script_inputs
-from billing.limits import get_limits, get_plan
+from billing.enforcement import PlanLimitExceeded, reserve_script_execution
 
 import httpx
 
 logger = logging.getLogger(__name__)
+
+
+def _create_execution_within_quota(user, **fields) -> ScriptExecution:
+    """Create a ScriptExecution only if the user has monthly quota left.
+
+    Shared by the streaming and fire-and-forget views so neither path can
+    bypass the cap. Check and insert are atomic (see ``reserve_quota``), so
+    parallel runs can't overshoot. Raises ``PlanLimitExceeded`` when over.
+    Sync (ORM) — async callers wrap it in ``sync_to_async``.
+    """
+    with reserve_script_execution(user):
+        return ScriptExecution.objects.create(user=user, **fields)
+
+
+def _plan_limit_json(exc: PlanLimitExceeded):
+    """Render PlanLimitExceeded for the raw async view (no DRF exception
+    handler there) in the same shape DRF views return: message + metadata."""
+    detail = exc.detail if isinstance(exc.detail, dict) else {}
+    return json_response(
+        False,
+        detail.get("detail") or "Plan limit reached. Upgrade to Pro for higher limits.",
+        errors=detail,
+        status_code=403,
+    )
 
 
 def _mask_stored_inputs(resolved: dict, secret_names: list) -> dict:
@@ -73,24 +97,6 @@ async def execute_script(request):
     if not await check_sustained(request, ExecutionSustainedThrottle):
         return json_response(False, "Rate limit exceeded.", status_code=429)
 
-    # ── Plan limit check ─────────────────────────────────────────────────
-    if not user.is_staff:
-        from django.utils import timezone as tz
-        limits = get_limits(user)
-        cap = limits.get('max_script_executions_per_month')
-        if cap is not None:
-            month_start = tz.now().replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-            count = await sync_to_async(
-                lambda: ScriptExecution.objects.filter(user=user, created_at__gte=month_start).count()
-            )()
-            if count >= cap:
-                return json_response(
-                    False,
-                    "You've reached your monthly script execution limit on the Free plan. Upgrade to Pro for 500 executions/month.",
-                    errors={'limit_key': 'max_script_executions_per_month', 'limit': cap, 'plan': get_plan(user), 'upgrade_required': True},
-                    status_code=403,
-                )
-
     # ── Parse & validate request body ────────────────────────────────────
     try:
         body = json.loads(request.body)
@@ -119,17 +125,20 @@ async def execute_script(request):
     # ── Resolve + type-coerce inputs against the script's param metadata ──
     resolved, secret_names, _ = resolve_script_inputs(inputs, script.parameters)
 
-    # ── Create execution record (persist inputs with secrets masked) ──────
-    create_execution = sync_to_async(ScriptExecution.objects.create)
-    execution = await create_execution(
-        script=script,
-        vault=vault,
-        server=server,
-        credential=credential,
-        user=user,
-        inputs=_mask_stored_inputs(resolved, secret_names),
-        status="pending",
-    )
+    # ── Create execution record — monthly quota checked atomically here ───
+    # (persisted inputs have secrets masked)
+    try:
+        execution = await sync_to_async(_create_execution_within_quota)(
+            user,
+            script=script,
+            vault=vault,
+            server=server,
+            credential=credential,
+            inputs=_mask_stored_inputs(resolved, secret_names),
+            status="pending",
+        )
+    except PlanLimitExceeded as exc:
+        return _plan_limit_json(exc)
 
     # ── Build payload for exec-worker (shared with run_script_async) ──────
     # Does synchronous GCS I/O (fetch + render) — run off the event loop.
@@ -204,12 +213,14 @@ def run_script_async_view(request):
 
     resolved, secret_names, _ = resolve_script_inputs(inputs, script.parameters)
 
-    execution = ScriptExecution.objects.create(
+    # Monthly quota (previously missing on this path) — raises
+    # PlanLimitExceeded → DRF 403 with upgrade info.
+    execution = _create_execution_within_quota(
+        request.user,
         script=script,
         vault=vault,
         server=server,
         credential=credential,
-        user=request.user,
         inputs=_mask_stored_inputs(resolved, secret_names),
         status="pending",
     )

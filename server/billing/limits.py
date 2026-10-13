@@ -10,8 +10,8 @@ PLAN_LIMITS = {
         'max_workflow_runs_per_month': 30,
         'max_autobot_admin_messages_per_day': 10,
         'max_autobot_threads': 10,
-        'max_http_triggers': 1,
-        'max_schedule_triggers': 1,
+        'max_http_triggers': 5,
+        'max_schedule_triggers': 5,
         'max_vault_entries': 5,
         'execution_mode': False,
     },
@@ -73,6 +73,25 @@ def get_limits(user) -> dict:
     return PLAN_LIMITS[get_plan(user)]
 
 
+def month_start(now=None):
+    """Start of the current calendar month (UTC) — the monthly quota window."""
+    now = now or timezone.now()
+    return now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+
+
+def workflow_runs_this_month(user) -> int:
+    """Workflow runs created this month, from every trigger source (manual,
+    autobot, HTTP webhook, schedule) — all count toward one monthly quota."""
+    from execution_engine.models import WorkflowRun
+    return WorkflowRun.objects.filter(user=user, created_at__gte=month_start()).count()
+
+
+def script_executions_this_month(user) -> int:
+    """One-shot script executions created this month (editor + async/Autobot)."""
+    from execution_engine.models import ScriptExecution
+    return ScriptExecution.objects.filter(user=user, created_at__gte=month_start()).count()
+
+
 def get_or_create_subscription(user):
     """Return the user's subscription, creating a free one if absent."""
     from billing.models import Subscription
@@ -85,25 +104,18 @@ def get_or_create_subscription(user):
 
 def get_usage(user) -> dict:
     """Compute current-period usage counts for the user."""
-    from django.utils import timezone
     from workflows.models import Workflow
     from scripts.models import Script
-    from execution_engine.models import ScriptExecution, WorkflowRun
     from autobot_api.models import Thread
     from triggers.models import HttpTrigger, ScheduleTrigger
     from vault.models import Vault, Credential, Server
 
-    now = timezone.now()
-    month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-
     workflow_count = Workflow.objects.filter(user=user).count()
     script_count = Script.objects.filter(owner=user).count()
-    script_exec_count = ScriptExecution.objects.filter(
-        user=user, created_at__gte=month_start
-    ).count()
-    workflow_run_count = WorkflowRun.objects.filter(
-        user=user, created_at__gte=month_start
-    ).count()
+    # Same counters the quota enforcement uses, so the Billing page can never
+    # disagree with what actually gets blocked.
+    script_exec_count = script_executions_this_month(user)
+    workflow_run_count = workflow_runs_this_month(user)
     thread_count = Thread.objects.filter(user=user, is_archived=False).count()
     http_trigger_count = HttpTrigger.objects.filter(
         workflow__user=user, is_active=True

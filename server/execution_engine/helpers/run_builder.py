@@ -1,10 +1,14 @@
 """Builds and enqueues a WorkflowRun, decoupled from the HTTP layer.
 
-Shared by the manual trigger view (``trigger_workflow_run``) and the public
-HTTP trigger view (``trigger_workflow_via_http``). On validation failure the
-helper raises :class:`RunBuildError`; the caller maps the error to an HTTP
-response (the messages here are returned verbatim to clients to preserve
-existing API contracts).
+The single entry point for every trigger source — manual, autobot (run,
+rerun, run-intent fulfill), public HTTP webhook and cron schedule. On
+validation failure the helper raises :class:`RunBuildError`; the caller maps
+the error to an HTTP response (the messages here are returned verbatim to
+clients to preserve existing API contracts).
+
+The monthly workflow-run quota is enforced HERE, not in the views, so no
+trigger path can bypass it; over quota it raises
+:class:`billing.enforcement.PlanLimitExceeded` (a DRF 403 with upgrade info).
 """
 from __future__ import annotations
 
@@ -21,6 +25,7 @@ from execution_engine.helpers.graph import (
 )
 from django.db.models import Q
 
+from billing.enforcement import reserve_workflow_run
 from execution_engine.models import WorkflowNodeRun, WorkflowRun
 from execution_engine.tasks import execute_workflow
 from scripts.models import Script
@@ -201,16 +206,21 @@ def enqueue_workflow_run(
             smtp_cfg.pop("password", None)
             smtp_cfg.pop("username", None)
 
-    workflow_run = WorkflowRun.objects.create(
-        workflow=workflow,
-        user=user,
-        status="queued",
-        inputs=masked_inputs,
-        send_email=send_email,
-        notification_email=user_email if send_email else "",
-        trigger_source=trigger_source,
-        trigger_node_id=trigger_node_id,
-    )
+    # Monthly quota, enforced for every trigger source (manual, autobot, HTTP
+    # webhook, schedule). Checked after validation so a broken workflow
+    # doesn't consume quota, and atomically with the insert so concurrent
+    # triggers (e.g. a webhook fired in parallel) can't overshoot the cap.
+    with reserve_workflow_run(user):
+        workflow_run = WorkflowRun.objects.create(
+            workflow=workflow,
+            user=user,
+            status="queued",
+            inputs=masked_inputs,
+            send_email=send_email,
+            notification_email=user_email if send_email else "",
+            trigger_source=trigger_source,
+            trigger_node_id=trigger_node_id,
+        )
 
     execution_order = 0
     for node_id in topo_order:
