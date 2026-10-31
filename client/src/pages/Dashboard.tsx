@@ -9,8 +9,13 @@ import { Button } from "@/components/ui/button";
 import {
   ProBanner,
   AutobotBanner,
+  SageCodeBanner,
   AutobotTodayCard,
+  ThinBarSkeleton,
+  PlanBanner,
 } from "@/components/Dashboard/Banners";
+import { useSubscription } from "@/hooks/use-subscription";
+import { DashboardSkeleton } from "@/components/Dashboard/DashboardSkeleton";
 import { StatsOverview } from "@/components/Dashboard/StatsOverview";
 import {
   ExecutionRow,
@@ -24,6 +29,10 @@ const Dashboard = () => {
   const { getToken, isSignedIn } = useAuth();
   const { user } = useUser();
   const navigate = useNavigate();
+  // The plan bar: "Upgrade to Pro" on free plans, the user's own plan otherwise.
+  // The rest of the layout is the same for every plan.
+  const { sub, loading: subLoading } = useSubscription();
+  const isFree = !!sub && sub.plan === "free" && !sub.is_admin;
 
   const [welcomeMessage, setWelcomeMessage] = useState("");
   const [showFirstVisitWelcome, setShowFirstVisitWelcome] = useState(false);
@@ -242,14 +251,7 @@ const Dashboard = () => {
 
           <main className="flex-1 overflow-y-auto p-6">
             {loading ? (
-              <div className="flex h-full w-full items-center justify-center min-h-[400px]">
-                <div className="flex flex-col items-center gap-3">
-                  <Loader2 className="w-8 h-8 animate-spin text-blue-600 dark:text-blue-400" />
-                  <span className="text-sm font-semibold text-gray-700 dark:text-gray-300 animate-pulse">
-                    Loading Dashboard...
-                  </span>
-                </div>
-              </div>
+              <DashboardSkeleton />
             ) : (
               <div className="max-w-7xl mx-auto">
                 {/* Header */}
@@ -262,152 +264,167 @@ const Dashboard = () => {
                   </p>
                 </div>
 
-                <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
-                  {/* Main Content Area */}
-                  {recentWorkflows.length === 0 &&
-                  recentScripts.length === 0 &&
-                  recentExecutions.length === 0 ? (
-                    <div className="lg:col-span-3 flex flex-col items-center justify-center min-h-[400px] text-center space-y-6 bg-white dark:bg-gray-800/40 rounded-xl border border-gray-200 dark:border-gray-700/50 border-dashed p-12">
-                      <div className="space-y-4 flex flex-col items-center">
-                        <img
-                          src="/logo.png"
-                          alt="AutoSage Logo"
-                          className="w-auto h-12 object-contain"
-                        />
-                        <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
-                          Welcome to AutoSage
-                        </h2>
-                        <p className="text-gray-500 dark:text-gray-400 max-w-md mx-auto">
-                          It looks like you haven't created anything yet. Start
-                          your automation journey by building your first
-                          workflow.
-                        </p>
-                      </div>
-                      <div className="flex flex-col sm:flex-row gap-3">
-                        <Button
-                          size="lg"
-                          className="bg-blue-600 hover:bg-blue-700 text-white gap-2"
-                          onClick={() => navigate("/workflow")}
-                        >
-                          <Plus className="w-5 h-5" />
-                          Build Your First Workflow
-                        </Button>
-                        <Button
-                          size="lg"
-                          variant="outline"
-                          className="border-2 gap-2"
-                          asChild
-                        >
-                          <a
-                            href={DOCS_BASE_URL}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                          >
-                            <BookText className="w-5 h-5" />
-                            Read Docs
-                          </a>
-                        </Button>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="lg:col-span-3 space-y-8">
-                      {/* Stats Overview */}
-                      <StatsOverview stats={stats} />
-
-                      {/* Recent Activity Grid */}
-                      {(recentWorkflows.length > 0 ||
-                        recentScripts.length > 0) && (
-                        <div
-                          className={`grid grid-cols-1 ${
-                            recentWorkflows.length > 0 &&
-                            recentScripts.length > 0
-                              ? "md:grid-cols-2"
-                              : ""
-                          } gap-6`}
-                        >
-                          {/* Recent Workflows */}
-                          {recentWorkflows.length > 0 && (
-                            <div className="space-y-4">
-                              <div className="flex items-center justify-between">
-                                <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
-                                  Recent Workflows
-                                </h2>
-
-                                <Button
-                                  variant="link"
-                                  className="text-blue-600 dark:text-blue-400 p-0 h-auto"
-                                  onClick={() => navigate("/workflows")}
-                                >
-                                  View All
-                                </Button>
-                              </div>
-                              <div className="space-y-3">
-                                {recentWorkflows.map((item, i) => (
-                                  <RecentItemCard key={i} item={item} />
-                                ))}
-                              </div>
-                            </div>
-                          )}
-
-                          {/* Recent Scripts */}
-                          {recentScripts.length > 0 && (
-                            <div className="space-y-4">
-                              <div className="flex items-center justify-between">
-                                <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
-                                  Recent Scripts
-                                </h2>
-
-                                <Button
-                                  variant="link"
-                                  className="text-blue-600 dark:text-blue-400 p-0 h-auto"
-                                  onClick={() => navigate("/script-editor/")}
-                                >
-                                  View All
-                                </Button>
-                              </div>
-                              <div className="space-y-3">
-                                {recentScripts.map((item, i) => (
-                                  <RecentItemCard key={i} item={item} />
-                                ))}
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      )}
-
-                      {/* Recent Executions */}
-                      {recentExecutions.length > 0 && (
-                        <div className="bg-white dark:bg-gray-800/40 rounded-xl border border-gray-200 dark:border-gray-700/50 p-6">
-                          <div className="flex items-center justify-between mb-4">
-                            <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
-                              Recent Executions
-                            </h2>
-
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => navigate("/execution-logs")}
-                            >
-                              View Logs
-                            </Button>
-                          </div>
-
-                          <div className="space-y-1">
-                            {recentExecutions.map((exec, i) => (
-                              <ExecutionRow key={i} execution={exec} />
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  {/* Right Sidebar / Banners */}
-                  <div className="lg:col-span-1 space-y-6">
+                {/* From xl the banners get a 20rem right column. Below that there
+                    isn't room for one, so the same banners move above the content
+                    (order-first) as two cards with the plan bar beneath. */}
+                <div className="grid grid-cols-1 gap-8 xl:grid-cols-[minmax(0,1fr)_20rem]">
+                  {/* Main column: the Autobot usage strip, then the content. */}
+                  <div className="min-w-0 space-y-8">
                     <AutobotTodayCard />
-                    <ProBanner />
-                    <AutobotBanner />
+                    {recentWorkflows.length === 0 &&
+                    recentScripts.length === 0 &&
+                    recentExecutions.length === 0 ? (
+                      <div className="flex flex-col items-center justify-center min-h-[400px] text-center space-y-6 bg-white dark:bg-gray-800/40 rounded-xl border border-gray-200 dark:border-gray-700/50 border-dashed p-12">
+                        <div className="space-y-4 flex flex-col items-center">
+                          <img
+                            src="/logo.png"
+                            alt="AutoSage Logo"
+                            className="w-auto h-12 object-contain"
+                          />
+                          <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
+                            Welcome to AutoSage
+                          </h2>
+                          <p className="text-gray-500 dark:text-gray-400 max-w-md mx-auto">
+                            It looks like you haven't created anything yet. Start
+                            your automation journey by building your first
+                            workflow.
+                          </p>
+                        </div>
+                        <div className="flex flex-col sm:flex-row gap-3">
+                          <Button
+                            size="lg"
+                            className="bg-blue-600 hover:bg-blue-700 text-white gap-2"
+                            onClick={() => navigate("/workflow")}
+                          >
+                            <Plus className="w-5 h-5" />
+                            Build Your First Workflow
+                          </Button>
+                          <Button
+                            size="lg"
+                            variant="outline"
+                            className="border-2 gap-2"
+                            asChild
+                          >
+                            <a
+                              href={DOCS_BASE_URL}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                            >
+                              <BookText className="w-5 h-5" />
+                              Read Docs
+                            </a>
+                          </Button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="space-y-8">
+                        {/* Stats Overview */}
+                        <StatsOverview stats={stats} />
+
+                        {/* Recent Activity Grid */}
+                        {(recentWorkflows.length > 0 ||
+                          recentScripts.length > 0) && (
+                          <div
+                            className={`grid grid-cols-1 ${
+                              recentWorkflows.length > 0 &&
+                              recentScripts.length > 0
+                                ? "md:grid-cols-2"
+                                : ""
+                            } gap-6`}
+                          >
+                            {/* Recent Workflows */}
+                            {recentWorkflows.length > 0 && (
+                              <div className="space-y-4">
+                                <div className="flex items-center justify-between">
+                                  <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
+                                    Recent Workflows
+                                  </h2>
+
+                                  <Button
+                                    variant="link"
+                                    className="text-blue-600 dark:text-blue-400 p-0 h-auto"
+                                    onClick={() => navigate("/workflows")}
+                                  >
+                                    View All
+                                  </Button>
+                                </div>
+                                <div className="space-y-3">
+                                  {recentWorkflows.map((item, i) => (
+                                    <RecentItemCard key={i} item={item} />
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Recent Scripts */}
+                            {recentScripts.length > 0 && (
+                              <div className="space-y-4">
+                                <div className="flex items-center justify-between">
+                                  <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
+                                    Recent Scripts
+                                  </h2>
+
+                                  <Button
+                                    variant="link"
+                                    className="text-blue-600 dark:text-blue-400 p-0 h-auto"
+                                    onClick={() => navigate("/script-editor/")}
+                                  >
+                                    View All
+                                  </Button>
+                                </div>
+                                <div className="space-y-3">
+                                  {recentScripts.map((item, i) => (
+                                    <RecentItemCard key={i} item={item} />
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        )}
+
+                        {/* Recent Executions */}
+                        {recentExecutions.length > 0 && (
+                          <div className="bg-white dark:bg-gray-800/40 rounded-xl border border-gray-200 dark:border-gray-700/50 p-6">
+                            <div className="flex items-center justify-between mb-4">
+                              <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
+                                Recent Executions
+                              </h2>
+
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => navigate("/execution-logs")}
+                              >
+                                View Logs
+                              </Button>
+                            </div>
+
+                            <div className="space-y-1">
+                              {recentExecutions.map((exec, i) => (
+                                <ExecutionRow key={i} execution={exec} />
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
+
+
+                  {/* Banners: right column from xl, above the content below it. */}
+                  <aside className="order-first grid content-start gap-4 md:grid-cols-2 xl:order-none xl:col-start-2 xl:row-start-1 xl:grid-cols-1">
+                    <SageCodeBanner />
+                    <AutobotBanner />
+                    <div className="md:col-span-2 xl:col-span-1">
+                      {subLoading ? (
+                        <ThinBarSkeleton />
+                      ) : isFree ? (
+                        <ProBanner />
+                      ) : (
+                        <PlanBanner sub={sub} />
+                      )}
+                    </div>
+                  </aside>
                 </div>
               </div>
             )}

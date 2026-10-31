@@ -6,6 +6,9 @@ export const AI_API_BASE_URL =
   import.meta.env.VITE_AI_API_URL || "http://localhost:3001";
 export const DOCS_BASE_URL =
   import.meta.env.VITE_DOCS_URL || "http://localhost:3000";
+// SageCode (the `sagex` CLI) website. A public site, so production is the default.
+export const SAGECODE_URL =
+  import.meta.env.VITE_SAGECODE_URL || "https://sagecode.web.app";
 
 export const apiRequest = async (
   endpoint: string,

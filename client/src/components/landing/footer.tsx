@@ -7,7 +7,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { Link } from "react-router-dom";
-import { DOCS_BASE_URL } from "@/lib/api-client";
+import { DOCS_BASE_URL, SAGECODE_URL } from "@/lib/api-client";
 import { cn } from "@/lib/utils";
 
 const SUPPORT_EMAIL = "autosagex@gmail.com";
@@ -29,6 +29,7 @@ const SECTIONS: { title: string; links: FooterLink[] }[] = [
     links: [
       { label: "Home", to: "/" },
       { label: "Plans & Pricing", to: "/#pricing" },
+      { label: "SageCode CLI", href: SAGECODE_URL },
       { label: "Get Started", to: "/signup" },
       { label: "Sign In", to: "/signin" },
     ],

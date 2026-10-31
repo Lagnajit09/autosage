@@ -43,9 +43,9 @@ export const RecentItemCard = ({ item }: { item: RecentItemProps }) => {
       className="flex items-center justify-between p-4 bg-white dark:bg-gray-800/40 rounded-lg border border-gray-200 dark:border-gray-700/50 hover:border-blue-500/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 transition-colors cursor-pointer group"
     >
       <div className="w-full flex items-center justify-between gap-3">
-        <div className="flex items-center gap-2">
+        <div className="flex min-w-0 items-center gap-2">
           <div
-            className={`p-2 rounded-md ${item.type === "workflow" ? "bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400" : "bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400"}`}
+            className={`flex-shrink-0 p-2 rounded-md ${item.type === "workflow" ? "bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400" : "bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400"}`}
           >
             {item.type === "workflow" ? (
               <Zap size={18} />
@@ -53,8 +53,8 @@ export const RecentItemCard = ({ item }: { item: RecentItemProps }) => {
               <FileText size={18} />
             )}
           </div>
-          <div>
-            <h4 className="font-medium text-gray-900 dark:text-gray-100 group-hover:text-blue-500 transition-colors">
+          <div className="min-w-0">
+            <h4 className="truncate font-medium text-gray-900 dark:text-gray-100 group-hover:text-blue-500 transition-colors">
               {item.title.length > 28
                 ? item.title.slice(0, 28) + "..."
                 : item.title}
@@ -65,8 +65,8 @@ export const RecentItemCard = ({ item }: { item: RecentItemProps }) => {
           </div>
         </div>
         {item.total_nodes && (
-          <div>
-            <p className="text-xs text-purple-600 dark:text-purple-400 border border-purple-600 dark:border-purple-400 rounded-full px-2 py-1">
+          <div className="flex-shrink-0">
+            <p className="whitespace-nowrap text-xs text-purple-600 dark:text-purple-400 border border-purple-600 dark:border-purple-400 rounded-full px-2 py-1">
               {item.total_nodes} nodes
             </p>
           </div>

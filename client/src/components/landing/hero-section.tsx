@@ -1,10 +1,11 @@
 "use client";
 
 import { motion } from "motion/react";
+import { ArrowRight } from "lucide-react";
 import { HoverBorderGradient } from "../ui/hover-border-gradient";
 import { cn } from "@/lib/utils";
 import CircularText from "./CircularText";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { Button } from "../ui/button";
 import { useTheme } from "@/contexts/theme/theme-context";
 
@@ -35,6 +36,20 @@ export default function HeroSectionOne() {
         <div className="absolute mx-auto h-px w-40 bg-gradient-to-r from-transparent via-blue-500 to-transparent" />
       </div>
       <div className="px-4 py-10 md:py-20 mt-10 md:mt-20">
+        {/* Announces SageCode; jumps to its section further down the page. */}
+        <motion.a
+          href="#sagecode"
+          initial={{ opacity: 0, y: -6 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.3 }}
+          className="relative z-10 mx-auto mb-6 flex w-fit max-w-full items-center gap-2 rounded-full border border-neutral-200 bg-white/80 px-2 py-1 pr-3 text-xs font-medium text-neutral-700 backdrop-blur transition-colors hover:border-purple-400 dark:border-neutral-800 dark:bg-neutral-900/80 dark:text-neutral-300"
+        >
+          <span className="rounded-full bg-purple-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-purple-700 dark:bg-purple-500/15 dark:text-purple-300">
+            New
+          </span>
+          <span className="truncate">SageCode: Autosage in your terminal</span>
+          <ArrowRight className="h-3.5 w-3.5 flex-shrink-0" />
+        </motion.a>
         <h1 className="relative z-10 mx-auto max-w-4xl text-center text-2xl font-bold text-slate-700 md:text-4xl lg:text-7xl dark:text-slate-300">
           {"Visualize. Automate. Execute.".split(" ").map((word, index) => (
             <motion.span
@@ -81,12 +96,20 @@ export default function HeroSectionOne() {
           }}
           className="relative z-10 mt-8 flex flex-wrap items-center justify-center gap-4"
         >
-          <button className="w-60 transform rounded-lg bg-black px-6 py-2 font-medium text-white transition-all duration-300 hover:-translate-y-0.5 hover:bg-gray-800 dark:bg-white dark:text-black dark:hover:bg-gray-200">
+          {/* The landing is signed-out only (PublicRoute), so "Explore" starts
+              the sign-up; the contact form lives on the FAQ page. */}
+          <Link
+            to="/signup"
+            className="inline-flex w-60 transform justify-center rounded-lg bg-black px-6 py-2 font-medium text-white transition-all duration-300 hover:-translate-y-0.5 hover:bg-gray-800 dark:bg-white dark:text-black dark:hover:bg-gray-200"
+          >
             Explore Now
-          </button>
-          <button className="w-60 transform rounded-lg border border-gray-300 bg-white px-6 py-2 font-medium text-black transition-all duration-300 hover:-translate-y-0.5 hover:bg-gray-100 dark:border-gray-700 dark:bg-black dark:text-white dark:hover:bg-gray-900">
+          </Link>
+          <Link
+            to="/contact"
+            className="inline-flex w-60 transform justify-center rounded-lg border border-gray-300 bg-white px-6 py-2 font-medium text-black transition-all duration-300 hover:-translate-y-0.5 hover:bg-gray-100 dark:border-gray-700 dark:bg-black dark:text-white dark:hover:bg-gray-900"
+          >
             Contact Support
-          </button>
+          </Link>
         </motion.div>
         <div className="absolute right-4 top-auto">
           <CircularText
