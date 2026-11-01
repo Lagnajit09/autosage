@@ -34,12 +34,12 @@ export const UserInfo = ({
 
   return (
     <section className="space-y-4">
-      <div className="flex items-center gap-2 mb-4">
+      {/* <div className="flex items-center gap-2 mb-4">
         <User className="w-5 h-5 text-purple-600 dark:text-purple-400" />
         <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
           User Information
         </h2>
-      </div>
+      </div> */}
       <Card className="bg-white dark:bg-gradient-to-br dark:from-gray-900/95 dark:to-gray-950 border-gray-200 dark:border-gray-800 shadow-sm">
         <CardContent className="p-6">
           {isLoading ? (

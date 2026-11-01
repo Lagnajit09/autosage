@@ -5,7 +5,9 @@ import { Crown, BarChart3, ArrowRight, ArrowUpRight } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useAuth } from "@clerk/clerk-react";
 import { useNavigate } from "react-router-dom";
+import { formatDistanceToNowStrict } from "date-fns";
 import { type AutobotDashboardData, getDashboard } from "@/lib/api/autobot";
+import { useCliSessions } from "@/hooks/use-cli-sessions";
 import type { Subscription } from "@/lib/api/billing";
 import { SAGECODE_URL } from "@/lib/api-client";
 import { cn } from "@/lib/utils";
@@ -96,40 +98,92 @@ export const AutobotBanner = ({ className }: BannerProps) => {
   );
 };
 
-// SageCode: the `sagex` CLI. Dark in both themes (it's a terminal product) with
-// Autosage purple; the action opens the SageCode site in a new tab.
-export const SageCodeBanner = ({ className }: BannerProps) => (
-  <Card className={cn("flex flex-col bg-gray-900 dark:bg-black border-gray-800 relative overflow-hidden group", className)}>
-    <div className="absolute inset-0 bg-grid-white/[0.02] bg-[size:20px_20px]" />
-    <div className="absolute -right-10 -bottom-10 w-40 h-40 bg-purple-500/20 rounded-full blur-3xl group-hover:bg-purple-500/30 transition-all duration-500" />
+const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
 
-    <CardHeader className="pb-3 relative">
-      <CardTitle className="flex items-center gap-2 text-base text-white min-w-0">
-        <img src="/sagecode-mark-dark.svg" alt="" className="h-[18px] w-auto flex-shrink-0" />
-        <span className="truncate">
-          Sage<span className="text-[#d4b0eb]">Code</span>
-        </span>
-        <span className="ml-auto flex-shrink-0 rounded border border-purple-400/40 px-1.5 py-0.5 font-mono text-[10px] font-semibold leading-none text-purple-200">
-          NEW
-        </span>
-      </CardTitle>
-      <CardDescription className="text-gray-400">
-        Autosage in your terminal: run workflows, webhooks and schedules from your shell.
-      </CardDescription>
-    </CardHeader>
-    <CardContent className="mt-auto relative space-y-3">
-      <code className="block truncate rounded-md border border-gray-700/60 bg-gray-800/60 px-2.5 py-1.5 font-mono text-xs text-gray-300">
-        <span className="text-[#d77757] select-none">$ </span>uv tool install sagex-cli
-      </code>
-      <Button asChild className="w-full bg-[#7429a7] hover:bg-[#8a3fd6] text-white gap-1.5">
-        <a href={SAGECODE_URL} target="_blank" rel="noopener noreferrer">
-          Get SageCode
-          <ArrowUpRight className="w-4 h-4" />
-        </a>
-      </Button>
-    </CardContent>
-  </Card>
-);
+// SageCode: the `sagex` CLI. Dark in both themes (it's a terminal product) with
+// Autosage purple. Until the user signs in from the CLI it's an install prompt
+// (opening the SageCode site); after that it shows where SageCode is signed in
+// and links to the devices list on the Profile page.
+export const SageCodeBanner = ({ className }: BannerProps) => {
+  const navigate = useNavigate();
+  const { data, loading } = useCliSessions();
+  const sessions = data?.sessions ?? [];
+  const connected = sessions.length > 0;
+
+  const tokens = sessions.filter((s) => s.kind === "token").length;
+  const devices = sessions.length - tokens;
+  const where = [devices && plural(devices, "device"), tokens && plural(tokens, "token")]
+    .filter(Boolean)
+    .join(" · ");
+  const latest = sessions[0]; // the server lists the most recently active first
+  const latestActivity = latest
+    ? formatDistanceToNowStrict(new Date(latest.last_used_at ?? latest.created_at), { addSuffix: true })
+    : "";
+
+  return (
+    <Card className={cn("flex flex-col bg-gray-900 dark:bg-black border-gray-800 relative overflow-hidden group", className)}>
+      <div className="absolute inset-0 bg-grid-white/[0.02] bg-[size:20px_20px]" />
+      <div className="absolute -right-10 -bottom-10 w-40 h-40 bg-purple-500/20 rounded-full blur-3xl group-hover:bg-purple-500/30 transition-all duration-500" />
+
+      <CardHeader className="pb-3 relative">
+        <CardTitle className="flex items-center gap-2 text-base text-white min-w-0">
+          <img src="/sagecode-mark-dark.svg" alt="" className="h-[18px] w-auto flex-shrink-0" />
+          <span className="truncate">
+            Sage<span className="text-[#d4b0eb]">Code</span>
+          </span>
+          {connected ? (
+            <span className="ml-auto flex flex-shrink-0 items-center gap-1.5 text-[11px] font-medium text-emerald-300">
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+              Connected
+            </span>
+          ) : (
+            <span className="ml-auto flex-shrink-0 rounded border border-purple-400/40 px-1.5 py-0.5 font-mono text-[10px] font-semibold leading-none text-purple-200">
+              NEW
+            </span>
+          )}
+        </CardTitle>
+        <CardDescription className="text-gray-400">
+          Autosage in your terminal: run workflows, webhooks and schedules from your shell.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="mt-auto relative space-y-3">
+        {loading ? (
+          // Same footprint as either state, so the card doesn't jump when sessions load.
+          <>
+            <div className="h-[30px] animate-pulse rounded-md bg-gray-800/60" />
+            <div className="h-9 animate-pulse rounded-md bg-gray-800/60" />
+          </>
+        ) : connected ? (
+          <>
+            <p className="truncate rounded-md border border-gray-700/60 bg-gray-800/60 px-2.5 py-1.5 text-xs text-gray-300">
+              <span className="font-medium text-white">{where}</span>
+              <span className="text-gray-400"> · active {latestActivity}</span>
+            </p>
+            <Button
+              className="w-full bg-[#7429a7] hover:bg-[#8a3fd6] text-white gap-1.5"
+              onClick={() => navigate("/profile#sagecode")}
+            >
+              Manage devices
+              <ArrowRight className="w-4 h-4" />
+            </Button>
+          </>
+        ) : (
+          <>
+            <code className="block truncate rounded-md border border-gray-700/60 bg-gray-800/60 px-2.5 py-1.5 font-mono text-xs text-gray-300">
+              <span className="text-[#d77757] select-none">$ </span>uv tool install sagex-cli
+            </code>
+            <Button asChild className="w-full bg-[#7429a7] hover:bg-[#8a3fd6] text-white gap-1.5">
+              <a href={SAGECODE_URL} target="_blank" rel="noopener noreferrer">
+                Get SageCode
+                <ArrowUpRight className="w-4 h-4" />
+              </a>
+            </Button>
+          </>
+        )}
+      </CardContent>
+    </Card>
+  );
+};
 
 /** A card-shaped placeholder for a banner (used by DashboardSkeleton). */
 export const BannerSkeleton = ({ className }: BannerProps) => (

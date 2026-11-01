@@ -6,4 +6,5 @@ export { PlanSubscription } from "./PlanSubscription";
 export { QuickLinks } from "./QuickLinks";
 export { EditProfileModal } from "./EditProfileModal";
 export { AutobotInsights } from "./AutobotInsights";
+export { SageCodeSessions } from "./SageCodeSessions";
 export { DangerZone } from "./DangerZone";

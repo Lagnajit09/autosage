@@ -40,6 +40,7 @@ import LimitExceed from "./pages/LimitExceed";
 import ExecutionLogs from "./pages/ExecutionLogs";
 import AccountReactivationRequest from "./pages/AccountReactivationRequest";
 import ReportBug from "./pages/ReportBug";
+import CliAuth from "./pages/CliAuth";
 import FaqContact from "./pages/FaqContact";
 import SignOut from "./pages/SignOut";
 import Terms from "./pages/Terms";
@@ -153,6 +154,8 @@ const App = () => {
                       element={<AccountReactivationRequest />}
                     />
                     <Route path="/report-bug" element={<ReportBug />} />
+                    {/* Approve a `sagex auth login` (SageCode CLI sign-in) */}
+                    <Route path="/cli-auth" element={<CliAuth />} />
                   </Route>
 
                   {/* Public Routes - redirect to dashboard if authenticated */}

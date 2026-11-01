@@ -103,6 +103,7 @@ export const ROUTE_META: RouteMeta[] = [
     noIndex: true,
   },
   { pattern: "/report-bug", title: "Report a Bug", noIndex: true },
+  { pattern: "/cli-auth", title: "Sign in to SageCode", noIndex: true },
 
   // ---- Error states --------------------------------------------------------
   { pattern: "/server-error", title: "Server Error", noIndex: true },

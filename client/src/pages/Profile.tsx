@@ -4,7 +4,10 @@ import LeftNav, { NavItems } from "@/components/LeftNav";
 import { SidebarProvider } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
-import { Menu } from "lucide-react";
+import { Activity, CreditCard, Menu } from "lucide-react";
+import { useLocation, useNavigate } from "react-router-dom";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { AutobotIcon } from "@/components/AutobotIcon";
 import {
   Sheet,
   SheetContent,
@@ -19,6 +22,7 @@ import {
   PlanSubscription,
   QuickLinks,
   AutobotInsights,
+  SageCodeSessions,
   DangerZone,
 } from "@/components/profile";
 import { getDashboardStats, getUserProfile } from "@/lib/api/user";
@@ -32,9 +36,50 @@ import type {
 } from "@/lib/api/autobot";
 import type { Subscription } from "@/lib/api/billing";
 
+const TABS = [
+  {
+    value: "activity",
+    label: "Usage & Activity",
+    icon: <Activity className="h-4 w-4" />,
+  },
+  { value: "autobot", label: "Autobot", icon: <AutobotIcon size={16} /> },
+  {
+    value: "sagecode",
+    label: "SageCode",
+    icon: (
+      <>
+        <img
+          src="/sagecode-mark-light.svg"
+          alt=""
+          className="h-3.5 w-auto dark:hidden"
+        />
+        <img
+          src="/sagecode-mark-dark.svg"
+          alt=""
+          className="hidden h-3.5 w-auto dark:block"
+        />
+      </>
+    ),
+  },
+  {
+    value: "plan",
+    label: "Plans & Subscription",
+    icon: <CreditCard className="h-4 w-4" />,
+  },
+];
+const DEFAULT_TAB = "activity";
+
 const Profile = () => {
   const { user, isLoaded: clerkLoaded } = useUser();
   const { getToken } = useAuth();
+  const location = useLocation();
+  const navigate = useNavigate();
+
+  // The open tab is the URL hash (#autobot, #sagecode, #plan); none = the first.
+  const hashTab = location.hash.slice(1);
+  const tab = TABS.some((t) => t.value === hashTab) ? hashTab : DEFAULT_TAB;
+  const selectTab = (value: string) =>
+    navigate({ hash: value === DEFAULT_TAB ? "" : value }, { replace: true });
 
   const [dashboard, setDashboard] = useState<DashboardData | null>(null);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
@@ -52,14 +97,15 @@ const Profile = () => {
     if (!token) return;
     setIsLoading(true);
     try {
-      const [dash, profile, abSettings, abDash, configs, sub] = await Promise.all([
-        getDashboardStats(token),
-        getUserProfile(token),
-        getSettings(token),
-        getDashboard(token),
-        listLLMConfigs(token),
-        getSubscription(token),
-      ]);
+      const [dash, profile, abSettings, abDash, configs, sub] =
+        await Promise.all([
+          getDashboardStats(token),
+          getUserProfile(token),
+          getSettings(token),
+          getDashboard(token),
+          listLLMConfigs(token),
+          getSubscription(token),
+        ]);
       setDashboard(dash);
       setUserProfile(profile);
       setAutobotSettings(abSettings);
@@ -159,7 +205,7 @@ const Profile = () => {
 
               <Separator className="bg-gray-200 dark:bg-gray-800" />
 
-              {/* User Information */}
+              {/* Account: the same whichever tab is open */}
               <UserInfo
                 name={user?.fullName ?? user?.firstName ?? ""}
                 email={user?.primaryEmailAddress?.emailAddress ?? ""}
@@ -178,39 +224,64 @@ const Profile = () => {
                 onProfileUpdated={handleProfileUpdate}
               />
 
-              {/* Statistics Overview */}
-              <StatsOverview
-                stats={dashboard?.stats ?? null}
-                isLoading={isLoading}
-              />
+              <Separator className="bg-gray-200 dark:bg-gray-800" />
 
-              {/* Activity & Usage Section */}
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <RecentActivity
-                  recentExecutions={dashboard?.recentExecutions ?? []}
-                  isLoading={isLoading}
-                />
-                <MostUsedWorkflows
-                  workflows={dashboard?.topWorkflows ?? []}
-                  isLoading={isLoading}
-                />
-              </div>
+              {/* Sections, one tab each. The tab lives in the URL hash so links
+                  like /profile#sagecode open on it. */}
+              <Tabs value={tab} onValueChange={selectTab} className="space-y-6">
+                <TabsList className="grid h-auto w-full grid-cols-2 gap-1 border border-gray-200 bg-gray-100 p-1 dark:border-gray-800 dark:bg-gray-900/50 sm:inline-flex sm:w-auto">
+                  {TABS.map(({ value, label, icon }) => (
+                    <TabsTrigger
+                      key={value}
+                      value={value}
+                      className="gap-2 px-3 py-1.5 text-gray-600 dark:text-gray-400 data-[state=active]:bg-white data-[state=active]:text-gray-900 data-[state=active]:shadow-sm dark:data-[state=active]:bg-gray-800 dark:data-[state=active]:text-gray-100"
+                    >
+                      {icon}
+                      {label}
+                    </TabsTrigger>
+                  ))}
+                </TabsList>
 
-              {/* Autobot AI Insights */}
-              <AutobotInsights
-                settings={autobotSettings}
-                llmConfigs={llmConfigs}
-                todayStats={autobotDashboard?.today ?? null}
-                isLoading={isLoading}
-              />
+                <TabsContent value="activity" className="mt-0 space-y-8">
+                  <StatsOverview
+                    stats={dashboard?.stats ?? null}
+                    isLoading={isLoading}
+                  />
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <RecentActivity
+                      recentExecutions={dashboard?.recentExecutions ?? []}
+                      isLoading={isLoading}
+                    />
+                    <MostUsedWorkflows
+                      workflows={dashboard?.topWorkflows ?? []}
+                      isLoading={isLoading}
+                    />
+                  </div>
+                </TabsContent>
 
-              {/* Plan & Subscription */}
-              <PlanSubscription
-                subscription={subscription}
-                isLoading={isLoading}
-              />
+                <TabsContent value="autobot" className="mt-0">
+                  <AutobotInsights
+                    settings={autobotSettings}
+                    llmConfigs={llmConfigs}
+                    todayStats={autobotDashboard?.today ?? null}
+                    isLoading={isLoading}
+                  />
+                </TabsContent>
 
-              {/* Quick Links */}
+                <TabsContent value="sagecode" className="mt-0">
+                  <SageCodeSessions />
+                </TabsContent>
+
+                <TabsContent value="plan" className="mt-0">
+                  <PlanSubscription
+                    subscription={subscription}
+                    isLoading={isLoading}
+                  />
+                </TabsContent>
+              </Tabs>
+
+              <Separator className="bg-gray-200 dark:bg-gray-800" />
+
               <QuickLinks />
 
               {/* Danger Zone */}

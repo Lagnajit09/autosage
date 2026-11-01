@@ -17,10 +17,26 @@ import { SAGECODE_URL } from "@/lib/api-client";
 const INSTALL_COMMAND = "uv tool install sagex-cli";
 
 const FEATURES: { icon: LucideIcon; title: string; text: string }[] = [
-  { icon: Terminal, title: "Run and watch live", text: "Start any workflow or script and follow it node by node." },
-  { icon: Webhook, title: "Webhooks and schedules", text: "Set up HTTP triggers and cron schedules from your shell." },
-  { icon: GitBranch, title: "Made for CI/CD", text: "Exit codes and --json output slot into any pipeline." },
-  { icon: ShieldCheck, title: "Secrets stay secret", text: "Keys live in your OS keychain, never on disk." },
+  {
+    icon: Terminal,
+    title: "Run and watch live",
+    text: "Start any workflow or script and follow it node by node.",
+  },
+  {
+    icon: Webhook,
+    title: "Webhooks and schedules",
+    text: "Set up HTTP triggers and cron schedules from your shell.",
+  },
+  {
+    icon: GitBranch,
+    title: "Made for CI/CD",
+    text: "Exit codes and --json output slot into any pipeline.",
+  },
+  {
+    icon: ShieldCheck,
+    title: "Secrets stay secret",
+    text: "Keys live in your OS keychain, never on disk.",
+  },
 ];
 
 // Introduces SageCode (the `sagex` CLI) on the landing page; the hero's "New"
@@ -41,7 +57,11 @@ export default function SageCodeSection() {
   };
 
   return (
-    <section id="sagecode" ref={ref} className="py-20 md:py-24 relative scroll-mt-8">
+    <section
+      id="sagecode"
+      ref={ref}
+      className="py-20 md:py-24 relative scroll-mt-8"
+    >
       <div className="container mx-auto px-4 md:px-6">
         <motion.div
           initial={{ opacity: 0, y: 24 }}
@@ -54,7 +74,10 @@ export default function SageCodeSection() {
             className="pointer-events-none absolute inset-0 opacity-70 [background-size:20px_20px] [background-image:linear-gradient(to_right,#e4e4e7_1px,transparent_1px),linear-gradient(to_bottom,#e4e4e7_1px,transparent_1px)] dark:[background-image:linear-gradient(to_right,#262626_1px,transparent_1px),linear-gradient(to_bottom,#262626_1px,transparent_1px)] [mask-image:radial-gradient(ellipse_at_top_left,black,transparent_70%)]"
             aria-hidden="true"
           />
-          <div className="pointer-events-none absolute -right-24 -top-24 h-72 w-72 rounded-full bg-purple-500/20 blur-3xl" aria-hidden="true" />
+          <div
+            className="pointer-events-none absolute -right-24 -top-24 h-72 w-72 rounded-full bg-purple-500/20 blur-3xl"
+            aria-hidden="true"
+          />
 
           <div className="relative grid items-center gap-10 p-6 md:p-12 lg:grid-cols-[1fr_1.1fr]">
             <div className="min-w-0">
@@ -64,10 +87,25 @@ export default function SageCodeSection() {
                 rel="noopener noreferrer"
                 className="inline-flex items-center gap-2 rounded-full border border-neutral-200 bg-white px-3 py-1.5 text-xs font-medium text-neutral-700 transition-colors hover:border-purple-400 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-300"
               >
-                <img src="/sagecode-mark-light.svg" alt="" className="h-4 w-auto dark:hidden" />
-                <img src="/sagecode-mark-dark.svg" alt="" className="hidden h-4 w-auto dark:block" />
+                <img
+                  src="/sagecode-mark-light.svg"
+                  alt=""
+                  className="h-4 w-auto dark:hidden"
+                />
+                <img
+                  src="/sagecode-mark-dark.svg"
+                  alt=""
+                  className="hidden h-4 w-auto dark:block"
+                />
                 <span>
-                  New · <span className="font-semibold">Sage<span className="text-[#7429a7] dark:text-[#d4b0eb]">Code</span></span> v1.0
+                  New ·{" "}
+                  <span className="font-semibold">
+                    Sage
+                    <span className="text-[#7429a7] dark:text-[#d4b0eb]">
+                      Code
+                    </span>
+                  </span>{" "}
+                  v1.1
                 </span>
                 <ArrowUpRight className="h-3.5 w-3.5" />
               </a>
@@ -76,8 +114,9 @@ export default function SageCodeSection() {
                 Autosage, in your terminal.
               </h2>
               <p className="mt-4 max-w-xl text-base text-muted-foreground md:text-lg">
-                SageCode is the command line for Autosage. Build, run and watch your workflows,
-                scripts, webhooks and schedules without leaving your shell, all with one command:{" "}
+                SageCode is the command line for Autosage. Build, run and watch
+                your workflows, scripts, webhooks and schedules without leaving
+                your shell, all with one command:{" "}
                 <code className="rounded border border-neutral-200 bg-white px-1.5 py-0.5 font-mono text-[0.9em] text-neutral-900 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-100">
                   sagex
                 </code>
@@ -91,8 +130,12 @@ export default function SageCodeSection() {
                       <Icon className="h-4 w-4" />
                     </span>
                     <span className="min-w-0">
-                      <span className="block text-sm font-semibold text-gray-900 dark:text-white">{title}</span>
-                      <span className="block text-sm text-muted-foreground">{text}</span>
+                      <span className="block text-sm font-semibold text-gray-900 dark:text-white">
+                        {title}
+                      </span>
+                      <span className="block text-sm text-muted-foreground">
+                        {text}
+                      </span>
                     </span>
                   </li>
                 ))}
@@ -100,14 +143,20 @@ export default function SageCodeSection() {
 
               <div className="mt-8 flex max-w-md items-center gap-3 rounded-xl border border-neutral-200 bg-white py-2.5 pl-4 pr-2.5 font-mono text-sm dark:border-neutral-800 dark:bg-black">
                 <span className="select-none text-[#d77757]">$</span>
-                <code className="min-w-0 flex-1 truncate text-neutral-900 dark:text-neutral-100">{INSTALL_COMMAND}</code>
+                <code className="min-w-0 flex-1 truncate text-neutral-900 dark:text-neutral-100">
+                  {INSTALL_COMMAND}
+                </code>
                 <button
                   type="button"
                   onClick={copyInstall}
                   aria-label={copied ? "Copied" : "Copy install command"}
                   className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-md border border-neutral-200 text-neutral-500 transition-colors hover:text-neutral-900 dark:border-neutral-800 dark:hover:text-white"
                 >
-                  {copied ? <Check className="h-4 w-4 text-green-600" /> : <Copy className="h-4 w-4" />}
+                  {copied ? (
+                    <Check className="h-4 w-4 text-green-600" />
+                  ) : (
+                    <Copy className="h-4 w-4" />
+                  )}
                 </button>
               </div>
 
@@ -117,7 +166,11 @@ export default function SageCodeSection() {
                   size="lg"
                   className="gap-1.5 bg-black text-white hover:bg-gray-800 dark:bg-white dark:text-black dark:hover:bg-gray-200"
                 >
-                  <a href={SAGECODE_URL} target="_blank" rel="noopener noreferrer">
+                  <a
+                    href={SAGECODE_URL}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
                     Explore SageCode
                     <ArrowUpRight className="h-4 w-4" />
                   </a>
@@ -130,15 +183,26 @@ export default function SageCodeSection() {
                   variant="outline"
                   className="border border-gray-300 bg-white text-black hover:bg-gray-100 dark:border-gray-700 dark:bg-black dark:text-white dark:hover:bg-gray-900"
                 >
-                  <a href={`${SAGECODE_URL}/install.html`} target="_blank" rel="noopener noreferrer">
+                  <a
+                    href={`${SAGECODE_URL}/install.html`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
                     Install guide
                   </a>
                 </Button>
               </div>
               <p className="mt-4 text-xs text-muted-foreground">
-                Early access: SageCode needs an Autosage API key.{" "}
-                <Link to="/contact" className="font-medium text-[#7429a7] underline-offset-4 hover:underline dark:text-[#d4b0eb]">
-                  Request one
+                Then sign in with your Autosage account:{" "}
+                <code className="font-mono text-[0.95em] text-neutral-900 dark:text-neutral-100">
+                  sagex auth login
+                </code>
+                . No account yet?{" "}
+                <Link
+                  to="/signup"
+                  className="font-medium text-[#7429a7] underline-offset-4 hover:underline dark:text-[#d4b0eb]"
+                >
+                  Create one for free
                 </Link>
               </p>
             </div>

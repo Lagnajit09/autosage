@@ -368,6 +368,8 @@ Cloud Run service is `--no-allow-unauthenticated`, so IAM rejects any caller wit
 | `http_trigger_idempotency_keys` | `triggers.HttpTriggerIdempotencyKey` | `id`, `trigger`, `key`, `workflow_run`, `created_at` — unique on (trigger, key) |
 | `schedule_triggers` | `triggers.ScheduleTrigger` | `id`, `workflow`, `node_id`, `cron_expression`, `timezone`, `is_active`, `periodic_task_name` (link to Beat), `last_run`, `last_triggered_at`, `last_error` |
 | `workflow_run_idempotency_keys` | `execution_engine.WorkflowRunIdempotencyKey` | `id (uuid)`, `user`, `workflow`, `key`, `workflow_run`, `created_at` — `unique(user, workflow, key)`; guards manual + autobot paths against duplicate runs |
+| `api_keys` | `users.ApiKey` | `id (uuid)`, `user`, `kind` (device/token/admin), `name`, `key_hash` (sha256, unique), `last4`, `is_active`, `revoked_at`, `revoke_reason`, `client_os`, `cli_version`, `last_ip`, `last_used_at`, `commands_run`, `runs_started`, `last_command`, `last_invocation` — one row per SageCode session |
+| `cli_login_requests` | `users.CliLoginRequest` | `id (uuid)`, `device_code_hash` (unique), `user_code`, `status` (pending/approved/denied/completed), `user`, `api_key`, device fields, `expires_at` (10 min) — a pending `sagex auth login` |
 | `workflow_run_intents` | `execution_engine.WorkflowRunIntent` | `id (uuid)`, `user`, `workflow`, `inputs (JSON — non-secret)`, `send_email`, `notification_email`, `created_at`, `fulfilled_at`, `expires_at` — single-use, 5-min TTL; the secure side-channel "prepared but not yet enqueued" run |
 | `django_celery_beat_*` | (3rd party) | `PeriodicTask`, `CrontabSchedule` |
 
@@ -410,6 +412,14 @@ ScriptExecution:    pending → running → (completed | failed | cancelled)
 - Cross-vault access is impossible because credentials/servers are always reached via `vault__owner=user`.
 - Public endpoints (`HTTP trigger`, public polling) have their own auth model (`X-Trigger-Secret` + bcrypt hash). They never trust the URL alone.
 
+### 11.2b API keys & SageCode (sagex CLI) sessions
+- Non-browser clients send `X-API-Key: sgx_…`. `ApiKeyAuthentication` (first in `DEFAULT_AUTHENTICATION_CLASSES`) hashes it (SHA-256, indexed) and resolves the owning `User`; `ClerkAuthMiddleware` does the same for raw async (SSE) views. A present-but-invalid key never falls through to Clerk.
+- Every key is a **session** (`users.ApiKey`, `kind` = `device` | `token` | `admin`). Sessions unused for **90 days** expire (checked on use, server-side times only). A dead key's 401 says why (expired / signed out / revoked).
+- **Sign-in** (`sagex auth login`) is a device-authorization flow (after RFC 8628), `users/views_cli.py`: the CLI starts a `CliLoginRequest` (public, IP-throttled), the user approves the code at `/cli-auth` in the SPA (Clerk), the CLI polls and collects a new key exactly once (row-locked). CI uses access tokens created on the Profile page.
+- **Browser-only actions:** approving a sign-in, creating tokens, listing/revoking sessions all require a Clerk session (`IsBrowserUser` rejects `request.auth` = ApiKey), so a leaked key can't mint more keys. An API key may only read or end **its own** session (`/sessions/current/`).
+- **Activity summary** is derived from request headers, no telemetry calls: `User-Agent: sagex/<ver> (<os>)`, `X-Sagex-Invocation` (one id per CLI process = one command), `X-Sagex-Command`. Runs started are counted in `ClerkAuthMiddleware` from successful responses on `cli_sessions.RUN_URL_NAMES` — the execution views stay untouched. All of it is display data, never used for authorization.
+- New-device sign-ins email the user (`users.send_new_device_email` Celery task; skipped for a device name + OS seen before).
+
 ### 11.3 Service-to-service auth (Django → exec-worker)
 - `X-API-Key` header (defense-in-depth) AND
 - Google OIDC ID token (Cloud Run IAM enforces).
@@ -431,6 +441,8 @@ Centralised in `server/server/rate_limiters.py` and `settings.py::REST_FRAMEWORK
 | `vault_*` | same pattern | vault |
 | `execution_burst` / `_sustained` | 30/min, 500/day | exec endpoints |
 | `http_trigger` | 60/min | public webhooks — keyed by `trigger_token`, not user |
+| `cli_auth_start` / `cli_auth_poll` | 20/hour, 60/min | public sagex sign-in — keyed by `X-Real-IP` (set by nginx, unspoofable) |
+| `cli_auth_review` / `cli_token_create` | 60/hour, 10/hour | approving sign-ins / creating CI tokens (per user) |
 
 ---
 
@@ -512,6 +524,15 @@ Root `urls.py`:
 /api/health/  (server-level)           service: main-server
 /api/dashboard/                         GET — stats + recent items
 /api/user/update/                       POST — sync Clerk profile
+
+/api/users/cli/auth/start/              POST public (IP-throttled) — start a sagex sign-in
+/api/users/cli/auth/token/              POST public (IP-throttled) — CLI polls; returns the key once
+/api/users/cli/auth/requests/<code>/    GET  Clerk only — the approval page's device details
+/api/users/cli/auth/requests/<code>/approve/ | deny/   POST Clerk only
+/api/users/cli/sessions/                GET  Clerk only — Profile / dashboard session list
+/api/users/cli/sessions/<uuid>/         DELETE Clerk only — revoke
+/api/users/cli/tokens/                  POST Clerk only — create a CI access token (shown once)
+/api/users/cli/sessions/current/        GET / DELETE API key only — `sagex auth status` / `logout`
 
 /api/workflows/                         CRUD (ListCreate + Detail)
 /api/workflows/<id>/triggers/           Per-workflow triggers
