@@ -27,8 +27,6 @@ class ApiKeyAuthentication(authentication.BaseAuthentication):
     """
 
     keyword = 'X-API-Key'
-    # Skip a DB write on every request; only refresh last_used_at this often.
-    _TOUCH_INTERVAL_SECONDS = 300
 
     def authenticate(self, request):
         presented = request.headers.get(self.keyword)
@@ -42,31 +40,29 @@ class ApiKeyAuthentication(authentication.BaseAuthentication):
             return resolved
 
         # Imported lazily so this module stays importable before apps are ready.
+        from users import cli_sessions
         from users.models import ApiKey, hash_api_key
 
         try:
-            api_key = ApiKey.objects.select_related('user').get(
-                key_hash=hash_api_key(presented),
-                is_active=True,
-            )
+            api_key = ApiKey.objects.select_related('user').get(key_hash=hash_api_key(presented))
         except ApiKey.DoesNotExist:
             # Present-but-invalid key is a hard failure (don't fall through).
             raise exceptions.AuthenticationFailed('Invalid API key.')
+
+        # A known-but-dead key gets a specific reason, so the CLI can say why.
+        if not api_key.is_active:
+            raise exceptions.AuthenticationFailed(cli_sessions.inactive_message(api_key))
+        now = timezone.now()
+        if cli_sessions.is_expired(api_key, now):
+            cli_sessions.revoke(api_key, ApiKey.RevokeReason.EXPIRED, now)
+            raise exceptions.AuthenticationFailed(cli_sessions.inactive_message(api_key))
 
         user = api_key.user
         if not user.is_active:
             raise exceptions.AuthenticationFailed('User is inactive.')
 
-        self._touch(api_key)
+        cli_sessions.record_request(api_key, request, now)
         return (user, api_key)
-
-    def _touch(self, api_key):
-        """Best-effort last_used_at stamp, throttled to avoid a write per request."""
-        now = timezone.now()
-        last = api_key.last_used_at
-        if last is None or (now - last).total_seconds() > self._TOUCH_INTERVAL_SECONDS:
-            # Use the instance's own class (ApiKey is imported lazily in authenticate).
-            type(api_key).objects.filter(pk=api_key.pk).update(last_used_at=now)
 
     def authenticate_header(self, request):
         # Make DRF return 401 (not 403) on failure.

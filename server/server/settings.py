@@ -133,6 +133,12 @@ REST_FRAMEWORK = {
         'autobot_message_create': '60/minute',
         # Public docs-search endpoint, keyed per client IP (no auth user).
         'docs_search': '60/minute',
+        # `sagex auth login`: starting is public (per IP); the CLI polls every
+        # 5s for up to 10 minutes; reviewing a code needs a signed-in user.
+        'cli_auth_start': '20/hour',
+        'cli_auth_poll': '60/minute',
+        'cli_auth_review': '60/hour',
+        'cli_token_create': '10/hour',
     }
 }
 

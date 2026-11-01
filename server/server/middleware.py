@@ -23,7 +23,10 @@ class ClerkAuthMiddleware:
                 result = None
             request.user = result[0] if result else AnonymousUser()
             request._api_key_auth = result     # lets DRF skip a second lookup
-            return self.get_response(request)
+            response = self.get_response(request)
+            if result:
+                self._count_run(request, response, result[1])
+            return response
 
         token = extract_bearer_token(request)
         if not token:
@@ -53,3 +56,17 @@ class ClerkAuthMiddleware:
             request.user = AnonymousUser()
 
         return self.get_response(request)
+
+    @staticmethod
+    def _count_run(request, response, api_key):
+        """Add a run to the SageCode session's activity when one was started.
+
+        Done here, once the response is known, so the execution views stay
+        untouched. A streaming response (live script run) has its status as soon
+        as the stream opens, which is when the run has started.
+        """
+        from users import cli_sessions
+
+        match = getattr(request, 'resolver_match', None)
+        if match and match.url_name in cli_sessions.RUN_URL_NAMES and 200 <= response.status_code < 300:
+            cli_sessions.record_run_started(api_key)

@@ -69,6 +69,39 @@ class HttpTriggerThrottle(SimpleRateThrottle):
         return self.cache_format % {'scope': self.scope, 'ident': token}
 
 
+class _ClientIpThrottle(SimpleRateThrottle):
+    """Per-IP throttle keyed on the address nginx saw (X-Real-IP), which a
+    client can't spoof the way it can prepend entries to X-Forwarded-For."""
+
+    def get_cache_key(self, request, view):
+        from users.cli_sessions import client_ip
+
+        return self.cache_format % {
+            'scope': self.scope,
+            'ident': client_ip(request) or self.get_ident(request),
+        }
+
+
+class CliAuthStartThrottle(_ClientIpThrottle):
+    """Public: starting a `sagex auth login` (creates a pending request)."""
+    scope = 'cli_auth_start'
+
+
+class CliAuthPollThrottle(_ClientIpThrottle):
+    """Public: the CLI polling for its key while the user approves."""
+    scope = 'cli_auth_poll'
+
+
+class CliAuthReviewThrottle(UserRateThrottle):
+    """Signed-in user looking up / approving / denying a login code."""
+    scope = 'cli_auth_review'
+
+
+class CliTokenCreateThrottle(UserRateThrottle):
+    """Signed-in user creating a SageCode access token (for CI)."""
+    scope = 'cli_token_create'
+
+
 class DocsSearchThrottle(SimpleRateThrottle):
     """Throttle the public docs-search endpoint per client IP (no auth user).
 
