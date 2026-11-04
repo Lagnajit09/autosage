@@ -1,6 +1,6 @@
 """Ingest the autosage-docs Docusaurus content into the DocChunk vector store.
 
-Reads the `docs/` and `tutorials/` markdown trees, strips MDX noise, chunks by
+Reads the `docs/`, `tutorials/` and `sagecode/` markdown trees, strips MDX noise, chunks by
 heading (bounded to the embedding model's input limit), embeds each chunk
 locally (fastembed), and writes them to Postgres/pgvector.
 
@@ -8,7 +8,7 @@ Runs INSIDE Django, so it writes DocChunk rows directly — a management command
 is part of the Django control plane, so this does not violate "autobot never
 writes the schema" (autobot is the separate FastAPI service).
 
-Idempotent: each source (docs / tutorials) is wiped and reloaded in a single
+Idempotent: each source (docs / tutorials / sagecode) is wiped and reloaded in a single
 transaction, so re-running picks up edits, renames, and deletions automatically.
 At ~24 files re-embedding everything takes seconds; the content_hash field is
 populated for a future skip-unchanged optimization.
@@ -32,11 +32,12 @@ from django.db import transaction
 from autobot_api import embeddings
 from autobot_api.models import DOC_CHUNK_MAX_CHARS, DocChunk
 
-# Routes match docusaurus.config.ts: docs preset routeBasePath "/docs",
-# tutorials plugin routeBasePath "/tutorials".
+# Routes match docusaurus.config.ts: docs preset routeBasePath "/docs", the
+# tutorials plugin "/tutorials" and the sagecode plugin "/sagecode".
 _SOURCE_ROUTE = {
     DocChunk.Source.DOCS: '/docs',
     DocChunk.Source.TUTORIALS: '/tutorials',
+    DocChunk.Source.SAGECODE: '/sagecode',
 }
 
 # Overlap (chars) carried between sub-chunks when a section is split, so a fact
@@ -49,6 +50,7 @@ _IMPORT_EXPORT_RE = re.compile(r'^\s*(import|export)\s')
 _ADMONITION_RE = re.compile(r'^\s*:::')          # :::tip / :::note / closing :::
 _HTML_COMMENT_RE = re.compile(r'<!--.*?-->', re.DOTALL)
 _TAG_RE = re.compile(r'<[^>]+>')                 # JSX / HTML tags
+_JSX_OPEN_RE = re.compile(r'^\s*<[A-Za-z][\w.]*(\s|$)')   # a tag opening at line start
 _BLANK_RUN_RE = re.compile(r'\n{3,}')
 
 
@@ -64,6 +66,7 @@ def clean_mdx(body: str) -> str:
     body = _HTML_COMMENT_RE.sub('', body)
     out: list[str] = []
     in_code = False
+    in_tag = False
     for line in body.splitlines():
         if _FENCE_RE.match(line):
             in_code = not in_code
@@ -71,6 +74,15 @@ def clean_mdx(body: str) -> str:
             continue
         if in_code:
             out.append(line)
+            continue
+        # A JSX tag whose attributes span lines (e.g. <ThemedImage alt=… sources={{…}} />):
+        # drop the attribute lines up to the end of the tag, not just the `<` line.
+        if in_tag:
+            if line.rstrip().endswith('>'):
+                in_tag = False
+            continue
+        if _JSX_OPEN_RE.match(line) and not line.rstrip().endswith('>'):
+            in_tag = True
             continue
         if _IMPORT_EXPORT_RE.match(line):
             continue
@@ -230,11 +242,11 @@ class Command(BaseCommand):
         parser.add_argument(
             '--docs-path',
             default=getattr(django_settings, 'AUTOSAGE_DOCS_PATH', '') or '',
-            help='Path to the autosage-docs repo root (contains docs/ and tutorials/).',
+            help='Path to the autosage-docs repo root (contains docs/, tutorials/ and sagecode/).',
         )
         parser.add_argument(
             '--source',
-            choices=['docs', 'tutorials', 'all'],
+            choices=[*DocChunk.Source.values, 'all'],
             default='all',
             help='Which content tree to ingest (default: all).',
         )
@@ -254,7 +266,7 @@ class Command(BaseCommand):
             raise CommandError(f'Docs path is not a directory: {docs_path}')
 
         chosen = (
-            [DocChunk.Source.DOCS, DocChunk.Source.TUTORIALS]
+            list(DocChunk.Source.values)
             if options['source'] == 'all'
             else [options['source']]
         )

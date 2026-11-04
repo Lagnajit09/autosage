@@ -848,7 +848,7 @@ Docusaurus site (public) ──HTTPS──▶ nginx ──▶ autobot
                                                               ├─ embed query LOCALLY (fastembed/bge-base-en-v1.5)
                                                               └─ pgvector cosine top-k over DocChunk
 
-Ingestion (offline / one-off): autosage-docs/{docs,tutorials}/*.md
+Ingestion (offline / one-off): autosage-docs/{docs,tutorials,sagecode}/*.md
    └─▶ server: manage.py ingest_docs ──▶ chunk + embed ──▶ DocChunk (Supabase pgvector)
 ```
 

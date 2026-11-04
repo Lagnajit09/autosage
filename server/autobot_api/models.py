@@ -429,11 +429,12 @@ class DocChunk(models.Model):
     class Source(models.TextChoices):
         DOCS = 'docs', _('Docs')
         TUTORIALS = 'tutorials', _('Tutorials')
+        SAGECODE = 'sagecode', _('SageCode')
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
 
     # Which Docusaurus content plugin this came from. Maps to the routeBasePath
-    # in autosage-docs/docusaurus.config.ts (/docs vs /tutorials).
+    # in autosage-docs/docusaurus.config.ts (/docs, /tutorials or /sagecode).
     source = models.CharField(max_length=16, choices=Source.choices)
 
     # Path of the source markdown file relative to its content root, e.g.
