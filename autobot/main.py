@@ -18,6 +18,7 @@ from routers import analytics as analytics_router
 from routers import chat as chat_router
 from routers import docs_chat as docs_chat_router
 from routers import proxy as proxy_router
+from sage import router as sage_router
 from settings import get_settings
 from throttling import limiter
 # Side-effect import: each tool module registers into the global registry.
@@ -93,6 +94,9 @@ app.include_router(analytics_router.router)
 
 # Public, no-Clerk docs assistant for the Docusaurus widget (Pillar A).
 app.include_router(docs_chat_router.router)
+
+# Sage, the SageCode agent — isolated package, see sage/__init__.py.
+app.include_router(sage_router.router)
 
 
 @app.get("/health/")

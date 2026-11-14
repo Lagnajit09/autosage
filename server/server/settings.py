@@ -95,6 +95,7 @@ INSTALLED_APPS = [
     'users.apps.UsersConfig',
     'billing.apps.BillingConfig',
     'library.apps.LibraryConfig',
+    'sage_api.apps.SageApiConfig',
 ]
 
 REST_FRAMEWORK = {

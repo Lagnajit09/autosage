@@ -899,6 +899,12 @@ When touching autobot code, preserve:
 - Extend the system prompt in `llm/prompts.py` (not inline in `routers/chat.py`).
 - For new providers, prefer LiteLLM's existing wrappers over a custom client. If a provider exposes server-side fallback (like OpenRouter), use it before falling back at the autobot layer.
 
+### 16.14 Sage — the SageCode agent (in progress)
+
+Status: **scaffold only** (phase 1.1). Sage is the agent behind SageCode (`sagex` v2): a terminal agent that can use sagex commands, local tools and (later) sub-agents.
+- **Runtime:** `autobot/sage/` — an isolated package in the autobot service, mounted at `/sage` (external `/api/ai/sage/`). It must not import `routers.*`, and the web chat must not import `sage` (`autobot/tests/test_sage_boundary.py` enforces both). Every Sage route must authenticate.
+- **Persistence:** `server/sage_api/` — a separate Django app (not `autobot_api`) so the web chat's tables never change for the agent. No models yet → no migration; any future migration targets the shared Supabase and needs review first. Only route today: `GET /api/sage/ping/` (authenticated canary, read-only).
+
 ---
 
 ## 17. Local Dev

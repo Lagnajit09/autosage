@@ -26,6 +26,7 @@ COPY main.py settings.py auth.py throttling.py ./
 COPY conversation/ ./conversation/
 COPY llm/ ./llm/
 COPY routers/ ./routers/
+COPY sage/ ./sage/
 COPY streaming/ ./streaming/
 COPY tools/ ./tools/
 

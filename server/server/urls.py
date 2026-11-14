@@ -35,5 +35,6 @@ urlpatterns = [
     path('api/dashboard/', dashboard_summary, name='dashboard-summary'),
     path('api/billing/', include('billing.urls')),
     path('api/library/', include('library.urls')),
+    path('api/sage/', include('sage_api.urls')),
     path('api/health/', health_check),
 ]
