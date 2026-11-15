@@ -123,6 +123,13 @@ class AutobotSettings(BaseSettings):
     SAGE_SESSION_CACHE_SECONDS: int = 60
     # Burst rate limit (slowapi) on Sage routes, keyed per SageCode session.
     SAGE_RATE_LIMIT: str = "30/minute"
+    # Bounds on the Sage WebSocket conversation. History lives only in the
+    # connection's memory for now (no persistence yet), capped by message count.
+    SAGE_MAX_MESSAGE_CHARS: int = 8000
+    SAGE_MAX_CONTEXT_CHARS: int = 6000      # last-command context the CLI attaches
+    SAGE_MAX_HISTORY_MESSAGES: int = 40
+    # Close a connection with no turn for this long (nginx read timeout is 1900s).
+    SAGE_IDLE_TIMEOUT_SECONDS: int = 1800
 
     AUTOBOT_CTX_TTL_SECONDS: int = 7200
     AUTOBOT_CONTEXT_TARGET_RATIO: float = 0.6

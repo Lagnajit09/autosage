@@ -28,7 +28,9 @@ CLI_HEADERS = {
     "X-Sagex-Invocation": "0" * 32,
     "X-Sagex-Command": "chat",
 }
-_OK = (200, {"success": True, "data": {"session": {"id": SESSION_ID}, "user": {}}})
+USER_SUB = "user_2abcDEF"
+_OK = (200, {"success": True,
+             "data": {"session": {"id": SESSION_ID}, "user": {"sub": USER_SUB}}})
 
 
 class FakeDjango:
@@ -147,7 +149,11 @@ def test_rejections_are_not_cached(client, django):
     assert len(fake.calls) == 2
 
 
-@pytest.mark.parametrize("upstream", [DjangoUnavailable("down"), (500, {}), (200, {"data": {}})])
+@pytest.mark.parametrize("upstream", [
+    DjangoUnavailable("down"), (500, {}), (200, {"data": {}}),
+    # A Django that predates `user.sub` (deploy order: Django first).
+    (200, {"data": {"session": {"id": SESSION_ID}, "user": {}}}),
+])
 def test_django_trouble_is_503(client, django, upstream):
     django(upstream)
     resp = _get(client)
@@ -172,7 +178,7 @@ def test_untrusted_activity_headers_are_dropped():
 
 def test_call_django_always_carries_the_key(django):
     fake = django((200, {}))
-    auth = sage_auth.SageAuth(api_key=KEY, session_id=SESSION_ID,
+    auth = sage_auth.SageAuth(api_key=KEY, session_id=SESSION_ID, user_sub=USER_SUB,
                               forward_headers={"user-agent": "sagex/2.0.0"})
     asyncio.run(auth.call_django("GET", "/api/workflows/", headers={"Idempotency-Key": "k1"}))
     (call,) = fake.calls

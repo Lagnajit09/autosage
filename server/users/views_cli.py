@@ -395,8 +395,12 @@ def cli_session_current(request):
         return api_response(success=True, message="Signed out.", data={})
 
     api_key.refresh_from_db()      # activity counters are updated in SQL, not on this instance
+    # `sub` (the user's own Clerk id) lets Sage share the web chat's per-user
+    # Autobot quota and plan lookup, which are keyed by it. It identifies the
+    # caller to themselves only — never authorizes anything.
+    user = {**_user_payload(request.user), "sub": request.user.username}
     return api_response(
         success=True,
         message="Current session retrieved.",
-        data={"session": _session_payload(api_key), "user": _user_payload(request.user)},
+        data={"session": _session_payload(api_key), "user": user},
     )

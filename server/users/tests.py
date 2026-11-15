@@ -113,6 +113,7 @@ class DeviceLoginTests(_CliTestBase):
         me = self.cli(data["api_key"]).get("/api/users/cli/sessions/current/")
         self.assertEqual(me.status_code, 200)
         self.assertEqual(me.json()["data"]["session"]["id"], str(key.id))
+        self.assertEqual(me.json()["data"]["user"]["sub"], self.user.username)   # Sage's quota key
         # ...and can't be collected twice.
         self.assertEqual(self.poll(login["device_code"]).status_code, 410)
 

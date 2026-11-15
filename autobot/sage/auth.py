@@ -71,6 +71,9 @@ class SageAuth:
 
     api_key: str = field(repr=False)          # forwarded to Django; never logged
     session_id: str
+    # The user's Clerk id — keys the per-user admin-LLM quota shared with the
+    # web chat. Identification only; Django authorizes every call by the key.
+    user_sub: str
     forward_headers: dict[str, str] = field(default_factory=dict)
 
     async def call_django(
@@ -95,26 +98,26 @@ class SageAuth:
 
 
 class _SessionCache:
-    """Small in-process TTL cache: sha256(key) -> session id. Per worker."""
+    """Small in-process TTL cache: sha256(key) -> (session id, user sub). Per worker."""
 
     def __init__(self, max_entries: int = 2048) -> None:
-        self._entries: OrderedDict[str, tuple[str, float]] = OrderedDict()
+        self._entries: OrderedDict[str, tuple[tuple[str, str], float]] = OrderedDict()
         self._max = max_entries
 
-    def get(self, digest: str) -> str | None:
+    def get(self, digest: str) -> tuple[str, str] | None:
         hit = self._entries.get(digest)
         if hit is None:
             return None
-        session_id, expires_at = hit
+        identity, expires_at = hit
         if time.monotonic() >= expires_at:
             self._entries.pop(digest, None)
             return None
-        return session_id
+        return identity
 
-    def put(self, digest: str, session_id: str, ttl: float) -> None:
+    def put(self, digest: str, identity: tuple[str, str], ttl: float) -> None:
         if ttl <= 0:
             return
-        self._entries[digest] = (session_id, time.monotonic() + ttl)
+        self._entries[digest] = (identity, time.monotonic() + ttl)
         self._entries.move_to_end(digest)
         while len(self._entries) > self._max:
             self._entries.popitem(last=False)
@@ -141,11 +144,16 @@ def _digest(api_key: str) -> str:
     return hashlib.sha256(api_key.encode("utf-8")).hexdigest()
 
 
-def _session_id(body: Any) -> str | None:
+def _identity(body: Any) -> tuple[str, str] | None:
+    """(session id, user sub) from Django's sessions/current payload, or None."""
     data = body.get("data") if isinstance(body, dict) else None
     session = data.get("session") if isinstance(data, dict) else None
+    user = data.get("user") if isinstance(data, dict) else None
     session_id = session.get("id") if isinstance(session, dict) else None
-    return session_id if isinstance(session_id, str) and session_id else None
+    user_sub = user.get("sub") if isinstance(user, dict) else None
+    if isinstance(session_id, str) and session_id and isinstance(user_sub, str) and user_sub:
+        return session_id, user_sub
+    return None
 
 
 def _unauthenticated_detail(body: Any) -> str:
@@ -170,8 +178,8 @@ async def authenticate_api_key(api_key: str | None, headers: Mapping[str, str]) 
 
     forward = activity_headers(headers)
     digest = _digest(api_key)
-    session_id = _cache.get(digest)
-    if session_id is None:
+    identity = _cache.get(digest)
+    if identity is None:
         try:
             status_code, body = await get_django_client().request(
                 method="GET", path=SESSION_PATH, api_key=api_key, headers=forward,
@@ -187,13 +195,22 @@ async def authenticate_api_key(api_key: str | None, headers: Mapping[str, str]) 
                 status.HTTP_429_TOO_MANY_REQUESTS,
                 "Too many requests — wait a moment and try again.",
             )
-        session_id = _session_id(body) if status_code == 200 else None
-        if session_id is None:
+        identity = _identity(body) if status_code == 200 else None
+        if identity is None:
+            # Includes a Django that predates `user.sub` — deploy Django first.
             logger.error("Sage session check: unexpected upstream status=%s", status_code)
             raise SageAuthError(status.HTTP_503_SERVICE_UNAVAILABLE, UNAVAILABLE)
-        _cache.put(digest, session_id, get_settings().SAGE_SESSION_CACHE_SECONDS)
+        _cache.put(digest, identity, get_settings().SAGE_SESSION_CACHE_SECONDS)
 
-    return SageAuth(api_key=api_key, session_id=session_id, forward_headers=forward)
+    session_id, user_sub = identity
+    return SageAuth(api_key=api_key, session_id=session_id, user_sub=user_sub,
+                    forward_headers=forward)
+
+
+async def recheck(auth: SageAuth) -> SageAuth:
+    """Re-validate a long-lived connection's key (cheap within the cache TTL),
+    so a session revoked or expired mid-conversation stops getting answers."""
+    return await authenticate_api_key(auth.api_key, auth.forward_headers)
 
 
 async def require_sage_auth(request: Request) -> SageAuth:

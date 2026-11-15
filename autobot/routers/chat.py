@@ -28,6 +28,7 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from auth import AuthContext, require_auth
 from conversation.cache import get_cache
 from conversation.persistence import DjangoUnavailable, get_django_client
+from conversation.quota import get_admin_daily_limit
 from conversation.summarizer import (
     count_message_tokens,
     count_tokens,
@@ -156,43 +157,9 @@ def _envelope(
 
 
 async def _get_admin_daily_limit(user_sub: str, raw_jwt: str, settings) -> int:
-    """Return the per-plan admin daily limit for a user.
-
-    Hits Django's /api/billing/internal/plan/ endpoint and caches the result
-    in Redis for 1 hour. Falls back to AUTOBOT_ADMIN_DAILY_LIMIT on any error.
-    """
-    import json as _json_mod
-
-    cache_key = f"autobot:billing_plan:{user_sub}"
-    cache = get_cache()
-
-    try:
-        cached = await cache._client.get(cache_key)
-        if cached:
-            data = _json_mod.loads(cached)
-            return int(data.get('admin_daily_limit', settings.AUTOBOT_ADMIN_DAILY_LIMIT))
-    except Exception:
-        pass
-
-    try:
-        client = get_django_client()
-        status_code, body = await client.request(
-            method='GET',
-            path='/api/billing/internal/plan/',
-            internal_secret=settings.AUTOBOT_INTERNAL_SECRET,
-            params={'user_sub': user_sub},
-        )
-        if status_code == 200 and isinstance(body, dict):
-            limit = int(body.get('admin_daily_limit', settings.AUTOBOT_ADMIN_DAILY_LIMIT))
-            try:
-                await cache._client.set(cache_key, _json_mod.dumps(body), ex=3600)
-            except Exception:
-                pass
-            return limit
-    except Exception as e:
-        logger.warning('billing plan lookup failed for %s: %s; using default', user_sub, e)
-
-    return settings.AUTOBOT_ADMIN_DAILY_LIMIT
+    """Return the per-plan admin daily limit for a user (shared with Sage —
+    see conversation/quota.py)."""
+    return await get_admin_daily_limit(user_sub)
 
 
 async def _read_message_body(request: Request) -> dict[str, Any]:
