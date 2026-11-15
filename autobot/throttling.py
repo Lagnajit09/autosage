@@ -10,6 +10,7 @@ requests get counted against the caller's IP.
 from __future__ import annotations
 
 import base64
+import hashlib
 import json
 import logging
 
@@ -25,9 +26,16 @@ logger = logging.getLogger(__name__)
 def _user_sub_or_ip(request: Request) -> str:
     """Extract `sub` from the Bearer JWT without verifying its signature.
 
-    Falls back to the client's IP when no Bearer is present or the token
+    A SageCode API key (`X-API-Key`, Sage routes) is keyed by its SHA-256 so
+    the raw key never becomes a Redis key name; an invalid key is rejected
+    later in `require_sage_auth`, same trade-off as the unverified JWT.
+    Falls back to the client's IP when no credential is present or the token
     is malformed.
     """
+    api_key = (request.headers.get("X-API-Key") or "").strip()
+    if api_key:
+        return "key:" + hashlib.sha256(api_key.encode("utf-8")).hexdigest()[:32]
+
     auth_header = request.headers.get("Authorization") or ""
     if not auth_header.lower().startswith("bearer "):
         return get_remote_address(request)

@@ -199,7 +199,9 @@ class AuthorizationRedactor(logging.Filter):
     Catches raw header logs and dict-repr forms like
     `{'Authorization': 'Bearer abc'}` that httpx dumps at DEBUG, plus the
     `X-Internal-Secret` header carried on the public docs-search path (a
-    long-lived shared secret that must never surface in logs).
+    long-lived shared secret that must never surface in logs), and SageCode
+    API keys — both the `X-API-Key` header and any bare `sgx_…` value, since
+    a key can also end up inside an exception message or a URL.
     """
 
     _PATTERN = re.compile(
@@ -207,9 +209,10 @@ class AuthorizationRedactor(logging.Filter):
         flags=re.IGNORECASE,
     )
     _SECRET_PATTERN = re.compile(
-        r"(x-internal-secret['\"]?\s*[:=]\s*['\"]?)([^\s'\";,)]+)",
+        r"((?:x-internal-secret|x-api-key)['\"]?\s*[:=]\s*['\"]?)([^\s'\";,)]+)",
         flags=re.IGNORECASE,
     )
+    _API_KEY_PATTERN = re.compile(r"sgx_[A-Za-z0-9_-]+")
     _REDACTED = "Bearer [REDACTED]"
     _SECRET_REDACTED = r"\1[REDACTED]"
 
@@ -217,7 +220,8 @@ class AuthorizationRedactor(logging.Filter):
         text = self._PATTERN.sub(
             lambda m: m.group(1) + self._REDACTED, text
         )
-        return self._SECRET_PATTERN.sub(self._SECRET_REDACTED, text)
+        text = self._SECRET_PATTERN.sub(self._SECRET_REDACTED, text)
+        return self._API_KEY_PATTERN.sub("sgx_[REDACTED]", text)
 
     def filter(self, record: logging.LogRecord) -> bool:
         try:

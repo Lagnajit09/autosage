@@ -47,13 +47,14 @@ class DjangoClient:
         path: str,
         jwt: str = "",
         internal_secret: str | None = None,
+        api_key: str | None = None,
         json_body: Any | None = None,
         params: dict[str, Any] | None = None,
         headers: dict[str, str] | None = None,
     ) -> tuple[int, Any]:
         """Request to Django; returns (status, parsed_body).
 
-        Two MUTUALLY EXCLUSIVE auth modes, both chosen by the caller — the
+        Three MUTUALLY EXCLUSIVE auth modes, all chosen by the caller — the
         client never decides authentication itself, it only carries the
         credential the caller hands it:
 
@@ -65,6 +66,13 @@ class DjangoClient:
             ``jwt`` empty). Sends ``X-Internal-Secret`` and NO Authorization
             header. Used ONLY by the public docs path, which has no user/JWT,
             to reach the secret-gated ``/api/autobot/docs/search/`` endpoint.
+
+          • **API-key mode:** pass ``api_key`` (a SageCode ``sgx_…`` session
+            key) and nothing else. Sends ``X-API-Key`` and NO Authorization.
+            Used by Sage: the user's own CLI session is forwarded, exactly like
+            a JWT, so Django applies its expiry/revocation and per-user scoping.
+            Combining it with another credential is refused — Django prefers
+            ``X-API-Key`` when both arrive, so a mix would be ambiguous.
 
         SECURITY — why this can't turn a secured route into a public one:
         the secret is only ever an *autobot-side credential the caller opts
@@ -88,22 +96,30 @@ class DjangoClient:
 
         Raises DjangoUnavailable on network failure / timeout.
         """
-        if internal_secret:
+        # Credentials only ever come from the explicit parameters above; extra
+        # `headers` can never add or replace one, in any mode.
+        reserved = {"authorization", "x-internal-secret", "x-api-key"}
+        if api_key:
+            if jwt or internal_secret:
+                raise ValueError(
+                    "DjangoClient.request takes exactly one credential; "
+                    "`api_key` can't be combined with `jwt` or `internal_secret`.",
+                )
+            req_headers = {"X-API-Key": api_key}
+        elif internal_secret:
             # Internal-secret mode: no Bearer at all. Sending both would be
             # ambiguous, so the secret path is exclusive — jwt is ignored.
             req_headers = {"X-Internal-Secret": internal_secret}
-            reserved = {"authorization", "x-internal-secret"}
         elif jwt:
             req_headers = {"Authorization": f"Bearer {jwt}"}
-            reserved = {"authorization"}
         else:
             # Neither credential — refuse rather than emit an unauthenticated
             # request to what is almost certainly an IsAuthenticated route.
             # Fails closed; protects against an accidental empty-JWT call.
             raise ValueError(
-                "DjangoClient.request requires either a non-empty `jwt` or "
-                "an `internal_secret`; refusing to send an unauthenticated "
-                "request.",
+                "DjangoClient.request requires a non-empty `jwt`, "
+                "`internal_secret` or `api_key`; refusing to send an "
+                "unauthenticated request.",
             )
         if headers:
             # Auth headers are non-overridable — merge extras under them.

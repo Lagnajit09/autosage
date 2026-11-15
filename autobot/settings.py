@@ -115,6 +115,15 @@ class AutobotSettings(BaseSettings):
     # so a couple of rounds is plenty; bounds runaway loops on free keys.
     AUTOBOT_DOCS_MAX_TOOL_ROUNDS: int = 3
 
+    # ── Sage (SageCode agent) ────────────────────────────────────────────
+    # How long a SageCode key that Django confirmed stays trusted in-process
+    # before it's re-checked. Short on purpose: a revoked/expired session is
+    # also rejected by Django on every forwarded call, so this only bounds how
+    # long a dead key can still *open* a Sage request. 0 = check every time.
+    SAGE_SESSION_CACHE_SECONDS: int = 60
+    # Burst rate limit (slowapi) on Sage routes, keyed per SageCode session.
+    SAGE_RATE_LIMIT: str = "30/minute"
+
     AUTOBOT_CTX_TTL_SECONDS: int = 7200
     AUTOBOT_CONTEXT_TARGET_RATIO: float = 0.6
     AUTOBOT_KEEP_LAST_N: int = 8
