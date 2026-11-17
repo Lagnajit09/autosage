@@ -130,6 +130,15 @@ class AutobotSettings(BaseSettings):
     SAGE_MAX_HISTORY_MESSAGES: int = 40
     # Close a connection with no turn for this long (nginx read timeout is 1900s).
     SAGE_IDLE_TIMEOUT_SECONDS: int = 1800
+    # Tools (sagex commands the CLI runs for Sage). The CLI sends its command
+    # index once per connection; tool calls go to the CLI and their results
+    # come back as data. Rounds bound one turn's cost like AUTOBOT_MAX_TOOL_ROUNDS.
+    SAGE_MAX_TOOL_ROUNDS: int = 8
+    SAGE_MAX_INDEX_CHARS: int = 8000
+    SAGE_MAX_TOOL_OUTPUT_CHARS: int = 8000
+    # How long to wait for the CLI to answer one tool call (it runs the command
+    # locally; read commands are quick, a stuck one shouldn't hold the turn).
+    SAGE_TOOL_RESULT_TIMEOUT_SECONDS: int = 180
 
     AUTOBOT_CTX_TTL_SECONDS: int = 7200
     AUTOBOT_CONTEXT_TARGET_RATIO: float = 0.6

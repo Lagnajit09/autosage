@@ -1,22 +1,32 @@
-"""One Sage conversation over a WebSocket: turns, model choice, quota, streaming.
+"""One Sage conversation over a WebSocket: turns, tools, model choice, quota.
 
 Protocol (JSON text frames; one turn at a time per connection):
 
   client → server
+    {"type": "hello", "index": "...", "tools": ["sagex_read", ...]}   optional, before a turn
     {"type": "turn", "text": "...", "context": {"last_command": {...}}}   context optional
+    {"type": "tool_result", "id": "...", "exit_code": int, "output": "...", "truncated": bool}
+    {"type": "tool_result", "id": "...", "error": "..."}                 refused / couldn't run
     {"type": "cancel"}                                                   stop the current turn
 
   server → client
-    {"type": "ready",  "session_id": "..."}                    once, after auth
+    {"type": "ready",  "session_id": "...", "features": ["tools"]}   once, after auth
+    {"type": "hello",  "tools": [...], "message"?: "..."}      answers the client's hello
     {"type": "token",  "text": "..."}                          streamed reply pieces
+    {"type": "tool_call", "id": "...", "name": "...", "args": [...]}   run this, answer with tool_result
     {"type": "done",   "cancelled": bool, "model": "...", "byo": bool, "usage": {...}}
     {"type": "error",  "code": "...", "message": "...", "fatal": bool}
 
   A turn ends with exactly one `done` or `error`. `fatal` errors are followed by
   the server closing the socket (4401 session invalid, 4408 idle, 1013 retry).
 
-Phase 1.3 scope: a single agent with no tools, and history kept only in this
-connection's memory (bounded). Persistence (sage_api) and tools come next.
+Tools: the CLI's `hello` carries its command index and the tools it can run;
+the server advertises the intersection with what it knows (sage/tools.py).
+Without a `hello`, Sage has no tools and says so. The CLI runs every command
+and decides locally whether it may run — the server never executes anything.
+
+History is kept only in this connection's memory (bounded); persistence
+(sage_api) comes later.
 """
 
 from __future__ import annotations
@@ -40,8 +50,9 @@ from llm.client import (
     resolve_admin_chain,
     resolve_from_llm_config,
 )
+from sage import tools as sage_tools
 from sage.auth import SageAuth, SageAuthError, recheck
-from sage.prompts import SAGE_SYSTEM_PROMPT
+from sage.prompts import system_prompt
 from settings import get_settings
 
 logger = logging.getLogger(__name__)
@@ -101,23 +112,27 @@ async def resolve_models(auth: SageAuth) -> list[LLMResolution]:
 
 
 def _final(cand: LLMResolution, content: str) -> dict[str, Any]:
-    return {"content": content, "provider": cand.provider, "model_name": cand.model_name,
+    return {"content": content, "tool_calls": [], "provider": cand.provider,
+            "model_name": cand.model_name,
             "prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
 
 
-async def stream_reply(messages: list[dict[str, Any]], resolutions: list[LLMResolution]):
+async def stream_reply(messages: list[dict[str, Any]], resolutions: list[LLMResolution],
+                       tools: list[dict[str, Any]] | None = None):
     """Yield ("token", str)… then one ("done", final), trying fallbacks.
 
     A retryable failure moves to the next model only before any token was
     sent — never splice two models into one reply. A failure after tokens
-    keeps what the user already saw.
+    keeps what the user already saw. `final["resolution"]` is the model that
+    answered, so later tool rounds of the turn stay on it (providers encode
+    tool-call ids differently; switching mid-turn breaks them).
     """
     last = len(resolutions) - 1
     for idx, cand in enumerate(resolutions):
         pieces: list[str] = []
         final: dict[str, Any] | None = None
         try:
-            async for kind, payload in astream_complete(messages, cand):
+            async for kind, payload in astream_complete(messages, cand, tools=tools):
                 if kind == "token":
                     pieces.append(payload)
                     yield "token", payload
@@ -134,7 +149,9 @@ async def stream_reply(messages: list[dict[str, Any]], resolutions: list[LLMReso
             else:
                 exhausted = cand.is_admin and idx == last and last > 0
                 raise TurnError("llm_error", friendly_llm_message(e.kind, all_exhausted=exhausted)) from e
-        yield "done", final or _final(cand, "".join(pieces))
+        final = dict(final or _final(cand, "".join(pieces)))
+        final["resolution"] = cand
+        yield "done", final
         return
 
 
@@ -161,18 +178,51 @@ def _context_block(context: Any) -> str:
     )
 
 
+_EMPTY_REPLY = ("I don't have anything to add here. Let me know if you'd like me to "
+                "continue or try something else.")
+_ROUNDS_EXHAUSTED = ("I worked through several steps but couldn't finish in one turn. "
+                     "The results are above — tell me how you'd like to continue.")
+
+
 class SageConversation:
-    """State for one connection: who's talking and the bounded history."""
+    """State for one connection: who's talking, its tools, and the bounded history."""
 
     def __init__(self, auth: SageAuth, send: Send, close: Close) -> None:
         self.auth = auth
         self._send = send
         self._close = close
-        self.history: list[dict[str, str]] = []
+        # One entry per finished turn: that turn's messages (user, any assistant
+        # tool-call + tool messages, final assistant). Trimmed by whole turns so
+        # a tool message is never left without the call it answers.
+        self.history: list[list[dict[str, Any]]] = []
+        # Set by the CLI's `hello`: the command index and the tools offered.
+        self.index: str | None = None
+        self.tool_names: frozenset[str] = frozenset()
+        # Tool calls sent to the CLI, awaiting its `tool_result`.
+        self._pending: dict[str, asyncio.Future] = {}
+        self._call_seq = 0
         # True from accepting a turn until its last frame is sent. Cleared
         # BEFORE that frame goes out: a client may send its next turn the
         # instant it sees `done`, before this task has fully unwound.
         self.busy = False
+
+    def set_tools(self, index: Any, names: Any) -> bool:
+        """Apply a `hello`. False (and no tools) if the index is unusable."""
+        settings = get_settings()
+        cleaned = sage_tools.clean_index(index, settings.SAGE_MAX_INDEX_CHARS)
+        offered = {n for n in names if isinstance(n, str)} if isinstance(names, list) else set()
+        if cleaned is None:
+            self.index, self.tool_names = None, frozenset()
+            return False
+        self.index = cleaned
+        self.tool_names = frozenset(offered & sage_tools.SERVER_TOOLS)
+        return True
+
+    def deliver(self, frame: dict[str, Any]) -> None:
+        """Hand a `tool_result` to the call waiting for it (unknown ids are ignored)."""
+        future = self._pending.get(str(frame.get("id") or ""))
+        if future is not None and not future.done():
+            future.set_result(frame)
 
     async def _finish(self, frame: dict[str, Any]) -> None:
         """Send a turn's terminal frame (`done`/`error`), marking it idle first."""
@@ -226,35 +276,105 @@ class SageConversation:
         if not is_byo:
             await self._tick_admin_quota()
 
-        user_content = _context_block(context) + text
-        messages = [{"role": "system", "content": SAGE_SYSTEM_PROMPT}, *self.history,
-                    {"role": "user", "content": user_content}]
+        user_msg = {"role": "user", "content": _context_block(context) + text}
+        tool_names = self.tool_names if self.index else frozenset()
+        tools = sage_tools.schemas_for(tool_names) or None
+        messages: list[dict[str, Any]] = [
+            {"role": "system", "content": system_prompt(self.index if tools else None)},
+            *(m for past in self.history for m in past),
+            user_msg,
+        ]
+        turn_msgs: list[dict[str, Any]] = [user_msg]
 
-        pieces: list[str] = []
-        final: dict[str, Any] | None = None
+        pieces: list[str] = []                     # every token the user saw this turn
+        usage = {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
+        model = ""
+        calls_made = 0
         try:
-            async for kind, payload in stream_reply(messages, resolutions):
-                if kind == "token":
-                    pieces.append(payload)
-                    await self._send({"type": "token", "text": payload})
-                else:
-                    final = payload
+            final: dict[str, Any] = {}
+            # Rounds 1..N may call tools; one extra tool-free round forces an
+            # answer if the model is still calling tools at the cap.
+            max_rounds = max(1, settings.SAGE_MAX_TOOL_ROUNDS) if tools else 1
+            for round_num in range(1, max_rounds + 2):
+                round_tools = tools if round_num <= max_rounds else None
+                final = await self._stream_round(messages, resolutions, round_tools, pieces)
+                resolutions = [final["resolution"]]          # pin the model for this turn
+                model = f"{final.get('provider', '')}/{final.get('model_name', '')}"
+                for k in usage:
+                    usage[k] += int(final.get(k) or 0)
+
+                calls = (final.get("tool_calls") or []) if round_tools else []
+                if not calls:
+                    break
+                assistant = {"role": "assistant", "content": final.get("content") or "",
+                             "tool_calls": calls}
+                messages.append(assistant)
+                turn_msgs.append(assistant)
+                for call in calls:
+                    calls_made += 1
+                    tool_msg = {"role": "tool", "tool_call_id": call.get("id") or "",
+                                "content": await self._run_tool(call, tool_names)}
+                    messages.append(tool_msg)
+                    turn_msgs.append(tool_msg)
+                if round_num == max_rounds:
+                    logger.warning("Sage: tool rounds exhausted (session=%s); forcing an answer",
+                                   self.auth.session_id)
         except asyncio.CancelledError:
+            # Keep only the user's message and what they saw — a half-finished
+            # tool exchange would leave history the provider rejects.
             partial = "".join(pieces)
-            self._remember(user_content, f"{partial}\n\n[interrupted by the user]" if partial
-                           else "[interrupted by the user before a reply]")
+            self._remember([user_msg, {
+                "role": "assistant",
+                "content": f"{partial}\n\n[interrupted by the user]" if partial
+                else "[interrupted by the user before a reply]",
+            }])
             await self._finish({"type": "done", "cancelled": True})
             raise
 
-        final = final or {}
-        self._remember(user_content, final.get("content") or "".join(pieces))
-        usage = {k: int(final.get(k) or 0)
-                 for k in ("prompt_tokens", "completion_tokens", "total_tokens")}
-        model = f"{final.get('provider', '')}/{final.get('model_name', '')}"
-        logger.info("SAGE_TURN session=%s model=%s byo=%s total_tokens=%d",
-                    self.auth.session_id, model, is_byo, usage["total_tokens"])
+        content = (final.get("content") or "").strip()
+        if not content:
+            content = _ROUNDS_EXHAUSTED if calls_made and tools else _EMPTY_REPLY
+            await self._send({"type": "token", "text": content})
+        self._remember([*turn_msgs, {"role": "assistant", "content": content}])
+        logger.info("SAGE_TURN session=%s model=%s byo=%s tool_calls=%d total_tokens=%d",
+                    self.auth.session_id, model, is_byo, calls_made, usage["total_tokens"])
         await self._finish({"type": "done", "cancelled": False, "model": model,
                             "byo": is_byo, "usage": usage})
+
+    async def _stream_round(self, messages, resolutions, tools, pieces: list[str]) -> dict[str, Any]:
+        """One model call: stream its text to the client, return its final payload."""
+        final: dict[str, Any] | None = None
+        async for kind, payload in stream_reply(messages, resolutions, tools):
+            if kind == "token":
+                pieces.append(payload)
+                await self._send({"type": "token", "text": payload})
+            else:
+                final = payload
+        return final or {**_final(resolutions[0], ""), "resolution": resolutions[0]}
+
+    async def _run_tool(self, call: dict[str, Any], allowed: frozenset[str]) -> str:
+        """Have the CLI run one tool call; return the tool message content."""
+        settings = get_settings()
+        fn = call.get("function") or {}
+        name = str(fn.get("name") or "")
+        try:
+            args = sage_tools.parse_call(name, str(fn.get("arguments") or ""), allowed)
+        except sage_tools.ToolCallError as e:
+            return f"error: {e}"
+
+        # Our own ids on the wire: model ids can be long, odd or repeated.
+        self._call_seq += 1
+        call_id = f"t{self._call_seq}"
+        future = asyncio.get_running_loop().create_future()
+        self._pending[call_id] = future
+        try:
+            await self._send({"type": "tool_call", "id": call_id, "name": name, "args": args})
+            result = await asyncio.wait_for(future, settings.SAGE_TOOL_RESULT_TIMEOUT_SECONDS)
+        except asyncio.TimeoutError:
+            return "error: SageCode didn't return this command's result in time."
+        finally:
+            self._pending.pop(call_id, None)
+        return sage_tools.format_result(result, settings.SAGE_MAX_TOOL_OUTPUT_CHARS)
 
     async def _tick_admin_quota(self) -> None:
         """Shared with the web chat: one tick per turn on the free (admin) models."""
@@ -270,12 +390,15 @@ class SageConversation:
                 "or try again tomorrow.",
             )
 
-    def _remember(self, user_content: str, assistant_content: str) -> None:
-        self.history += [{"role": "user", "content": user_content},
-                         {"role": "assistant", "content": assistant_content}]
+    def _remember(self, turn_msgs: list[dict[str, Any]]) -> None:
+        """Keep a finished turn; drop the oldest whole turns past the cap.
+
+        The newest turn always stays, even if it alone is over the cap.
+        """
+        self.history.append(turn_msgs)
         cap = max(2, get_settings().SAGE_MAX_HISTORY_MESSAGES)
-        while len(self.history) > cap:
-            del self.history[:2]                 # drop the oldest exchange
+        while len(self.history) > 1 and sum(len(t) for t in self.history) > cap:
+            del self.history[0]
 
     async def _safe_send(self, frame: dict[str, Any]) -> None:
         try:
@@ -300,7 +423,11 @@ def _parse(message: dict[str, Any], limit: int) -> dict[str, Any] | None:
 async def serve(websocket: WebSocket, auth: SageAuth, send: Send) -> None:
     """Read frames until the client leaves, running one turn at a time."""
     settings = get_settings()
-    frame_limit = settings.SAGE_MAX_MESSAGE_CHARS + settings.SAGE_MAX_CONTEXT_CHARS * 2 + 4096
+    # The largest legitimate frame: a turn with context, the hello's index, or
+    # a tool result (JSON escaping can double its size).
+    frame_limit = 4096 + max(settings.SAGE_MAX_MESSAGE_CHARS + settings.SAGE_MAX_CONTEXT_CHARS * 2,
+                             settings.SAGE_MAX_INDEX_CHARS * 2,
+                             settings.SAGE_MAX_TOOL_OUTPUT_CHARS * 2)
 
     async def close(code: int) -> None:
         try:
@@ -309,7 +436,9 @@ async def serve(websocket: WebSocket, auth: SageAuth, send: Send) -> None:
             pass
 
     convo = SageConversation(auth, send, close)
-    await send({"type": "ready", "session_id": auth.session_id})
+    # `features` lets a CLI know this server understands `hello` + tools; an
+    # older server would answer an unknown frame with bad_frame.
+    await send({"type": "ready", "session_id": auth.session_id, "features": ["tools"]})
     task: asyncio.Task | None = None
     try:
         while True:
@@ -338,6 +467,22 @@ async def serve(websocket: WebSocket, auth: SageAuth, send: Send) -> None:
                     continue
                 convo.busy = True
                 task = asyncio.create_task(convo.run(frame.get("text"), frame.get("context")))
+            elif kind == "tool_result":
+                convo.deliver(frame)
+            elif kind == "hello":
+                if convo.busy:
+                    await send({"type": "error", "code": "busy", "fatal": False,
+                                "message": "Sage is still answering."})
+                else:
+                    # Always answered, so the CLI can wait for it before the first turn.
+                    reply: dict[str, Any] = {"type": "hello"}
+                    if convo.set_tools(frame.get("index"), frame.get("tools")):
+                        reply["tools"] = sorted(convo.tool_names)
+                    else:
+                        reply["tools"] = []
+                        reply["message"] = ("Sage couldn't use this sagex's command list, so it "
+                                            "can't run commands in this conversation.")
+                    await send(reply)
             elif kind == "cancel":
                 if convo.busy and task is not None:
                     task.cancel()
