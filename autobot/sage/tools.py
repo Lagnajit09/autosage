@@ -5,6 +5,8 @@ model calls one it forwards `{name, args}` to the CLI as a `tool_call` frame;
 the CLI parses the command with sagex's real parser, decides whether it may run
 (its own fixed read/change table, not the model's say-so), runs it, and answers
 with a `tool_result` frame. The server only checks the call's shape and bounds.
+A `sagex_change` call also waits for the user to approve it in the terminal —
+the approval happens in the CLI, which the model can't reach.
 
 Few generic tools instead of one per command: the model learns the commands
 from a compact index the CLI sends once per connection (see prompts.py), and
@@ -37,6 +39,28 @@ TOOL_SCHEMAS: dict[str, dict[str, Any]] = {
             },
         },
     },
+    "sagex_change": {
+        "type": "function",
+        "function": {
+            "name": "sagex_change",
+            "description": (
+                "Run a sagex command that changes things or runs long (run, create, update, "
+                "rename, delete, push, copy…). The user approves each call in their terminal "
+                "first, unless they allowed that command for the session; deletes always ask. "
+                "`args` are the words after `sagex`, one per item. `summary` is one short line, "
+                "in plain words, of what it will do — shown to the user when asking, e.g. "
+                "\"Run deploy-app with version=1.4\"."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "args": {"type": "array", "items": _ARGS_ITEM},
+                    "summary": {"type": "string"},
+                },
+                "required": ["args", "summary"],
+            },
+        },
+    },
     "sagex_help": {
         "type": "function",
         "function": {
@@ -55,16 +79,21 @@ TOOL_SCHEMAS: dict[str, dict[str, Any]] = {
 }
 
 # Which argument carries the word list, per tool.
-_ARG_KEY = {"sagex_read": "args", "sagex_help": "command"}
+_ARG_KEY = {"sagex_read": "args", "sagex_change": "args", "sagex_help": "command"}
 
 SERVER_TOOLS = frozenset(TOOL_SCHEMAS)
+# Tools that wait on the user (approval) and may follow a long run.
+SLOW_TOOLS = frozenset({"sagex_change"})
 
 MAX_WORDS = 40
 MAX_WORD_CHARS = 1000
 MAX_TOTAL_CHARS = 4000
+MAX_SUMMARY_CHARS = 160
 
 # Control characters other than newline/tab never belong in the index.
 _CONTROL = re.compile(r"[\x00-\x08\x0b-\x1f\x7f]")
+# A summary is one line: every control character (incl. newlines) becomes a space.
+_SUMMARY_CONTROL = re.compile(r"[\x00-\x1f\x7f  ]+")
 
 
 class ToolCallError(Exception):
@@ -76,8 +105,22 @@ def schemas_for(names: frozenset[str] | set[str]) -> list[dict[str, Any]]:
     return [TOOL_SCHEMAS[n] for n in sorted(names) if n in TOOL_SCHEMAS]
 
 
-def parse_call(name: str, raw_arguments: str, allowed: frozenset[str] | set[str]) -> list[str]:
-    """The word list of a tool call, or ToolCallError.
+def clean_summary(value: Any) -> str:
+    """The model's one-line description of a change, made safe to show: one
+    line, bounded. Missing or empty is fine — the CLI describes the command
+    itself. (The CLI always shows the exact command too, so a misleading
+    summary can't hide what will run.)"""
+    if not isinstance(value, str):
+        return ""
+    text = " ".join(_SUMMARY_CONTROL.sub(" ", value).split())
+    if len(text) > MAX_SUMMARY_CHARS:
+        text = text[:MAX_SUMMARY_CHARS - 1].rstrip() + "…"
+    return text
+
+
+def parse_call(name: str, raw_arguments: str, allowed: frozenset[str] | set[str]) -> dict[str, Any]:
+    """The `tool_call` payload for a model's call — {"args": [...]} plus a
+    "summary" for sagex_change — or ToolCallError.
 
     Refuses names never advertised on this connection (a model can hallucinate
     one) — the dispatch-side half of the allow-list.
@@ -102,7 +145,9 @@ def parse_call(name: str, raw_arguments: str, allowed: frozenset[str] | set[str]
     if (len(words) > MAX_WORDS or any(len(w) > MAX_WORD_CHARS for w in words)
             or sum(len(w) for w in words) > MAX_TOTAL_CHARS):
         raise ToolCallError("That command is too long.")
-    return words
+    if name == "sagex_change":
+        return {"args": words, "summary": clean_summary(parsed.get("summary"))}
+    return {"args": words}
 
 
 def clean_index(text: Any, limit: int) -> str | None:

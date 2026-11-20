@@ -139,6 +139,10 @@ class AutobotSettings(BaseSettings):
     # How long to wait for the CLI to answer one tool call (it runs the command
     # locally; read commands are quick, a stuck one shouldn't hold the turn).
     SAGE_TOOL_RESULT_TIMEOUT_SECONDS: int = 180
+    # sagex_change waits for the user's approval and may follow a run live. The
+    # CLI bounds both itself (10 min to answer, 30 min to run); this only has to
+    # outlast them. The socket stays up meanwhile: client pings cross nginx.
+    SAGE_CHANGE_RESULT_TIMEOUT_SECONDS: int = 2700
 
     AUTOBOT_CTX_TTL_SECONDS: int = 7200
     AUTOBOT_CONTEXT_TARGET_RATIO: float = 0.6

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import time
 
 import pytest
 from fastapi import FastAPI
@@ -492,9 +493,74 @@ def test_refusal_from_the_cli_reaches_the_model(client, env):
 def test_parse_call_bounds():
     from sage.tools import ToolCallError, parse_call
     allowed = {"sagex_read", "sagex_help"}
-    assert parse_call("sagex_read", json.dumps({"args": ["sagex", "list", "run"]}), allowed) == ["list", "run"]
-    assert parse_call("sagex_help", json.dumps({"command": "run workflow"}), allowed) == ["run", "workflow"]
+    assert parse_call("sagex_read", json.dumps({"args": ["sagex", "list", "run"]}),
+                      allowed) == {"args": ["list", "run"]}
+    assert parse_call("sagex_help", json.dumps({"command": "run workflow"}),
+                      allowed) == {"args": ["run", "workflow"]}
     for raw in ('{"args": []}', '{"args": [1]}', '{"args": ["sagex"]}', '[]',
                 json.dumps({"args": ["x"] * 41}), json.dumps({"args": ["x" * 1001]})):
         with pytest.raises(ToolCallError):
             parse_call("sagex_read", raw, allowed)
+
+
+# --- changes (phase 1.4b) -------------------------------------------------------
+
+ALL_TOOLS = ("sagex_change", "sagex_help", "sagex_read")
+
+
+def test_change_call_carries_a_clean_summary():
+    from sage.tools import MAX_SUMMARY_CHARS, parse_call
+    allowed = set(ALL_TOOLS)
+    raw = json.dumps({"args": ["run", "workflow", "deploy"],
+                      "summary": "Run deploy\n\x1b[31mnow\x1b[0m  please  "})
+    payload = parse_call("sagex_change", raw, allowed)
+    assert payload == {"args": ["run", "workflow", "deploy"],
+                       "summary": "Run deploy [31mnow [0m please"}
+    long = parse_call("sagex_change", json.dumps({"args": ["x"], "summary": "y" * 500}), allowed)
+    assert len(long["summary"]) == MAX_SUMMARY_CHARS and long["summary"].endswith("…")
+    # Missing or not a string: the CLI describes the command itself.
+    assert parse_call("sagex_change", json.dumps({"args": ["x"], "summary": 7}), allowed)["summary"] == ""
+    assert parse_call("sagex_change", json.dumps({"args": ["x"]}), allowed)["summary"] == ""
+
+
+def test_change_round_trip_and_prompt(client, env):
+    env.script = [{"tool_calls": [_call("sagex_change", args=["run", "workflow", "deploy"],
+                                        summary="Run deploy")]},
+                  {"text": "It passed."}]
+    with client.websocket_connect("/sage/ws", headers=HEADERS) as ws:
+        assert _hello(ws, tools=ALL_TOOLS)["tools"] == list(ALL_TOOLS)
+        ws.send_json({"type": "turn", "text": "run deploy"})
+        assert ws.receive_json() == {"type": "tool_call", "id": "t1", "name": "sagex_change",
+                                     "args": ["run", "workflow", "deploy"], "summary": "Run deploy"}
+        ws.send_json({"type": "tool_result", "id": "t1", "error": "The user chose not to run it."})
+        _turn_frames(ws)
+    system = env.prompts[0][0]["content"]
+    assert "sagex_change(args, summary)" in system and "If the user declines" in system
+    assert "not available to you yet" not in system
+    assert env.prompts[1][-1]["content"] == "error: The user chose not to run it."
+
+
+def test_prompt_without_the_change_tool_says_to_hand_over_commands(client, env):
+    with client.websocket_connect("/sage/ws", headers=HEADERS) as ws:
+        _hello(ws)                                          # help + read only (an older CLI)
+        ws.send_json({"type": "turn", "text": "hi"})
+        _turn_frames(ws)
+    system = env.prompts[0][0]["content"]
+    assert "sagex_change" not in system and "not available to you yet" in system
+
+
+def test_change_waits_longer_than_a_read(client, env, monkeypatch):
+    # A read would time out at once; a change (waiting on approval) doesn't.
+    monkeypatch.setattr(get_settings(), "SAGE_TOOL_RESULT_TIMEOUT_SECONDS", 0.01)
+    env.script = [{"tool_calls": [_call("sagex_change", args=["rename", "vault", "a", "b"],
+                                        summary="Rename vault a to b")]},
+                  {"text": "Renamed."}]
+    with client.websocket_connect("/sage/ws", headers=HEADERS) as ws:
+        _hello(ws, tools=ALL_TOOLS)
+        ws.send_json({"type": "turn", "text": "rename a"})
+        call = ws.receive_json()
+        time.sleep(0.1)                                     # the user thinks it over
+        ws.send_json({"type": "tool_result", "id": call["id"], "exit_code": 0, "output": "✓ Renamed"})
+        frames = _turn_frames(ws)
+    assert _text(frames) == "Renamed."
+    assert "✓ Renamed" in env.prompts[1][-1]["content"]

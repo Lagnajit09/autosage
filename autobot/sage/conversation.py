@@ -13,7 +13,9 @@ Protocol (JSON text frames; one turn at a time per connection):
     {"type": "ready",  "session_id": "...", "features": ["tools"]}   once, after auth
     {"type": "hello",  "tools": [...], "message"?: "..."}      answers the client's hello
     {"type": "token",  "text": "..."}                          streamed reply pieces
-    {"type": "tool_call", "id": "...", "name": "...", "args": [...]}   run this, answer with tool_result
+    {"type": "tool_call", "id": "...", "name": "...", "args": [...], "summary"?: "..."}
+                                                               run this, answer with tool_result
+                                                               (summary: sagex_change only)
     {"type": "done",   "cancelled": bool, "model": "...", "byo": bool, "usage": {...}}
     {"type": "error",  "code": "...", "message": "...", "fatal": bool}
 
@@ -23,7 +25,8 @@ Protocol (JSON text frames; one turn at a time per connection):
 Tools: the CLI's `hello` carries its command index and the tools it can run;
 the server advertises the intersection with what it knows (sage/tools.py).
 Without a `hello`, Sage has no tools and says so. The CLI runs every command
-and decides locally whether it may run — the server never executes anything.
+and decides locally whether it may run — the server never executes anything —
+and asks the user to approve every `sagex_change` call before running it.
 
 History is kept only in this connection's memory (bounded); persistence
 (sage_api) comes later.
@@ -280,7 +283,7 @@ class SageConversation:
         tool_names = self.tool_names if self.index else frozenset()
         tools = sage_tools.schemas_for(tool_names) or None
         messages: list[dict[str, Any]] = [
-            {"role": "system", "content": system_prompt(self.index if tools else None)},
+            {"role": "system", "content": system_prompt(self.index if tools else None, tool_names)},
             *(m for past in self.history for m in past),
             user_msg,
         ]
@@ -358,7 +361,7 @@ class SageConversation:
         fn = call.get("function") or {}
         name = str(fn.get("name") or "")
         try:
-            args = sage_tools.parse_call(name, str(fn.get("arguments") or ""), allowed)
+            payload = sage_tools.parse_call(name, str(fn.get("arguments") or ""), allowed)
         except sage_tools.ToolCallError as e:
             return f"error: {e}"
 
@@ -367,9 +370,11 @@ class SageConversation:
         call_id = f"t{self._call_seq}"
         future = asyncio.get_running_loop().create_future()
         self._pending[call_id] = future
+        timeout = (settings.SAGE_CHANGE_RESULT_TIMEOUT_SECONDS if name in sage_tools.SLOW_TOOLS
+                   else settings.SAGE_TOOL_RESULT_TIMEOUT_SECONDS)
         try:
-            await self._send({"type": "tool_call", "id": call_id, "name": name, "args": args})
-            result = await asyncio.wait_for(future, settings.SAGE_TOOL_RESULT_TIMEOUT_SECONDS)
+            await self._send({"type": "tool_call", "id": call_id, "name": name, **payload})
+            result = await asyncio.wait_for(future, timeout)
         except asyncio.TimeoutError:
             return "error: SageCode didn't return this command's result in time."
         finally:
