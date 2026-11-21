@@ -58,6 +58,15 @@ class AutobotMessageCreateThrottle(UserRateThrottle):
     scope = 'autobot_message_create'
 
 
+# Sage conversations (sage_api): a turn is one write, opening /sessions a
+# couple of reads; summaries are rare.
+class SageBurstThrottle(UserRateThrottle):
+    scope = 'sage_burst'
+
+class SageSustainedThrottle(UserRateThrottle):
+    scope = 'sage_sustained'
+
+
 class HttpTriggerThrottle(SimpleRateThrottle):
     """Throttle public HTTP trigger calls per trigger_token (no auth user)."""
     scope = 'http_trigger'

@@ -123,19 +123,31 @@ class AutobotSettings(BaseSettings):
     SAGE_SESSION_CACHE_SECONDS: int = 60
     # Burst rate limit (slowapi) on Sage routes, keyed per SageCode session.
     SAGE_RATE_LIMIT: str = "30/minute"
-    # Bounds on the Sage WebSocket conversation. History lives only in the
-    # connection's memory for now (no persistence yet), capped by message count.
+    # Bounds on the Sage WebSocket conversation.
     SAGE_MAX_MESSAGE_CHARS: int = 8000
     SAGE_MAX_CONTEXT_CHARS: int = 6000      # last-command context the CLI attaches
-    SAGE_MAX_HISTORY_MESSAGES: int = 40
+    SAGE_MAX_HISTORY_MESSAGES: int = 80
     # Old tool output is shortened in the history (sage/compaction.py): turns
     # older than the last SAGE_FULL_TOOL_TURNS keep results up to
     # SAGE_COMPACT_TOOL_CHARS in full, longer ones become a digest. Past
     # SAGE_MAX_HISTORY_CHARS everything but the newest turn is shortened,
-    # then the oldest turns are dropped.
+    # then the oldest turns are dropped (a last resort: summaries come first).
     SAGE_FULL_TOOL_TURNS: int = 2
     SAGE_COMPACT_TOOL_CHARS: int = 600
     SAGE_MAX_HISTORY_CHARS: int = 120_000
+    # Summaries (sage/summary.py): before a turn, a history over either
+    # trigger has all but its last SAGE_SUMMARY_KEEP_TURNS turns folded into a
+    # summary by the turn's own model. Set below the hard caps above.
+    SAGE_SUMMARY_TRIGGER_CHARS: int = 60_000
+    SAGE_SUMMARY_TRIGGER_MESSAGES: int = 60
+    SAGE_SUMMARY_KEEP_TURNS: int = 3
+    SAGE_MAX_SUMMARY_CHARS: int = 8000
+    # Saved conversations (sage/store.py → Django sage_api). Tool results and
+    # file text longer than SAGE_STORED_TOOL_CHARS are digested before saving,
+    # so a user's local files never reach the database in full.
+    SAGE_STORE_ENABLED: bool = True
+    SAGE_STORED_TOOL_CHARS: int = 2000
+    SAGE_STORE_TIMEOUT_SECONDS: float = 8.0
     # Close a connection with no turn for this long (nginx read timeout is 1900s).
     SAGE_IDLE_TIMEOUT_SECONDS: int = 1800
     # Tools (sagex commands the CLI runs for Sage). The CLI sends its command

@@ -67,6 +67,86 @@ def test_garbage_inside_tags_is_dropped_not_run():
     assert prose == "Sure." and calls == []
 
 
+NAMES = {"sagex_read", "sagex_help", "read_file"}
+
+
+def _named(text):
+    prose, calls = tc.parse(text, NAMES)
+    return prose, [(c["function"]["name"], json.loads(c["function"]["arguments"])) for c in calls]
+
+
+def test_mistral_tool_calls():
+    assert _named('[TOOL_CALLS][{"name": "sagex_read", "arguments": {"args": ["list"]}}]') == (
+        "", [("sagex_read", {"args": ["list"]})])
+    assert _named('Checking.[TOOL_CALLS]sagex_help[ARGS]{"command": ["run"]}') == (
+        "Checking.", [("sagex_help", {"command": ["run"]})])
+
+
+def test_llama_python_tag_and_bare_json():
+    assert _named('<|python_tag|>{"name": "sagex_read", "parameters": {"args": ["list"]}}<|eom_id|>')[1] == [
+        ("sagex_read", {"args": ["list"]})]
+    assert _named('{"name": "sagex_read", "parameters": {"args": ["list", "run"]}}') == (
+        "", [("sagex_read", {"args": ["list", "run"]})])
+    assert _named('I will look.\n{"type": "function", "function": {"name": "read_file", '
+                  '"arguments": {"path": "a.sh"}}}') == ("I will look.", [("read_file", {"path": "a.sh"})])
+
+
+def test_gemma_tool_code():
+    assert _named("```tool_code\nprint(default_api.sagex_read(args=['list', 'run']))\n```")[1] == [
+        ("sagex_read", {"args": ["list", "run"]})]
+    assert _named("<tool_code>read_file(path='a.sh', offset=3)</tool_code>")[1] == [
+        ("read_file", {"path": "a.sh", "offset": 3})]
+    # Never evaluated: a non-literal argument just isn't a call.
+    assert _named("```tool_code\nread_file(path=__import__('os').getcwd())\n```") == ("", [])
+
+
+def test_deepseek_tokens():
+    old = ('<｜tool▁calls▁begin｜><｜tool▁call▁begin｜>function<｜tool▁sep｜>sagex_read\n```json\n'
+           '{"args": ["list"]}\n```<｜tool▁call▁end｜><｜tool▁calls▁end｜>')
+    new = ('<｜tool▁calls▁begin｜><｜tool▁call▁begin｜>sagex_help<｜tool▁sep｜>{"command": ["run"]}'
+           '<｜tool▁call▁end｜><｜tool▁calls▁end｜><｜end▁of▁sentence｜>')
+    assert _named(old) == ("", [("sagex_read", {"args": ["list"]})])
+    assert _named(new) == ("", [("sagex_help", {"command": ["run"]})])
+
+
+def test_gpt_oss_channels():
+    text = ('<|channel|>analysis<|message|>The user wants runs.<|end|>'
+            '<|start|>assistant<|channel|>commentary to=functions.sagex_read <|constrain|>json'
+            '<|message|>{"args": ["list", "run"]}<|call|>')
+    assert _named(text) == ("", [("sagex_read", {"args": ["list", "run"]})])
+    answer = ('<|channel|>analysis<|message|>think think<|end|><|start|>assistant'
+              '<|channel|>final<|message|>Two runs failed.<|return|>')
+    assert _named(answer) == ("Two runs failed.", [])
+
+
+def test_json_that_is_not_a_call_stays():
+    # An example in an answer: unknown name, or prose around it, or no tools at all.
+    example = '```json\n{"name": "deploy", "nodes": []}\n```'
+    assert tc.parse(example, NAMES) == (example, [])
+    assert tc.parse('{"name": "sagex_read", "arguments": {}}') == (
+        '{"name": "sagex_read", "arguments": {}}', [])            # session without tools
+    mixed = '```json\n{"name": "sagex_read", "arguments": {}}\nplus a note\n```'
+    assert tc.parse(mixed, NAMES) == (mixed, [])
+    assert _named('```json\n{"name": "sagex_read", "arguments": {"args": ["list"]}}\n```')[1] == [
+        ("sagex_read", {"args": ["list"]})]
+
+
+def test_reasoning_and_template_tokens_are_removed():
+    assert tc.strip_tool_markup("<think>\nThe user wants X.\n</think>\n\nHere it is.<|im_end|>") == "Here it is."
+    assert tc.strip_tool_markup("<thinking>a</thinking>Done.</s>") == "Done."
+    assert tc.strip_tool_markup("Answer.<|eot_id|>") == "Answer."
+    assert tc.strip_tool_markup("<|im_start|>assistant\nHi") == "Hi"
+    assert tc.strip_tool_markup("stray</think> close") == "stray close"
+    assert tc.strip_tool_markup("<think>never closed") == ""
+
+
+def test_markup_inside_code_is_left_alone():
+    for text in ("Wrap reasoning in `<think>` tags.",
+                 "```bash\necho '<tool_call>' # <|im_end|>\n```",
+                 "```python\nprint('[TOOL_CALLS]')\n```"):
+        assert tc.parse(text, NAMES) == (text, [])
+
+
 # --- streaming ------------------------------------------------------------------
 
 def _stream(pieces):
@@ -86,6 +166,36 @@ def test_stream_releases_a_lone_angle_bracket():
 
 def test_stream_keeps_prose_after_a_closed_call():
     assert _stream(["A <tool_call>{}</tool_call>", " then B"]) == "A then B"
+
+
+_SAMPLES = [
+    "Let me check. <tool_call>{\"name\": \"sagex_read\", \"arguments\": {}}</tool_call>",
+    "<think>plan it</think>\n\nThe run **failed** at `step 2` (exit 1).<|im_end|>",
+    "Use `<think>` tags.\n\n```bash\necho \"<tool_call>\"\n```\nDone [TOOL_CALLS][{\"name\": \"x\"}]",
+    "Looking.\n{\"name\": \"sagex_read\", \"parameters\": {\"args\": [\"list\"]}}",
+    "Example:\n```json\n{\"name\": \"deploy\"}\n```\nand a < b > c.",
+    "<|channel|>analysis<|message|>hm<|end|><|start|>assistant<|channel|>final<|message|>All good.<|return|>",
+    "Answer with a [link](https://x.example) and a table:\n\n| a | b |\n|---|---|\n| 1 | 2 |",
+]
+
+
+@pytest.mark.parametrize("text", _SAMPLES)
+def test_streaming_matches_the_final_text_at_every_split(text):
+    final = tc.strip_tool_markup(text, NAMES)
+    for cut in range(1, len(text)):
+        f = tc.StreamFilter(NAMES)
+        shown = f.feed(text[:cut]) + f.feed(text[cut:]) + f.finish()
+        assert shown == final, cut
+    # One character at a time, too.
+    f = tc.StreamFilter(NAMES)
+    assert "".join(f.feed(ch) for ch in text) + f.finish() == final
+
+
+def test_stream_holds_an_unsettled_json_fence():
+    f = tc.StreamFilter(NAMES)
+    assert f.feed("Here:\n```json\n{\"name\": \"sagex_read\"") == "Here:"
+    assert f.feed(", \"arguments\": {}}\n```") == ""          # a call: never shown
+    assert f.finish() == ""
 
 
 # --- models that reject tools -----------------------------------------------------

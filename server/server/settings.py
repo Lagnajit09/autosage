@@ -132,6 +132,8 @@ REST_FRAMEWORK = {
         'autobot_burst': '30/minute',
         'autobot_sustained': '500/day',
         'autobot_message_create': '60/minute',
+        'sage_burst': '60/minute',
+        'sage_sustained': '3000/day',
         # Public docs-search endpoint, keyed per client IP (no auth user).
         'docs_search': '60/minute',
         # `sagex auth login`: starting is public (per IP); the CLI polls every

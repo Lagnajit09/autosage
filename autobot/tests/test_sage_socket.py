@@ -40,10 +40,14 @@ class RoutedDjango:
     def __init__(self, routes):
         self.routes = routes
         self.calls: list[tuple[str, str]] = []
+        self.bodies: list[tuple[str, str, object]] = []
 
-    async def request(self, *, method, path, **_kwargs):
+    async def request(self, *, method, path, json_body=None, **_kwargs):
         self.calls.append((method, path))
-        answer = self.routes.get(path, (404, {}))
+        self.bodies.append((method, path, json_body))
+        answer = self.routes.get((method, path), self.routes.get(path, (404, {})))
+        if callable(answer):
+            return answer(json_body)
         if isinstance(answer, list):
             answer = answer.pop(0) if len(answer) > 1 else answer[0]
         if isinstance(answer, Exception):
@@ -116,6 +120,9 @@ def env(monkeypatch):
         return 10
 
     monkeypatch.setattr(sage_auth, "get_django_client", lambda: Env.django)
+    # Saving conversations is tested in test_sage_store.py; here it's off so
+    # the fake Django doesn't need its routes.
+    monkeypatch.setattr(get_settings(), "SAGE_STORE_ENABLED", False)
     monkeypatch.setattr(conversation, "resolve_admin_chain", lambda: list(Env.chain))
     monkeypatch.setattr(conversation, "astream_complete", fake_stream)
     monkeypatch.setattr(conversation, "get_admin_daily_limit", fake_limit)
@@ -483,7 +490,7 @@ def test_strip_tool_markup_shapes():
     strip = conversation.strip_tool_markup
     assert strip("Done.") == "Done."
     assert strip("Ok <function=x><parameter=a>1</parameter></function>") == "Ok"
-    assert strip("A <tool_call>{\"name\": \"x\"}</tool_call> B") == "A  B"
+    assert strip("A <tool_call>{\"name\": \"x\"}</tool_call> B") == "A B"
     assert strip("<function_calls><invoke name=\"x\"></invoke></function_calls>") == ""
     assert strip("Use `<b>` tags") == "Use `<b>` tags"
 
