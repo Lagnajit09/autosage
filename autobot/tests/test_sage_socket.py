@@ -90,11 +90,14 @@ def env(monkeypatch):
         reply = Env.replies.get(resolution.model_name, ["Hel", "lo"])
         if isinstance(reply, Exception):
             raise reply
-        if Env.script:                         # {"tool_calls": [...]} and/or {"text": ...}
+        if Env.script:          # {"tool_calls": [...]} and/or {"text"|"tokens": ...}, or an error
             step = Env.script.pop(0)
-            if step.get("text"):
-                yield "token", step["text"]
-            yield "done", {"content": step.get("text") or "",
+            if isinstance(step, Exception):
+                raise step
+            tokens = step.get("tokens") or ([step["text"]] if step.get("text") else [])
+            for piece in tokens:
+                yield "token", piece
+            yield "done", {"content": "".join(tokens),
                            "tool_calls": step.get("tool_calls") or [],
                            "provider": resolution.provider, "model_name": resolution.model_name,
                            "prompt_tokens": 3, "completion_tokens": 2, "total_tokens": 5}
@@ -786,3 +789,78 @@ def test_history_over_the_character_budget_drops_old_turns(client, env, monkeypa
     users = [m["content"] for m in env.prompts[-1] if m["role"] == "user"]
     # Two turns of ~2100 characters don't fit 3000: the oldest went; the newest finished one stays.
     assert users == ["read file 1", "read file 2"]
+
+
+# --- models without (reliable) native tool support --------------------------------
+
+def test_a_call_written_as_text_runs_like_a_native_one(client, env):
+    env.script = [{"tokens": ["Let me look. <tool", "_call>{\"name\": \"sagex_read\", ",
+                              "\"arguments\": {\"args\": [\"list\", \"run\"]}}</tool_call>"]},
+                  {"text": "Two runs."}]
+    with client.websocket_connect("/sage/ws", headers=HEADERS) as ws:
+        _hello(ws)
+        ws.send_json({"type": "turn", "text": "runs?"})
+        shown = []
+        while (frame := ws.receive_json())["type"] != "tool_call":
+            shown.append(frame)
+        assert frame["name"] == "sagex_read" and frame["args"] == ["list", "run"]
+        ws.send_json({"type": "tool_result", "id": frame["id"], "exit_code": 0, "output": "r1\nr2"})
+        after = _turn_frames(ws)
+    assert _text(shown) == "Let me look." and _text(after) == "Two runs."   # no markup on screen
+    # Kept in the native shape: the next round sees a real tool call + result.
+    assistant, tool = env.prompts[1][-2:]
+    assert assistant["content"] == "Let me look." and assistant["tool_calls"][0]["function"]["name"] == "sagex_read"
+    assert tool == {"role": "tool", "tool_call_id": assistant["tool_calls"][0]["id"], "content": tool["content"]}
+
+
+def test_a_model_that_rejects_tools_gets_them_as_text(client, env):
+    env.script = [LLMError("ollama/gemma does not support tools", kind="bad_request"),
+                  {"text": "<tool_call>{\"name\": \"sagex_read\", \"arguments\": {\"args\": [\"list\", \"run\"]}}"
+                           "</tool_call>"},
+                  {"text": "One run."},
+                  {"text": "Hi again."}]
+    with client.websocket_connect("/sage/ws", headers=HEADERS) as ws:
+        _hello(ws)
+        ws.send_json({"type": "turn", "text": "runs?"})
+        notice = ws.receive_json()
+        assert notice["type"] == "notice" and "tool calling" in notice["message"]
+        call = ws.receive_json()
+        assert call["type"] == "tool_call" and call["args"] == ["list", "run"]
+        ws.send_json({"type": "tool_result", "id": call["id"], "exit_code": 0, "output": "run-1"})
+        assert _text(_turn_frames(ws)) == "One run."
+        ws.send_json({"type": "turn", "text": "hello"})
+        second = _turn_frames(ws)
+    assert not [f for f in second if f["type"] == "notice"]          # told once per connection
+    # Native attempt once; every later request is text-only, same model (no fallback).
+    assert env.tools_seen == [["sagex_help", "sagex_read"], None, None, None]
+    assert env.models == ["m1"] * 4
+    system = env.prompts[1][0]["content"]
+    assert "## How to call tools (this model)" in system and "- sagex_read:" in system
+    # The tool exchange reaches the model as plain text, never as tool messages.
+    later = env.prompts[2]
+    assert all(set(m) == {"role", "content"} for m in later)
+    assert "<tool_call>" in later[-2]["content"] and later[-1]["content"].startswith("<tool_response")
+
+
+def test_a_text_mode_model_is_not_retried_forever(client, env):
+    rejection = LLMError("does not support tools", kind="bad_request")
+    env.replies["m1"] = rejection                                    # every call fails the same way
+    with client.websocket_connect("/sage/ws", headers=HEADERS) as ws:
+        _hello(ws)
+        ws.send_json({"type": "turn", "text": "hi"})
+        frames = _turn_frames(ws)
+    assert frames[-1]["type"] == "error"
+    assert env.tools_seen == [["sagex_help", "sagex_read"], None]    # one switch, then give up
+
+
+def test_a_rejection_on_the_free_chain_tries_text_before_the_next_model(client, env):
+    env.chain = [ADMIN, ADMIN_2]
+    env.script = [LLMError("No endpoints found that support tool use", retryable=True,
+                           kind="model_unavailable"),
+                  {"text": "Answered as text."}]
+    with client.websocket_connect("/sage/ws", headers=HEADERS) as ws:
+        _hello(ws)
+        ws.send_json({"type": "turn", "text": "hi"})
+        frames = _turn_frames(ws)
+    assert _text(frames) == "Answered as text."
+    assert env.models == ["m1", "m1"]

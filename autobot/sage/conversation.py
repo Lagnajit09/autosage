@@ -22,6 +22,7 @@ Protocol (JSON text frames; one turn at a time per connection):
                  run_shell {command, summary}
     {"type": "done",   "cancelled": bool, "model": "...", "byo": bool, "usage": {...},
                        "limit_reached": bool}     true: stopped at SAGE_MAX_TOOL_ROUNDS
+    {"type": "notice", "message": "..."}         show as a note (e.g. tools passed as text)
     {"type": "error",  "code": "...", "message": "...", "fatal": bool}
 
   A turn ends with exactly one `done` or `error`. `fatal` errors are followed by
@@ -34,6 +35,10 @@ and decides locally whether it may run — the server never executes anything �
 and asks the user to approve everything but sagex reads and help (changes,
 file access, shell commands) before running it.
 
+Models without (reliable) native tools: calls written as text are read like
+native ones, and a model that rejects the tools parameter gets them described
+in text for the rest of the connection (sage/textcalls.py).
+
 History is kept only in this connection's memory, bounded by message count and
 characters; old tool output in it is shortened (sage/compaction.py).
 Persistence (sage_api) comes later.
@@ -44,7 +49,6 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-import re
 from collections.abc import Awaitable, Callable
 from typing import Any
 
@@ -61,7 +65,7 @@ from llm.client import (
     resolve_admin_chain,
     resolve_from_llm_config,
 )
-from sage import compaction
+from sage import compaction, textcalls
 from sage import tools as sage_tools
 from sage.auth import SageAuth, SageAuthError, recheck
 from sage.prompts import system_prompt
@@ -129,8 +133,14 @@ def _final(cand: LLMResolution, content: str) -> dict[str, Any]:
             "prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
 
 
+def model_key(cand: LLMResolution) -> str:
+    """Identifies a model endpoint for "this one takes tools as text" (no key in it)."""
+    return f"{cand.provider}|{cand.model}|{cand.base_url or ''}"
+
+
 async def stream_reply(messages: list[dict[str, Any]], resolutions: list[LLMResolution],
-                       tools: list[dict[str, Any]] | None = None):
+                       tools: list[dict[str, Any]] | None = None,
+                       text_models: set[str] | None = None):
     """Yield ("token", str)… then one ("done", final), trying fallbacks.
 
     A retryable failure moves to the next model only before any token was
@@ -138,33 +148,57 @@ async def stream_reply(messages: list[dict[str, Any]], resolutions: list[LLMReso
     keeps what the user already saw. `final["resolution"]` is the model that
     answered, so later tool rounds of the turn stay on it (providers encode
     tool-call ids differently; switching mid-turn breaks them).
+
+    Models in `text_models` get their tools as text (sage/textcalls.py). A
+    model that rejects the tools parameter is added to it, announced with
+    ("text_mode", resolution), and retried once that way before any fallback.
     """
+    text_models = text_models if text_models is not None else set()
     last = len(resolutions) - 1
     for idx, cand in enumerate(resolutions):
-        pieces: list[str] = []
-        final: dict[str, Any] | None = None
-        try:
-            async for kind, payload in astream_complete(messages, cand, tools=tools):
-                if kind == "token":
-                    pieces.append(payload)
-                    yield "token", payload
-                elif kind == "done":
-                    final = payload
-        except LLMError as e:
-            if pieces:
-                logger.warning("Sage: stream broke after content (%s/%s): %s",
-                               cand.provider, cand.model_name, e)
-            elif e.retryable and idx < last:
-                logger.warning("Sage: %s/%s failed (retryable): %s — trying fallback",
-                               cand.provider, cand.model_name, e)
-                continue
+        switched = False
+        while True:
+            text_mode = model_key(cand) in text_models
+            if text_mode:
+                send = textcalls.to_text_messages(
+                    messages, textcalls.format_section(tools) if tools else None)
+                send_tools = None
             else:
-                exhausted = cand.is_admin and idx == last and last > 0
-                raise TurnError("llm_error", friendly_llm_message(e.kind, all_exhausted=exhausted)) from e
-        final = dict(final or _final(cand, "".join(pieces)))
-        final["resolution"] = cand
-        yield "done", final
-        return
+                send, send_tools = messages, tools
+            pieces: list[str] = []
+            final: dict[str, Any] | None = None
+            try:
+                async for kind, payload in astream_complete(send, cand, tools=send_tools):
+                    if kind == "token":
+                        pieces.append(payload)
+                        yield "token", payload
+                    elif kind == "done":
+                        final = payload
+            except LLMError as e:
+                if (not pieces and send_tools and not switched
+                        and textcalls.tools_unsupported(str(e))):
+                    logger.info("Sage: %s/%s rejects tools; calling them as text",
+                                cand.provider, cand.model_name)
+                    text_models.add(model_key(cand))
+                    switched = True
+                    yield "text_mode", cand
+                    continue
+                if pieces:
+                    logger.warning("Sage: stream broke after content (%s/%s): %s",
+                                   cand.provider, cand.model_name, e)
+                elif e.retryable and idx < last:
+                    logger.warning("Sage: %s/%s failed (retryable): %s — trying fallback",
+                                   cand.provider, cand.model_name, e)
+                    break
+                else:
+                    exhausted = cand.is_admin and idx == last and last > 0
+                    raise TurnError("llm_error",
+                                    friendly_llm_message(e.kind, all_exhausted=exhausted)) from e
+            final = dict(final or _final(cand, "".join(pieces)))
+            final["resolution"] = cand
+            final["text_mode"] = text_mode
+            yield "done", final
+            return
 
 
 # --- the conversation ---------------------------------------------------------
@@ -229,23 +263,12 @@ _LAST_ROUND_NOTE = (
     "\"say continue\" if you can finish it with a few more steps.]"
 )
 
-# Tool calls written out as text (Hermes/Qwen `<tool_call>`, `<function=…>`,
-# Claude-style `<function_calls>`/`<invoke>`) — some models do this when no tools
-# are advertised. From an opener to its closer, or to the end if never closed.
-_TOOL_MARKUP_OPEN = re.compile(r"<(?:tool_call\b|function_calls\b|function=|invoke\b)", re.I)
-_TOOL_MARKUP_CLOSE = re.compile(r"</(?:tool_call|function_calls)\s*>", re.I)
+# Tool calls written out as text never reach the user (sage/textcalls.py).
+strip_tool_markup = textcalls.strip_tool_markup
 
-
-def strip_tool_markup(text: str) -> str:
-    """Remove tool calls a model wrote as text, so they never reach the user."""
-    out: list[str] = []
-    rest = text
-    while (start := _TOOL_MARKUP_OPEN.search(rest)) is not None:
-        out.append(rest[:start.start()])
-        close = _TOOL_MARKUP_CLOSE.search(rest, start.end())
-        rest = rest[close.end():] if close else ""
-    out.append(rest)
-    return re.sub(r"\n{3,}", "\n\n", "".join(out)).strip()
+_TEXT_MODE_NOTICE = ("This model doesn't support tool calling, so Sage is passing it its "
+                     "tools as text. It can still use them, but less reliably; a model with "
+                     "tool support works best (Autobot → Customize on the web).")
 
 
 class SageConversation:
@@ -265,6 +288,9 @@ class SageConversation:
         # Tool calls sent to the CLI, awaiting its `tool_result`.
         self._pending: dict[str, asyncio.Future] = {}
         self._call_seq = 0
+        # Models (model_key) that rejected native tools: they get them as text
+        # for the rest of the connection, and the user is told once.
+        self._text_models: set[str] = set()
         # True from accepting a turn until its last frame is sent. Cleared
         # BEFORE that frame goes out: a client may send its next turn the
         # instant it sees `done`, before this task has fully unwound.
@@ -359,8 +385,9 @@ class SageConversation:
         try:
             final: dict[str, Any] = {}
             # Rounds 1..N may call tools; one extra tool-free round forces an
-            # answer if the model is still calling tools at the cap. That answer
-            # is held back and cleaned (strip_tool_markup) before it's sent.
+            # answer if the model is still calling tools at the cap. Calls a
+            # model writes as text are read like native ones (sage/textcalls.py);
+            # their markup never reaches the user.
             max_rounds = max(1, settings.SAGE_MAX_TOOL_ROUNDS) if tools else 1
             for round_num in range(1, max_rounds + 2):
                 limit_reached = round_num > max_rounds
@@ -368,17 +395,19 @@ class SageConversation:
                 if limit_reached:
                     messages.append({"role": "user",
                                      "content": _LAST_ROUND_NOTE.format(rounds=max_rounds)})
-                final = await self._stream_round(messages, resolutions, round_tools, pieces,
-                                                 hold=limit_reached)
+                final = await self._stream_round(messages, resolutions, round_tools, pieces)
                 resolutions = [final["resolution"]]          # pin the model for this turn
                 model = f"{final.get('provider', '')}/{final.get('model_name', '')}"
                 for k in usage:
                     usage[k] += int(final.get(k) or 0)
 
                 calls = (final.get("tool_calls") or []) if round_tools else []
+                said = final.get("content") or ""
+                if round_tools and not calls:
+                    said, calls = textcalls.parse(said)
                 if not calls:
                     break
-                assistant = {"role": "assistant", "content": final.get("content") or "",
+                assistant = {"role": "assistant", "content": strip_tool_markup(said),
                              "tool_calls": calls}
                 messages.append(assistant)
                 turn_msgs.append(assistant)
@@ -403,14 +432,9 @@ class SageConversation:
             await self._finish({"type": "done", "cancelled": True})
             raise
 
-        content = (final.get("content") or "").strip()
-        streamed = not limit_reached               # the capped answer was held back
-        if limit_reached:
-            content = strip_tool_markup(content)
-        if not content:
+        content = strip_tool_markup(final.get("content") or "")
+        if not content:                            # nothing was shown: say something
             content = _ROUNDS_EXHAUSTED if calls_made and tools else _EMPTY_REPLY
-            streamed = False
-        if not streamed:
             pieces.append(content)
             await self._send({"type": "token", "text": content})
         self._remember([*turn_msgs, {"role": "assistant", "content": content}])
@@ -420,18 +444,25 @@ class SageConversation:
         await self._finish({"type": "done", "cancelled": False, "model": model,
                             "byo": is_byo, "usage": usage, "limit_reached": limit_reached})
 
-    async def _stream_round(self, messages, resolutions, tools, pieces: list[str],
-                            *, hold: bool = False) -> dict[str, Any]:
-        """One model call: stream its text to the client (unless `hold`, for the
-        answer at the round cap, which is cleaned first), return its final payload."""
+    async def _stream_round(self, messages, resolutions, tools, pieces: list[str]) -> dict[str, Any]:
+        """One model call: stream its text to the client minus any tool-call
+        markup (textcalls.StreamFilter), return its final payload."""
         final: dict[str, Any] | None = None
-        async for kind, payload in stream_reply(messages, resolutions, tools):
+        shown = textcalls.StreamFilter()
+
+        async def show(text: str) -> None:
+            if text:
+                pieces.append(text)
+                await self._send({"type": "token", "text": text})
+
+        async for kind, payload in stream_reply(messages, resolutions, tools, self._text_models):
             if kind == "token":
-                if not hold:
-                    pieces.append(payload)
-                    await self._send({"type": "token", "text": payload})
+                await show(shown.feed(payload))
+            elif kind == "text_mode":
+                await self._send({"type": "notice", "message": _TEXT_MODE_NOTICE})
             else:
                 final = payload
+        await show(shown.finish())
         return final or {**_final(resolutions[0], ""), "resolution": resolutions[0]}
 
     async def _run_tool(self, call: dict[str, Any], allowed: frozenset[str]) -> str:
