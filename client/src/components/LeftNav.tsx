@@ -4,6 +4,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import {
+  BarChart3,
   BookText,
   CodeXml,
   FileClock,
@@ -70,6 +71,13 @@ export const NavItems = ({ mobile = false }: { mobile?: boolean }) => {
       ),
       label: "AutoBot",
       onClick: () => navigate("/ai/autobot"),
+    },
+    {
+      icon: (
+        <BarChart3 className={cn("w-6 h-6", mobile ? "w-5 h-5 mr-2" : "")} />
+      ),
+      label: "Agent Dashboard",
+      onClick: () => navigate("/agent/dashboard"),
     },
   ];
 

@@ -37,7 +37,7 @@ export const AutobotDashboardHeader = ({
       <div className="flex items-center gap-2 md:gap-4 min-w-0">
         <SidebarTrigger className="md:hidden" />
         <div className="text-xl md:text-2xl font-bold text-gray-900 dark:text-gray-100 truncate">
-          Autobot Dashboard
+          Agent Dashboard
         </div>
       </div>
 

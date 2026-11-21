@@ -171,7 +171,8 @@ def test_streams_a_reply(client, env):
     done = frames[-1]
     assert done == {"type": "done", "cancelled": False, "model": "groq/m1", "byo": False,
                     "usage": {"prompt_tokens": 3, "completion_tokens": 2, "total_tokens": 5},
-                    "limit_reached": False}
+                    "limit_reached": False,
+                    "quota": {"used": 1, "limit": 10, "remaining": 9}}   # for the CLI's usage line
     assert env.cache.ticks == 1                       # one free-model turn, shared quota
     # No hello → no tools, and the prompt says it can't run anything.
     assert env.prompts[0][0]["content"] == SAGE_SYSTEM_PROMPT

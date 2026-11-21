@@ -24,7 +24,8 @@ Protocol (JSON text frames; one turn at a time per connection):
                  run_shell {command, summary}
     {"type": "done",   "cancelled": bool, "model": "...", "byo": bool, "usage": {...},
                        "limit_reached": bool,     true: stopped at SAGE_MAX_TOOL_ROUNDS
-                       "conversation_id"?: "..."}  once the conversation is saved
+                       "conversation_id"?: "...",  once the conversation is saved
+                       "quota"?: {used, limit, remaining}}  free allowance after a free-model turn
     {"type": "notice", "message": "..."}         show as a note (e.g. tools passed as text)
     {"type": "error",  "code": "...", "message": "...", "fatal": bool}
 
@@ -425,8 +426,7 @@ class SageConversation:
             raise TurnError("llm_unconfigured",
                             "No AI model is available for Sage right now. Please try again later.")
         is_byo = not resolutions[0].is_admin
-        if not is_byo:
-            await self._tick_admin_quota()
+        quota = None if is_byo else await self._tick_admin_quota()
 
         await self._maybe_summarize(resolutions)
 
@@ -513,9 +513,11 @@ class SageConversation:
                     usage["total_tokens"], limit_reached)
         await self._save(finished, context, prompt=text, reply=content, model=model, is_byo=is_byo,
                          usage=usage, tool_calls=calls_made, limit_reached=limit_reached)
-        await self._finish(self._with_id({"type": "done", "cancelled": False, "model": model,
-                                          "byo": is_byo, "usage": usage,
-                                          "limit_reached": limit_reached}))
+        done = {"type": "done", "cancelled": False, "model": model, "byo": is_byo, "usage": usage,
+                "limit_reached": limit_reached}
+        if quota is not None:
+            done["quota"] = quota
+        await self._finish(self._with_id(done))
 
     async def _stream_round(self, messages, resolutions, tools, pieces: list[str],
                             tool_names: frozenset[str] = frozenset()) -> dict[str, Any]:
@@ -567,12 +569,14 @@ class SageConversation:
             self._pending.pop(call_id, None)
         return sage_tools.format_result(result, settings.SAGE_MAX_TOOL_OUTPUT_CHARS)
 
-    async def _tick_admin_quota(self) -> None:
-        """Shared with the web chat: one tick per turn on the free (admin) models."""
+    async def _tick_admin_quota(self) -> dict[str, int] | None:
+        """Shared with the web chat: one tick per turn on the free (admin) models.
+        Returns the allowance after this tick (sent on `done` for the CLI's
+        usage line), or None when there's no cap."""
         limit = await get_admin_daily_limit(self.auth.user_sub)
         if limit <= 0:
-            return
-        allowed, _count = await get_cache().incr_admin_quota_for_today(self.auth.user_sub, limit)
+            return None
+        allowed, count = await get_cache().incr_admin_quota_for_today(self.auth.user_sub, limit)
         if not allowed:
             raise TurnError(
                 "admin_quota_exhausted",
@@ -580,6 +584,8 @@ class SageConversation:
                 "Add a personal LLM key in Autobot → Customize on the web to keep going, "
                 "or try again tomorrow.",
             )
+        used = min(int(count or 0), limit)
+        return {"used": used, "limit": limit, "remaining": max(0, limit - used)}
 
     def _remember(self, turn_msgs: list[dict[str, Any]]) -> None:
         """Keep a finished turn, then bound the history."""

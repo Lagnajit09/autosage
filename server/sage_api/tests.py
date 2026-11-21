@@ -121,6 +121,35 @@ class SageConversationTests(TestCase):
         listed = [c['id'] for c in self.cli.get(BASE).json()['data']['conversations']]
         self.assertEqual(listed, [a, b])
 
+    def test_usage_totals_turns_summaries_models_and_days(self):
+        cid = self._start()
+        self.cli.post(f'{BASE}{cid}/turns/', _turn(total_tokens=100, prompt_tokens=80, completion_tokens=20,
+                                                   tool_calls=2), format='json')
+        self.cli.post(f'{BASE}{cid}/turns/', _turn(total_tokens=50, is_byo=True, model='openai/gpt-x'),
+                      format='json')
+        self.cli.post(f'{BASE}{cid}/summaries/', {'text': 's', 'up_to_seq': 1, 'total_tokens': 7},
+                      format='json')
+        # Someone else's usage never counts.
+        theirs = SageConversation.objects.create(user=User.objects.get(username='user_b'))
+        SageTurn.objects.create(conversation=theirs, user=theirs.user, seq=1, total_tokens=999)
+
+        data = self.cli.get('/api/sage/usage/').json()['data']
+        today = data['today']
+        self.assertEqual((today['requests'], today['total_tokens'], today['tool_calls']), (2, 157, 2))
+        self.assertEqual((today['admin_tokens'], today['byo_tokens']), (107, 50))
+        self.assertEqual(today['conversations'], 1)
+        self.assertEqual({(m['provider'], m['model']) for m in today['model_usage']},
+                         {('groq', 'llama'), ('openai', 'gpt-x')})
+        self.assertEqual(data['all_time']['total_tokens'], 157)
+        self.assertEqual(len(data['daily']), 7)
+        self.assertEqual((data['daily'][-1]['requests'], data['daily'][-1]['total_tokens']), (2, 150))
+        self.assertEqual(data['devices'], [{'device': 'laptop', 'requests': 2, 'total_tokens': 150}])
+
+    def test_usage_for_a_new_user_is_zero(self):
+        data = self.other.get('/api/sage/usage/').json()['data']
+        self.assertEqual((data['today']['requests'], data['all_time']['total_tokens']), (0, 0))
+        self.assertEqual(data['devices'], [])
+
     def test_revoking_the_session_keeps_its_conversations(self):
         cid = self._start()
         self.api_key.delete()

@@ -96,6 +96,13 @@ const LastLocationTracker = () => {
   return null;
 };
 
+// The dashboard moved when it gained SageCode usage; keep old bookmarks (and
+// any ?tab=) working.
+const LegacyAgentDashboardRedirect = () => {
+  const { search } = useLocation();
+  return <Navigate to={{ pathname: "/agent/dashboard", search }} replace />;
+};
+
 const App = () => {
   const PUBLISHABLE_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
 
@@ -136,9 +143,14 @@ const App = () => {
                     <Route path="/raw/:id" element={<ScriptViewer />} />
                     <Route path="/execution-logs" element={<ExecutionLogs />} />
                     <Route path="/ai/autobot" element={<AutobotChat />} />
+                    {/* Usage for Autobot (web) and SageCode (terminal). */}
+                    <Route
+                      path="/agent/dashboard"
+                      element={<AutobotDashboard />}
+                    />
                     <Route
                       path="/ai/autobot/dashboard"
-                      element={<AutobotDashboard />}
+                      element={<LegacyAgentDashboardRedirect />}
                     />
                     <Route
                       path="/ai/autobot/archived"

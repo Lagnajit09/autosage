@@ -22,7 +22,7 @@ export interface RouteMeta {
 /**
  * Ordered most-specific → least-specific. `resolveRouteMeta` returns the first
  * match, so nested/dynamic routes must precede their broader siblings
- * (e.g. "/ai/autobot/dashboard" before "/ai/autobot/:id").
+ * (e.g. "/ai/autobot/archived" before "/ai/autobot/:id").
  */
 export const ROUTE_META: RouteMeta[] = [
   // ---- Public, indexable ---------------------------------------------------
@@ -89,7 +89,7 @@ export const ROUTE_META: RouteMeta[] = [
   { pattern: "/script-editor", title: "Script Editor", noIndex: true },
   { pattern: "/raw/:id", title: "Raw Script", noIndex: true },
   { pattern: "/execution-logs", title: "Execution Logs", noIndex: true },
-  { pattern: "/ai/autobot/dashboard", title: "Autobot Dashboard", noIndex: true },
+  { pattern: "/agent/dashboard", title: "Agent Dashboard", noIndex: true },
   { pattern: "/ai/autobot/archived", title: "Autobot Archive", noIndex: true },
   { pattern: "/ai/autobot/:id", title: "Autobot", noIndex: true },
   { pattern: "/ai/autobot", title: "Autobot", noIndex: true },

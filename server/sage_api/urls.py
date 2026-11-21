@@ -4,6 +4,7 @@ from . import views
 
 urlpatterns = [
     path('ping/', views.sage_ping, name='sage-ping'),
+    path('usage/', views.usage, name='sage-usage'),
     path('conversations/', views.conversations, name='sage-conversations'),
     path('conversations/<uuid:conversation_id>/', views.conversation_detail,
          name='sage-conversation-detail'),

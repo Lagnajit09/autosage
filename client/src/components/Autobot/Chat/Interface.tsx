@@ -1049,14 +1049,14 @@ const Interface = () => {
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button
-                    onClick={() => navigate("/ai/autobot/dashboard")}
+                    onClick={() => navigate("/agent/dashboard")}
                     className="flex items-center gap-2 cursor-pointer bg-transparent hover:bg-gray-100/70 dark:hover:bg-gray-800/70 py-2 px-3 rounded-full transition-colors"
                   >
                     <BarChart3 className="w-4 h-4 text-gray-800 dark:text-gray-200" />
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent>
-                  <p>Dashboard</p>
+                  <p>Agent Dashboard</p>
                 </TooltipContent>
               </Tooltip>
 

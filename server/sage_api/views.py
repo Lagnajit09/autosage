@@ -12,12 +12,15 @@ its own data.
     DELETE conversations/<id>/
     POST   conversations/<id>/turns/      append a finished turn
     POST   conversations/<id>/summaries/  record a summary of the older turns
+    GET    usage/                         SageCode usage: today, 7 days, all time
 """
 
 import json
+from datetime import timedelta
 
 from django.db import transaction
-from django.db.models import F
+from django.db.models import Count, F, Sum
+from django.db.models.functions import TruncDate
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from rest_framework import status
@@ -182,6 +185,84 @@ def append_turn(request, conversation_id):
             fields.append('title')
         convo.save(update_fields=fields)
     return api_response(message='Turn saved.', data={'seq': seq}, status_code=status.HTTP_201_CREATED)
+
+
+def _usage_bucket(turns, summaries):
+    """One window of SageCode usage, in the same shape as the web chat's
+    dashboard buckets (autobot_api `_bucket_stats`) so the UI can reuse its
+    tiles. A request is a turn; summary calls add tokens, not requests."""
+    totals = turns.aggregate(requests=Count('id'), total=Sum('total_tokens'),
+                             prompt=Sum('prompt_tokens'), completion=Sum('completion_tokens'),
+                             tool_calls=Sum('tool_calls'))
+    split = {row['is_byo']: row['t'] or 0
+             for row in turns.values('is_byo').annotate(t=Sum('total_tokens'))}
+    summary_split = {row['is_byo']: row['t'] or 0
+                     for row in summaries.values('is_byo').annotate(t=Sum('total_tokens'))}
+    requests = totals['requests'] or 0
+    total = (totals['total'] or 0) + sum(summary_split.values())
+    models = []
+    for row in (turns.exclude(model='').values('model').annotate(count=Count('id'))
+                .order_by('-count')[:10]):
+        provider, _, name = row['model'].partition('/')
+        models.append({'provider': provider, 'model': name or provider, 'count': row['count']})
+    return {
+        'requests': requests,
+        'total_tokens': total,
+        'prompt_tokens': totals['prompt'] or 0,
+        'completion_tokens': totals['completion'] or 0,
+        'avg_tokens_per_request': total // requests if requests else 0,
+        'admin_tokens': split.get(False, 0) + summary_split.get(False, 0),
+        'byo_tokens': split.get(True, 0) + summary_split.get(True, 0),
+        'model_usage': models,
+        'tool_calls': totals['tool_calls'] or 0,
+        'conversations': turns.values('conversation_id').distinct().count(),
+    }
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+@throttle_classes(_THROTTLES)
+def usage(request):
+    """SageCode usage for the caller (the web dashboard and `sagex /usage`).
+
+    Windows match the web chat's dashboard: today since 00:00 UTC (the same
+    boundary as the shared daily allowance), the last 7 days, all time. Plus a
+    per-day series for the last 7 days and the devices used.
+    """
+    now = timezone.now()
+    today = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    week = now - timedelta(days=7)
+    # .order_by(): the models' default ordering would join the GROUP BYs below.
+    turns = SageTurn.objects.filter(user=request.user).order_by()
+    summaries = SageSummary.objects.filter(conversation__user=request.user).order_by()
+
+    first_day = (today - timedelta(days=6)).date()
+    per_day = {row['day']: row for row in (
+        turns.filter(created_at__gte=today - timedelta(days=6))
+        .annotate(day=TruncDate('created_at')).values('day')
+        .annotate(requests=Count('id'), total_tokens=Sum('total_tokens')))}
+    daily = []
+    for offset in range(7):
+        day = first_day + timedelta(days=offset)
+        row = per_day.get(day) or {}
+        daily.append({'date': day.isoformat(), 'requests': row.get('requests') or 0,
+                      'total_tokens': row.get('total_tokens') or 0})
+
+    devices = [
+        {'device': row['conversation__api_key__name'] or row['conversation__api_key__client_os']
+         or 'Revoked session', 'requests': row['requests'], 'total_tokens': row['total_tokens'] or 0}
+        for row in (turns.values('conversation__api_key__name', 'conversation__api_key__client_os')
+                    .annotate(requests=Count('id'), total_tokens=Sum('total_tokens'))
+                    .order_by('-requests')[:5])
+    ]
+    return api_response(data={
+        'today': _usage_bucket(turns.filter(created_at__gte=today),
+                               summaries.filter(created_at__gte=today)),
+        'last_7d': _usage_bucket(turns.filter(created_at__gte=week), summaries.filter(created_at__gte=week)),
+        'all_time': _usage_bucket(turns, summaries),
+        'daily': daily,
+        'devices': devices,
+    })
 
 
 @api_view(['POST'])

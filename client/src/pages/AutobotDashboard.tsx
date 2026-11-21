@@ -1,12 +1,14 @@
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "@clerk/clerk-react";
 import { toast } from "sonner";
 import {
   Archive,
   BarChart3,
   Loader2,
+  MessageSquare,
   RefreshCw,
+  Terminal,
 } from "lucide-react";
 import {
   Bar,
@@ -23,12 +25,16 @@ import { AutobotDashboardHeader } from "@/components/Autobot/DashboardHeader";
 import { SidebarProvider } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useTheme } from "@/contexts/theme/theme-context";
 import { cn } from "@/lib/utils";
+import { SAGECODE_URL } from "@/lib/api-client";
 import {
   type AutobotDashboardData,
   type DashboardBucket,
+  type SageUsageData,
   getDashboard,
+  getSageUsage,
 } from "@/lib/api/autobot";
 
 // Explicit dark variants — the design-system `bg-card` tokens lack
@@ -42,11 +48,7 @@ const QuotaTile = ({ used, limit }: { used: number; limit: number }) => {
   if (limit <= 0) return null;
   const pct = Math.min(100, Math.round((used / limit) * 100));
   const barColor =
-    pct >= 100
-      ? "bg-red-500"
-      : pct >= 80
-        ? "bg-amber-500"
-        : "bg-emerald-500";
+    pct >= 100 ? "bg-red-500" : pct >= 80 ? "bg-amber-500" : "bg-emerald-500";
   const remaining = Math.max(0, limit - used);
   return (
     <Card className={CARD_SURFACE}>
@@ -75,8 +77,8 @@ const QuotaTile = ({ used, limit }: { used: number; limit: number }) => {
           />
         </div>
         <p className="text-[11px] sm:text-xs text-gray-500 dark:text-gray-400 leading-snug">
-          Resets at 00:00 UTC. Add a BYO LLM key in Customize for unlimited
-          requests.
+          Shared by Autobot and SageCode. Resets at 00:00 UTC. Add a BYO LLM key
+          in Customize for unlimited requests.
         </p>
       </CardContent>
     </Card>
@@ -144,9 +146,8 @@ const ModelUsageChart = ({
   const tooltipText = isDark ? "#f3f4f6" : "#111827";
 
   // Narrow YAxis label column on mobile — provider/model ids can be very long.
-  const yAxisWidth = typeof window !== "undefined" && window.innerWidth < 640
-    ? 110
-    : 180;
+  const yAxisWidth =
+    typeof window !== "undefined" && window.innerWidth < 640 ? 110 : 180;
 
   return (
     <div className="h-56 sm:h-64 w-full">
@@ -174,9 +175,73 @@ const ModelUsageChart = ({
               color: tooltipText,
               fontSize: 12,
             }}
-            cursor={{ fill: isDark ? "rgba(212,176,235,0.08)" : "rgba(116,41,167,0.08)" }}
+            cursor={{
+              fill: isDark ? "rgba(212,176,235,0.08)" : "rgba(116,41,167,0.08)",
+            }}
           />
           <Bar dataKey="count" fill={barColor} radius={[0, 4, 4, 0]} />
+        </BarChart>
+      </ResponsiveContainer>
+    </div>
+  );
+};
+
+// Replies per day for the last 7 days (SageCode tab).
+const DailyChart = ({ data }: { data: SageUsageData["daily"] }) => {
+  const { isDark } = useTheme();
+  const rows = useMemo(
+    () =>
+      data.map((d) => ({
+        // "2026-11-21" → "Nov 21"; parsed as UTC so the label matches the UTC bucket.
+        day: new Date(`${d.date}T00:00:00Z`).toLocaleDateString(undefined, {
+          month: "short",
+          day: "numeric",
+          timeZone: "UTC",
+        }),
+        replies: d.requests,
+        tokens: d.total_tokens,
+      })),
+    [data],
+  );
+  const axisColor = isDark ? "#9ca3af" : "#4b5563";
+  const gridColor = isDark ? "#374151" : "#e5e7eb";
+  const barColor = isDark ? "#d4b0eb" : "#7429a7";
+  return (
+    <div className="h-48 sm:h-56 w-full">
+      <ResponsiveContainer width="100%" height="100%">
+        <BarChart data={rows} margin={{ left: -16, right: 8 }}>
+          <CartesianGrid
+            strokeDasharray="3 3"
+            stroke={gridColor}
+            vertical={false}
+          />
+          <XAxis
+            dataKey="day"
+            stroke={axisColor}
+            tick={{ fill: axisColor, fontSize: 11 }}
+          />
+          <YAxis
+            allowDecimals={false}
+            stroke={axisColor}
+            tick={{ fill: axisColor, fontSize: 11 }}
+          />
+          <RechartsTooltip
+            contentStyle={{
+              backgroundColor: isDark ? "#1f2937" : "#ffffff",
+              border: `1px solid ${isDark ? "#374151" : "#e5e7eb"}`,
+              borderRadius: 8,
+              color: isDark ? "#f3f4f6" : "#111827",
+              fontSize: 12,
+            }}
+            formatter={(value: number, name: string) => [
+              formatNumber(value),
+              name === "replies" ? "Replies" : name,
+            ]}
+            cursor={{
+              fill: isDark ? "rgba(212,176,235,0.08)" : "rgba(116,41,167,0.08)",
+            }}
+          />
+          <Bar dataKey="replies" fill={barColor} radius={[4, 4, 0, 0]} />
         </BarChart>
       </ResponsiveContainer>
     </div>
@@ -188,11 +253,15 @@ const BucketSection = ({
   subtitle,
   bucket,
   trailing,
+  requestLabel = "Requests",
+  requestHint = "Assistant turns",
 }: {
   title: string;
   subtitle: string;
   bucket: DashboardBucket;
   trailing?: React.ReactNode;
+  requestLabel?: string;
+  requestHint?: string;
 }) => (
   <section className="space-y-4">
     <div>
@@ -205,9 +274,9 @@ const BucketSection = ({
     </div>
     <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
       <StatTile
-        label="Requests"
+        label={requestLabel}
         value={formatNumber(bucket.requests)}
-        hint="Assistant turns"
+        hint={requestHint}
       />
       <StatTile
         label="Total tokens"
@@ -241,12 +310,133 @@ const BucketSection = ({
   </section>
 );
 
+const SageCodeUsage = ({
+  usage,
+  quota,
+}: {
+  usage: SageUsageData | null;
+  quota: AutobotDashboardData["admin_quota"] | null;
+}) => {
+  if (!usage) {
+    return (
+      <Card className={CARD_SURFACE}>
+        <CardContent className="py-10 text-center space-y-2">
+          <p className="text-sm text-gray-700 dark:text-gray-200">
+            SageCode usage isn't available right now.
+          </p>
+          <p className="text-xs text-gray-500 dark:text-gray-400">
+            SageCode is Autosage in your terminal, with Sage as its assistant.{" "}
+            <a
+              href={SAGECODE_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-[#7429a7] dark:text-[#d4b0eb] underline"
+            >
+              Learn more
+            </a>
+          </p>
+        </CardContent>
+      </Card>
+    );
+  }
+  const hint = (b: SageUsageData["today"]) =>
+    `${formatNumber(b.conversations)} conversation${b.conversations === 1 ? "" : "s"} · ${formatNumber(b.tool_calls)} tool calls`;
+  return (
+    <div className="space-y-6 sm:space-y-8">
+      <BucketSection
+        title="Today"
+        subtitle="Sage requests in your terminal since 00:00 UTC."
+        bucket={usage.today}
+        requestLabel="Requests"
+        requestHint={hint(usage.today)}
+        trailing={
+          quota ? (
+            <QuotaTile used={quota.used} limit={quota.limit} />
+          ) : undefined
+        }
+      />
+      <section className="grid gap-3 sm:gap-4 lg:grid-cols-3">
+        <Card className={cn(CARD_SURFACE, "lg:col-span-2")}>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm sm:text-base text-gray-900 dark:text-white">
+              Replies per day
+            </CardTitle>
+            <p className="text-[11px] sm:text-xs text-gray-500 dark:text-gray-400">
+              Last 7 days (UTC).
+            </p>
+          </CardHeader>
+          <CardContent>
+            <DailyChart data={usage.daily} />
+          </CardContent>
+        </Card>
+        <Card className={CARD_SURFACE}>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm sm:text-base text-gray-900 dark:text-white">
+              Devices
+            </CardTitle>
+            <p className="text-[11px] sm:text-xs text-gray-500 dark:text-gray-400">
+              Where you talked to Sage. Manage sessions on your Profile.
+            </p>
+          </CardHeader>
+          <CardContent>
+            {usage.devices.length === 0 ? (
+              <p className="text-sm text-gray-500 dark:text-gray-400">
+                No replies yet.
+              </p>
+            ) : (
+              <ul className="space-y-2">
+                {usage.devices.map((d) => (
+                  <li
+                    key={d.device}
+                    className="flex items-baseline justify-between gap-3 text-sm"
+                  >
+                    <span className="truncate text-gray-900 dark:text-gray-100">
+                      {d.device}
+                    </span>
+                    <span className="whitespace-nowrap text-xs text-gray-500 dark:text-gray-400">
+                      {formatNumber(d.requests)} replies ·{" "}
+                      {formatNumber(d.total_tokens)} tokens
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </CardContent>
+        </Card>
+      </section>
+      <BucketSection
+        title="Last 7 days"
+        subtitle="Rolling seven-day window."
+        bucket={usage.last_7d}
+        requestLabel="Replies"
+        requestHint={hint(usage.last_7d)}
+      />
+      <BucketSection
+        title="All-time"
+        subtitle="Every saved Sage reply. Conversations beyond your latest 100 are deleted, and their usage with them."
+        bucket={usage.all_time}
+        requestLabel="Replies"
+        requestHint={hint(usage.all_time)}
+      />
+    </div>
+  );
+};
+
 const AutobotDashboard = () => {
   const navigate = useNavigate();
   const { getToken } = useAuth();
   const [data, setData] = useState<AutobotDashboardData | null>(null);
+  const [sage, setSage] = useState<SageUsageData | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  // The tab lives in the URL so links (e.g. from `sagex /usage`) can open
+  // the SageCode tab directly.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const tab = searchParams.get("tab") === "sagecode" ? "sagecode" : "web";
+  const selectTab = (value: string) =>
+    setSearchParams(value === "sagecode" ? { tab: "sagecode" } : {}, {
+      replace: true,
+    });
 
   const load = async (signalRefresh = false) => {
     if (signalRefresh) setRefreshing(true);
@@ -254,8 +444,14 @@ const AutobotDashboard = () => {
     try {
       const token = await getToken();
       if (!token) throw new Error("Not signed in.");
-      const payload = await getDashboard(token);
-      setData(payload);
+      // Independent: an older server without SageCode usage still shows Autobot's.
+      const [web, terminal] = await Promise.allSettled([
+        getDashboard(token),
+        getSageUsage(token),
+      ]);
+      if (web.status === "fulfilled") setData(web.value);
+      else throw web.reason;
+      setSage(terminal.status === "fulfilled" ? terminal.value : null);
     } catch (err) {
       const msg =
         err instanceof Error ? err.message : "Failed to load dashboard.";
@@ -283,13 +479,11 @@ const AutobotDashboard = () => {
                 <div className="min-w-0">
                   <div className="flex items-center gap-2 text-[#7429a7] dark:text-[#d4b0eb]">
                     <BarChart3 className="w-5 h-5 flex-shrink-0" />
-                    <span className="text-sm font-medium">
-                      Usage analytics
-                    </span>
+                    <span className="text-sm font-medium">Usage analytics</span>
                   </div>
                   <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400 mt-1">
-                    Per-bucket request and token totals for your Autobot
-                    conversations.
+                    Request and token totals for Autobot on the web and Sage in
+                    SageCode, your terminal.
                   </p>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
@@ -300,7 +494,9 @@ const AutobotDashboard = () => {
                     className="border-gray-300 dark:border-gray-700 dark:bg-transparent dark:text-gray-200 dark:hover:bg-gray-800"
                   >
                     <Archive className="w-4 h-4 sm:mr-2" />
-                    <span className="hidden sm:inline">View archived chats</span>
+                    <span className="hidden sm:inline">
+                      View archived chats
+                    </span>
                   </Button>
                   <Button
                     variant="outline"
@@ -346,29 +542,51 @@ const AutobotDashboard = () => {
                   </CardContent>
                 </Card>
               ) : (
-                <>
-                  <BucketSection
-                    title="Today"
-                    subtitle="Since 00:00 UTC."
-                    bucket={data.today}
-                    trailing={
-                      <QuotaTile
-                        used={data.admin_quota.used}
-                        limit={data.admin_quota.limit}
-                      />
-                    }
-                  />
-                  <BucketSection
-                    title="Last 7 days"
-                    subtitle="Rolling seven-day window."
-                    bucket={data.last_7d}
-                  />
-                  <BucketSection
-                    title="All-time"
-                    subtitle="Every assistant turn on record."
-                    bucket={data.all_time}
-                  />
-                </>
+                <Tabs
+                  value={tab}
+                  onValueChange={selectTab}
+                  className="space-y-6"
+                >
+                  <TabsList className="bg-gray-200/70 dark:bg-gray-800/60">
+                    <TabsTrigger value="web" className="gap-2">
+                      <MessageSquare className="w-4 h-4" />
+                      Autobot (web)
+                    </TabsTrigger>
+                    <TabsTrigger value="sagecode" className="gap-2">
+                      <Terminal className="w-4 h-4" />
+                      SageCode (terminal)
+                    </TabsTrigger>
+                  </TabsList>
+                  <TabsContent
+                    value="web"
+                    className="space-y-6 sm:space-y-8 mt-0"
+                  >
+                    <BucketSection
+                      title="Today"
+                      subtitle="Since 00:00 UTC."
+                      bucket={data.today}
+                      trailing={
+                        <QuotaTile
+                          used={data.admin_quota.used}
+                          limit={data.admin_quota.limit}
+                        />
+                      }
+                    />
+                    <BucketSection
+                      title="Last 7 days"
+                      subtitle="Rolling seven-day window."
+                      bucket={data.last_7d}
+                    />
+                    <BucketSection
+                      title="All-time"
+                      subtitle="Every assistant turn on record."
+                      bucket={data.all_time}
+                    />
+                  </TabsContent>
+                  <TabsContent value="sagecode" className="mt-0">
+                    <SageCodeUsage usage={sage} quota={data.admin_quota} />
+                  </TabsContent>
+                </Tabs>
               )}
             </div>
           </main>

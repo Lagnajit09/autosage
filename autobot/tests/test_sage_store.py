@@ -179,6 +179,57 @@ def test_a_saved_turn_that_cant_be_resent_is_skipped(client, stored):
     assert "orphan" not in contents and contents[:2] == ["thanks", "Any time."]
 
 
+# --- usage ----------------------------------------------------------------------------
+
+@pytest.fixture
+def usage_env(env, monkeypatch):
+    import sage.usage as sage_usage
+
+    class Cache:
+        async def get_admin_quota_for_today(self, user_sub):
+            return 7
+
+    async def limit(user_sub):
+        return 30
+
+    monkeypatch.setattr(sage_usage, "get_cache", lambda: Cache())
+    monkeypatch.setattr(sage_usage, "get_admin_daily_limit", limit)
+    return env
+
+
+def test_usage_adds_the_shared_allowance_and_key_kind(client, usage_env):
+    usage_env.django.routes["/api/sage/usage/"] = (200, {"data": {"today": {"requests": 3}}})
+    response = client.get("/sage/usage/", headers=HEADERS)
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert data["today"] == {"requests": 3}
+    assert data["admin_quota"] == {"used": 7, "limit": 30, "remaining": 23}
+    assert data["own_key"] is False
+    assert ("GET", "/api/sage/usage/") in usage_env.django.calls
+
+
+def test_usage_survives_a_broken_allowance_store(client, usage_env, monkeypatch):
+    import sage.usage as sage_usage
+
+    async def broken(user_sub):
+        raise ValueError("Redis URL must specify one of the following schemes")
+
+    monkeypatch.setattr(sage_usage, "get_admin_daily_limit", broken)
+    monkeypatch.setattr(get_settings(), "AUTOBOT_ADMIN_DAILY_LIMIT", 30)
+    usage_env.django.routes["/api/sage/usage/"] = (200, {"data": {}})
+    response = client.get("/sage/usage/", headers=HEADERS)
+    assert response.status_code == 200 and response.json()["data"]["admin_quota"]["limit"] == 30
+
+
+def test_usage_from_an_older_server_says_so(client, usage_env):
+    response = client.get("/sage/usage/", headers=HEADERS)          # fake Django: 404
+    assert response.status_code == 404 and "newer Autosage server" in response.json()["message"]
+
+
+def test_usage_needs_a_key(client, usage_env):
+    assert client.get("/sage/usage/", headers={"User-Agent": "sagex/2.0.0"}).status_code == 401
+
+
 # --- summaries ----------------------------------------------------------------------
 
 def test_a_long_history_is_summarized_and_the_summary_saved(client, stored, monkeypatch):

@@ -282,9 +282,9 @@ export const AutobotTodayCard = ({ className }: BannerProps) => {
         <Button
           variant="link"
           className="h-auto self-start p-0 text-sm text-blue-600 dark:text-blue-400 gap-1 md:self-center"
-          onClick={() => navigate("/ai/autobot/dashboard")}
+          onClick={() => navigate("/agent/dashboard")}
         >
-          View full Dashboard
+          View Agent Dashboard
           <ArrowRight className="w-4 h-4" />
         </Button>
       </div>

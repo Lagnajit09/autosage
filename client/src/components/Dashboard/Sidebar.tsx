@@ -37,6 +37,7 @@ const navItems: NavItem[] = [
   { icon: Code2, label: "Editor", route: "/script-editor" },
   { icon: FileClock, label: "Execution Logs", route: "/execution-logs" },
   { icon: AutobotIcon, label: "Autobot", route: "/ai/autobot" },
+  { icon: BarChart3, label: "Agent Dashboard", route: "/agent/dashboard" },
 ];
 
 export const DashboardSidebar = () => {

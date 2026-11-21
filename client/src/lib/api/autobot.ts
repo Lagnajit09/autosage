@@ -445,3 +445,25 @@ export const getDashboard = async (
   const response = await apiRequest(`${AI_BASE}/dashboard/`, {}, token);
   return response.data;
 };
+
+/** SageCode (the `sagex` terminal agent) usage — Django `sage_api` `_usage_bucket`.
+ *  Same shape as the web chat's buckets; a "request" is one Sage reply. */
+export interface SageUsageBucket extends DashboardBucket {
+  tool_calls: number;
+  conversations: number;
+}
+
+export interface SageUsageData {
+  today: SageUsageBucket;
+  last_7d: SageUsageBucket;
+  all_time: SageUsageBucket;
+  /** Last 7 UTC days, oldest first, today last. */
+  daily: Array<{ date: string; requests: number; total_tokens: number }>;
+  devices: Array<{ device: string; requests: number; total_tokens: number }>;
+}
+
+/** Throws on servers without SageCode usage (404) — callers hide the tab. */
+export const getSageUsage = async (token: string): Promise<SageUsageData> => {
+  const response = await apiRequest(`/api/sage/usage/`, {}, token);
+  return response.data;
+};

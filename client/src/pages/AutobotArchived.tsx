@@ -162,11 +162,11 @@ const AutobotArchived = () => {
                 <Button
                   variant="ghost"
                   size="sm"
-                  onClick={() => navigate("/ai/autobot/dashboard")}
+                  onClick={() => navigate("/agent/dashboard")}
                   className="-ml-2 mb-1 text-gray-600 dark:text-gray-300 hover:bg-gray-200/60 dark:hover:bg-gray-800"
                 >
                   <ArrowLeft className="w-4 h-4 mr-1" />
-                  Back to Autobot Dashboard
+                  Back to Agent Dashboard
                 </Button>
                 <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white">
                   Archived chats

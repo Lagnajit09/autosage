@@ -9,7 +9,9 @@ import asyncio
 import json
 
 from fastapi import APIRouter, Depends, Request, WebSocket
+from fastapi.responses import JSONResponse
 
+from sage import usage as sage_usage
 from sage.auth import API_KEY_HEADER, SageAuth, SageAuthError, authenticate_api_key, require_sage_auth
 from sage.conversation import CLOSE_FORBIDDEN, CLOSE_TRY_AGAIN, CLOSE_UNAUTHENTICATED, serve
 from settings import get_settings
@@ -23,6 +25,17 @@ router = APIRouter(prefix="/sage", tags=["sage"])
 async def whoami(request: Request, auth: SageAuth = Depends(require_sage_auth)):
     """Authenticated canary: proves a SageCode key gets through to Sage."""
     return {"service": "sage", "session_id": auth.session_id}
+
+
+@router.get("/usage/")
+@limiter.limit(get_settings().SAGE_RATE_LIMIT)
+async def usage(request: Request, auth: SageAuth = Depends(require_sage_auth)):
+    """SageCode usage (today / 7 days / all time) plus the shared free allowance."""
+    try:
+        data = await sage_usage.usage(auth)
+    except sage_usage.UsageUnavailable as e:
+        return JSONResponse({"success": False, "message": e.message, "data": None}, e.status_code)
+    return {"success": True, "message": "", "data": data}
 
 
 @router.websocket("/ws")
