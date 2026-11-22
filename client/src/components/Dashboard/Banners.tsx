@@ -138,12 +138,12 @@ export const SageCodeBanner = ({ className }: BannerProps) => {
             </span>
           ) : (
             <span className="ml-auto flex-shrink-0 rounded border border-purple-400/40 px-1.5 py-0.5 font-mono text-[10px] font-semibold leading-none text-purple-200">
-              NEW
+              V2
             </span>
           )}
         </CardTitle>
         <CardDescription className="text-gray-400">
-          Autosage in your terminal: run workflows, webhooks and schedules from your shell.
+          Autosage in your terminal, now with Sage: ask, and it looks things up, writes and runs, with your approval.
         </CardDescription>
       </CardHeader>
       <CardContent className="mt-auto relative space-y-3">

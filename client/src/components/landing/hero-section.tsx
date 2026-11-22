@@ -47,7 +47,7 @@ export default function HeroSectionOne() {
           <span className="rounded-full bg-purple-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-purple-700 dark:bg-purple-500/15 dark:text-purple-300">
             New
           </span>
-          <span className="truncate">SageCode: Autosage in your terminal</span>
+          <span className="truncate">SageCode v2: meet Sage, your assistant in the terminal</span>
           <ArrowRight className="h-3.5 w-3.5 flex-shrink-0" />
         </motion.a>
         <h1 className="relative z-10 mx-auto max-w-4xl text-center text-2xl font-bold text-slate-700 md:text-4xl lg:text-7xl dark:text-slate-300">

@@ -7,8 +7,8 @@ import {
   Copy,
   GitBranch,
   ShieldCheck,
+  Sparkles,
   Terminal,
-  Webhook,
   type LucideIcon,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -18,14 +18,14 @@ const INSTALL_COMMAND = "uv tool install sagex-cli";
 
 const FEATURES: { icon: LucideIcon; title: string; text: string }[] = [
   {
+    icon: Sparkles,
+    title: "Sage, your assistant",
+    text: "Ask in plain words. Sage looks things up, writes and runs, and asks before it changes anything.",
+  },
+  {
     icon: Terminal,
     title: "Run and watch live",
     text: "Start any workflow or script and follow it node by node.",
-  },
-  {
-    icon: Webhook,
-    title: "Webhooks and schedules",
-    text: "Set up HTTP triggers and cron schedules from your shell.",
   },
   {
     icon: GitBranch,
@@ -105,7 +105,7 @@ export default function SageCodeSection() {
                       Code
                     </span>
                   </span>{" "}
-                  v1.1
+                  v2
                 </span>
                 <ArrowUpRight className="h-3.5 w-3.5" />
               </a>
@@ -116,7 +116,8 @@ export default function SageCodeSection() {
               <p className="mt-4 max-w-xl text-base text-muted-foreground md:text-lg">
                 SageCode is the command line for Autosage. Build, run and watch
                 your workflows, scripts, webhooks and schedules without leaving
-                your shell, all with one command:{" "}
+                your shell, with Sage, your assistant, beside you. All with one
+                command:{" "}
                 <code className="rounded border border-neutral-200 bg-white px-1.5 py-0.5 font-mono text-[0.9em] text-neutral-900 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-100">
                   sagex
                 </code>
@@ -215,7 +216,7 @@ export default function SageCodeSection() {
             >
               <img
                 src="/sagecode-tui.svg"
-                alt="The SageCode terminal app: workflows, scripts, vault items, recent runs and triggers on the left, and a live workflow run on the right."
+                alt="The SageCode terminal app: your resources and today's Sage usage on the left; a live workflow run and a reply from Sage on the right."
                 width={1726}
                 height={928}
                 loading="lazy"
