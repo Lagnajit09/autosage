@@ -186,7 +186,7 @@ const ModelUsageChart = ({
   );
 };
 
-// Replies per day for the last 7 days (SageCode tab).
+// Requests per day for the last 7 days (SageCode tab).
 const DailyChart = ({ data }: { data: SageUsageData["daily"] }) => {
   const { isDark } = useTheme();
   const rows = useMemo(
@@ -198,7 +198,7 @@ const DailyChart = ({ data }: { data: SageUsageData["daily"] }) => {
           day: "numeric",
           timeZone: "UTC",
         }),
-        replies: d.requests,
+        requests: d.requests,
         tokens: d.total_tokens,
       })),
     [data],
@@ -235,13 +235,13 @@ const DailyChart = ({ data }: { data: SageUsageData["daily"] }) => {
             }}
             formatter={(value: number, name: string) => [
               formatNumber(value),
-              name === "replies" ? "Replies" : name,
+              name === "requests" ? "Requests" : name,
             ]}
             cursor={{
               fill: isDark ? "rgba(212,176,235,0.08)" : "rgba(116,41,167,0.08)",
             }}
           />
-          <Bar dataKey="replies" fill={barColor} radius={[4, 4, 0, 0]} />
+          <Bar dataKey="requests" fill={barColor} radius={[4, 4, 0, 0]} />
         </BarChart>
       </ResponsiveContainer>
     </div>
@@ -359,7 +359,7 @@ const SageCodeUsage = ({
         <Card className={cn(CARD_SURFACE, "lg:col-span-2")}>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm sm:text-base text-gray-900 dark:text-white">
-              Replies per day
+              Requests per day
             </CardTitle>
             <p className="text-[11px] sm:text-xs text-gray-500 dark:text-gray-400">
               Last 7 days (UTC).
@@ -381,7 +381,7 @@ const SageCodeUsage = ({
           <CardContent>
             {usage.devices.length === 0 ? (
               <p className="text-sm text-gray-500 dark:text-gray-400">
-                No replies yet.
+                No requests yet.
               </p>
             ) : (
               <ul className="space-y-2">
@@ -394,7 +394,7 @@ const SageCodeUsage = ({
                       {d.device}
                     </span>
                     <span className="whitespace-nowrap text-xs text-gray-500 dark:text-gray-400">
-                      {formatNumber(d.requests)} replies ·{" "}
+                      {formatNumber(d.requests)} requests ·{" "}
                       {formatNumber(d.total_tokens)} tokens
                     </span>
                   </li>
@@ -408,14 +408,14 @@ const SageCodeUsage = ({
         title="Last 7 days"
         subtitle="Rolling seven-day window."
         bucket={usage.last_7d}
-        requestLabel="Replies"
+        requestLabel="Requests"
         requestHint={hint(usage.last_7d)}
       />
       <BucketSection
         title="All-time"
-        subtitle="Every saved Sage reply. Conversations beyond your latest 100 are deleted, and their usage with them."
+        subtitle="Every saved Sage request. Conversations beyond your latest 100 are deleted, and their usage with them."
         bucket={usage.all_time}
-        requestLabel="Replies"
+        requestLabel="Requests"
         requestHint={hint(usage.all_time)}
       />
     </div>

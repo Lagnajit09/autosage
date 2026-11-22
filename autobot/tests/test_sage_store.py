@@ -204,8 +204,30 @@ def test_usage_adds_the_shared_allowance_and_key_kind(client, usage_env):
     data = response.json()["data"]
     assert data["today"] == {"requests": 3}
     assert data["admin_quota"] == {"used": 7, "limit": 30, "remaining": 23}
-    assert data["own_key"] is False
+    assert data["own_key"] is False and data["model"] is None
     assert ("GET", "/api/sage/usage/") in usage_env.django.calls
+
+
+MODEL_ID = "8f0c2b4e-1111-4222-8333-944455556666"
+
+
+def test_usage_names_the_selected_personal_model(client, usage_env):
+    usage_env.django.routes["/api/sage/usage/"] = (200, {"data": {}})
+    usage_env.django.routes["/api/autobot/settings/"] = (200, {"data": {"default_llm_config": MODEL_ID}})
+    usage_env.django.routes[f"/api/autobot/llm-configs/{MODEL_ID}/"] = (200, {"data": {
+        "id": MODEL_ID, "name": "My Claude", "provider": "anthropic",
+        "model_name": "claude-sonnet-4-5", "base_url": "", "is_default": False}})
+    data = client.get("/sage/usage/", headers=HEADERS).json()["data"]
+    assert data["own_key"] is True
+    assert data["model"] == {"id": MODEL_ID, "name": "My Claude", "provider": "anthropic",
+                             "model_name": "claude-sonnet-4-5"}
+
+
+def test_usage_ignores_a_selection_whose_model_is_gone(client, usage_env):
+    usage_env.django.routes["/api/sage/usage/"] = (200, {"data": {}})
+    usage_env.django.routes["/api/autobot/settings/"] = (200, {"data": {"default_llm_config": MODEL_ID}})
+    data = client.get("/sage/usage/", headers=HEADERS).json()["data"]     # config detail: 404
+    assert data["own_key"] is False and data["model"] is None
 
 
 def test_usage_survives_a_broken_allowance_store(client, usage_env, monkeypatch):

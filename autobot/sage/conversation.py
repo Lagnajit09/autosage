@@ -580,7 +580,7 @@ class SageConversation:
         if not allowed:
             raise TurnError(
                 "admin_quota_exhausted",
-                f"You've used today's {limit} free AI replies (shared with Autobot on the web). "
+                f"You've used today's {limit} free AI requests (shared with Autobot on the web). "
                 "Add a personal LLM key in Autobot → Customize on the web to keep going, "
                 "or try again tomorrow.",
             )

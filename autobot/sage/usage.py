@@ -43,15 +43,27 @@ async def allowance(user_sub: str) -> dict[str, int]:
     return {"used": used, "limit": limit, "remaining": max(0, limit - used) if limit > 0 else 0}
 
 
-async def own_key(auth: SageAuth) -> bool:
-    """Whether Sage answers this user with their own LLM key (so the free
-    allowance doesn't apply)."""
+_MODEL_FIELDS = ("id", "name", "provider", "model_name")
+
+
+async def selected_model(auth: SageAuth) -> dict[str, Any] | None:
+    """The personal model Sage answers this user with, or None (free models,
+    so the allowance applies). Display fields only — the standard config
+    serializer never carries the key. A selection pointing at a config that's
+    gone counts as none, as it does when Sage picks the model for a turn."""
     try:
         status_code, body = await auth.call_django("GET", "/api/autobot/settings/")
+        data = body.get("data") if status_code == 200 and isinstance(body, dict) else None
+        config_id = data.get("default_llm_config") if isinstance(data, dict) else None
+        if not config_id:
+            return None
+        status_code, body = await auth.call_django("GET", f"/api/autobot/llm-configs/{config_id}/")
     except DjangoUnavailable:
-        return False
-    data = body.get("data") if status_code == 200 and isinstance(body, dict) else None
-    return bool(isinstance(data, dict) and data.get("default_llm_config"))
+        return None
+    config = body.get("data") if status_code == 200 and isinstance(body, dict) else None
+    if not isinstance(config, dict):
+        return None
+    return {k: str(config.get(k) or "") for k in _MODEL_FIELDS}
 
 
 async def usage(auth: SageAuth) -> dict[str, Any]:
@@ -65,5 +77,7 @@ async def usage(auth: SageAuth) -> dict[str, Any]:
     if not isinstance(data, dict):
         raise UsageUnavailable(502 if status_code < 400 else status_code, "Usage is temporarily unavailable.")
     data["admin_quota"] = await allowance(auth.user_sub)
-    data["own_key"] = await own_key(auth)
+    model = await selected_model(auth)
+    data["model"] = model
+    data["own_key"] = model is not None
     return data
