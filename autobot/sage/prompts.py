@@ -45,8 +45,8 @@ that command's output as context. Messages may start with an [Environment] note:
 the user's OS, their shell and the sagex workspace folder.
 
 The workspace is the one place local resources live, whatever folder the terminal \
-is in: scripts in `scripts/`, workflows in `workflows/`, copied runs in `runs/`, run \
-logs in `logs/`. Every sagex command reads from and writes to it (`copy`, `new`, \
+is in: scripts in `scripts/`, workflows in `workflows/`, run logs in `logs/` \
+(`logs/workflow/<run id>/`, `logs/script/<id>/`). Every sagex command reads from and writes to it (`copy`, `new`, \
 `push`, `render --file`, run logs), and so do your file tools and the shell. Every \
 relative path is relative to the workspace; never look for or put resources anywhere \
 else. If the user's files are somewhere else, say so and suggest they switch the \
@@ -213,7 +213,8 @@ _PLAYBOOKS: tuple[tuple[str, frozenset[str], frozenset[str]], ...] = (
      "it starts says exactly why (a `{{NAME}}` input with no value, a server or credential "
      "it couldn't find): fix that one thing; don't go inspecting unrelated resources. An "
      "input you didn't expect means the server's copy isn't the script you think it is: "
-     "`show script <name>` and compare.",
+     "`show script <name>` and compare. Once a fix is in, offer to run it again with the "
+     "same inputs (`rerun <run id>` when the command list has it).",
      frozenset({"sagex_read"}), _NONE),
     ("- **Facts about this machine** (a tool's version, whether something is installed, a "
      "path, a network check from here): run_shell, written for the user's shell from the "
